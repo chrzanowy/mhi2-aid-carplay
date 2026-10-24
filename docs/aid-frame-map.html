@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AID 791 Frame Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: status first, then the AID panel model (1440x540 panel px, 800x480 stream laid 1:1) with the variant sheet beside it, then in-car photos and the measurements the model rests on */
+:root {
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --ink: #17202b;
+  --muted: #5b6878;
+  --line: #ccd4de;
+  --accent: #d9731a;
+  --safe: #1f7ae0;
+  --map: #2d4f8a;
+  --map-road: #b9c6dc;
+  --map-minor: #3e639e;
+  --route: #6fe0e8;
+  --black: #05070a;
+  --glass: #0b0f14;
+  --dial: #10161d;
+  --dial-ring: #8f9aa6;
+  --dial-ink: #eef2f6;
+  --bar: rgba(8, 11, 15, 0.92);
+  --card-bg: rgba(60, 170, 150, 0.92);
+  --card-ink: #ffffff;
+  --puck: #2f6bff;
+  --ok: #2e8b57;
+  --warn: #c0392b;
+  --display: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --panel: #171e26; --ink: #e6ebf0; --muted: #93a1b1; --line: #2a3542;
+    --accent: #f0923a; --safe: #5aa2ff; --ok: #4cc38a; --warn: #ff6b5e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #171e26; --ink: #e6ebf0; --muted: #93a1b1; --line: #2a3542;
+  --accent: #f0923a; --safe: #5aa2ff; --ok: #4cc38a; --warn: #ff6b5e; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 22px; }
+header h1 { font-family: var(--display); font-weight: 700; font-size: clamp(26px, 4vw, 36px); line-height: 1.1; margin: 0; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 75ch; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+h2.sec { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 6px 0 0; }
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.status-grid article { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.status-grid h3 { font-family: var(--display); font-weight: 600; font-size: 17px; margin: 0 0 8px; }
+.controls { display: grid; gap: 10px; }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ctl > span { font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); min-width: 92px; }
+.ctl button {
+  font-family: var(--body); font-size: 14px; font-weight: 500; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 11px; cursor: pointer;
+}
+.ctl button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.ctl button:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 14px; font-size: 14px; }
+.toggles label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 22px; align-items: start; }
+@media (max-width: 960px) { .main { grid-template-columns: 1fr; } }
+.stage { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.svgbox { overflow-x: auto; }
+#aid { display: block; width: 100%; min-width: 600px; height: auto; font-family: var(--mono); }
+.spec { display: grid; gap: 14px; min-width: 0; }
+.spec section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.spec h2 { font-family: var(--display); font-weight: 600; font-size: 19px; margin: 0 0 8px; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.status { display: inline-block; font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.ok { color: var(--ok); }
+.bad { color: var(--warn); }
+.mid { color: var(--accent); }
+.note { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 14px; }
+.checks li { display: grid; grid-template-columns: 18px 1fr; gap: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend svg { width: 18px; height: 12px; }
+.photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
+figure img { width: 100%; height: auto; border-radius: 6px; display: block; }
+figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.facts article { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.facts h3 { font-family: var(--display); font-weight: 600; font-size: 17px; margin: 0 0 6px; }
+.facts p { margin: 0 0 6px; font-size: 14px; }
+ul.plain { margin: 0; padding-left: 18px; font-size: 14px; }
+ul.plain li { margin: 2px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-variant-numeric: tabular-nums; }
+th { color: var(--muted); font-weight: 500; }
+.tablebox { overflow-x: auto; }
+code { font-family: var(--mono); font-size: 0.9em; }
+.lang { font-size: 13px; margin: 0 0 6px; }
+.lang a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <p class="lang"><a href="aid-frame-map.pl.html" hreflang="pl" lang="pl">Wersja polska</a></p>
+    <div class="eyebrow">Passat B8 · MHI2 MU1161 · AID 791 12.3" · status: October 2026</div>
+    <h1>CarPlay map and native guidance on the AID</h1>
+    <p>What works in the car, where the 800×480 CarPlay frame sits on the 1440×540 AID panel, and which <code>core.so</code> variant gives which layout. The model and the position-marker placement are calibrated on photos taken in the car on 23–24 Oct 2026.</p>
+  </header>
+
+  <h2 class="sec">Status in the car</h2>
+  <div class="status-grid">
+    <article>
+      <h3>Works</h3>
+      <ul class="plain">
+        <li>CarPlay map in the AID map window (Apple Maps and Google Maps, big and small dials), variant <code>url-map-hybrid</code>: map only, no maneuver card and no speed-limit sign from the iPhone; signs come from the VW camera. The default <code>map-clean</code> has the same layout.</li>
+        <li>Native VW maneuver arrow with distance to the turn in the right dial (appears once moving; when standing at the start of a route there is no maneuver yet).</li>
+        <li>Native distance and time to destination in the bar above the map and in the left dial.</li>
+        <li>The map stays up during Apple Maps guidance (NavActiveIgnore).</li>
+        <li>Map zoom with the steering-wheel arrows, track title and artist on the AID, day/night mode.</li>
+      </ul>
+    </article>
+    <article>
+      <h3>Packages</h3>
+      <ul class="plain">
+        <li>Stage A: picture on the AID (<code>dio_manager</code> with overlay, the variant's <code>core.so</code>). Switching variant swaps one <code>core.so</code>, then a restart, no "Potwierdz" (confirm).</li>
+        <li>System RG (package E): iAP2 driver, <code>iap2.cfg</code>, guidance reader.</li>
+        <li>Java: nai, np, rg, zoom, dn. Each one: "Wlacz: …" (enable), restart, check, then "Potwierdz" in the same boot.</li>
+        <li>Install card from <code>installer/build_card_install.py</code> and a separate rescue card from <code>installer/build_rescue.py</code> (restores the stock HMI).</li>
+      </ul>
+    </article>
+    <article>
+      <h3>To test</h3>
+      <ul class="plain">
+        <li>Variants in the car: <code>card-clean</code> (with maneuver card), <code>map-clean-l40</code> (shifted slightly left) and <code>map-square</code> (mathsls layout, closer to square).</li>
+        <li>Native arrow with Waze.</li>
+      </ul>
+    </article>
+  </div>
+
+  <h2 class="sec">Panel model</h2>
+  <div class="controls">
+    <div class="ctl" role="group" aria-label="AID view" id="viewSwitch"><span>AID view</span></div>
+    <div class="ctl" role="group" aria-label="core.so variant" id="varSwitch"><span>Variant</span></div>
+    <div class="toggles">
+      <label><input type="checkbox" id="tStream" checked> 800×480 frame outline</label>
+      <label><input type="checkbox" id="tSafe" checked> safe area</label>
+      <label><input type="checkbox" id="tCluster" checked> cluster graphics</label>
+      <label><input type="checkbox" id="tNative" checked> native VW guidance (bar, arrow)</label>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="stage">
+      <div class="svgbox">
+        <svg id="aid" viewBox="-70 -50 1580 660" role="img" aria-labelledby="aidTitle">
+          <title id="aidTitle">AID panel, 1440 by 540 pixels, with dials, bars, native guidance and the CarPlay stream overlaid</title>
+          <defs>
+            <clipPath id="panelClip"><rect x="0" y="0" width="1440" height="540" rx="120" ry="120"></rect></clipPath>
+            <clipPath id="streamClip"><rect x="0" y="0" width="800" height="480"></rect></clipPath>
+          </defs>
+          <g id="rulers" font-size="13" fill="var(--muted)"></g>
+
+          <g clip-path="url(#panelClip)">
+            <rect x="0" y="0" width="1440" height="540" fill="var(--glass)"></rect>
+
+            <!-- CarPlay stream, in stream pixels, placed 1:1 at panel x 320, y 60 -->
+            <g id="stream">
+              <g clip-path="url(#streamClip)">
+                <rect width="800" height="480" fill="var(--map)"></rect>
+                <g stroke="var(--map-minor)" stroke-width="3" fill="none">
+                  <path d="M0 120 L800 150 M0 300 L800 270 M140 0 L210 480 M620 0 L560 480 M300 0 L330 480 M470 0 L500 480 M0 420 L800 400"></path>
+                </g>
+                <g stroke="var(--map-road)" stroke-width="12" fill="none" stroke-linecap="round">
+                  <path d="M0 210 L800 235"></path>
+                  <path d="M90 480 L260 330 L420 300"></path>
+                </g>
+                <path id="route" stroke="var(--route)" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+                <rect id="safeArea" fill="none" stroke="var(--safe)" stroke-width="4" stroke-dasharray="10 6"></rect>
+                <g id="card">
+                  <rect id="cardBg" rx="16" fill="var(--card-bg)"></rect>
+                  <text id="cardText" fill="var(--card-ink)" font-family="var(--display)" font-weight="700" text-anchor="middle">toward Długa</text>
+                </g>
+                <circle id="puckHalo" r="30" fill="var(--puck)" opacity="0.85"></circle>
+                <path id="puckArrow" fill="#ffffff"></path>
+              </g>
+              <rect id="streamOutline" width="800" height="480" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="14 8"></rect>
+            </g>
+
+            <!-- cluster graphics, in panel pixels -->
+            <g id="cluster">
+              <path id="winMask" fill="var(--glass)" fill-rule="evenodd" d=""></path>
+              <rect id="topBar" x="0" y="0" width="1440" fill="var(--bar)"></rect>
+              <rect id="bottomBar" x="0" width="1440" fill="var(--bar)"></rect>
+              <g id="etaBar">
+                <rect id="etaBg" fill="rgba(20, 26, 34, 0.80)"></rect>
+                <g id="etaText" fill="var(--dial-ink)" font-family="var(--body)" font-weight="600" font-size="26"></g>
+              </g>
+              <g id="topText" fill="var(--dial-ink)" font-family="var(--body)" font-weight="600" font-size="30" text-anchor="middle"></g>
+              <g id="dials"></g>
+              <g id="nativeDials" fill="var(--dial-ink)" font-family="var(--body)" font-weight="600" text-anchor="middle"></g>
+            </g>
+          </g>
+          <rect x="0" y="0" width="1440" height="540" rx="120" ry="120" fill="none" stroke="var(--ink)" stroke-width="3"></rect>
+        </svg>
+      </div>
+      <div class="legend">
+        <span><svg viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 2"></rect></svg> 800×480 frame (partly under the bars and dials)</span>
+        <span><svg viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="none" stroke="var(--safe)" stroke-width="2" stroke-dasharray="4 2"></rect></svg> variant safe area</span>
+        <span><svg viewBox="0 0 18 12"><circle cx="9" cy="6" r="5" fill="var(--puck)"></circle></svg> position marker (Google Maps, measured position)</span>
+      </div>
+    </div>
+
+    <aside class="spec">
+      <section>
+        <h2 id="vName">Variant</h2>
+        <span id="vStatus" class="status"></span>
+        <dl style="margin-top:10px">
+          <dt>URL</dt><dd id="vUrl"></dd>
+          <dt>safe area</dt><dd id="vSafe"></dd>
+          <dt>density</dt><dd>240×144 mm · 3.33 px/mm</dd>
+          <dt>fps / IDR</dt><dd>30 / every 5</dd>
+          <dt>map window</dt><dd id="vRows"></dd>
+          <dt>GEM</dt><dd id="vGem"></dd>
+        </dl>
+        <p class="note" id="vNote"></p>
+      </section>
+      <section>
+        <h2>In this view</h2>
+        <ul class="checks" id="checks"></ul>
+        <p class="note">The marker sits where it was measured on Google Maps photos with the <code>url-map-hybrid</code> variant: about 90% of the safe-area width and 66% of its height. How Google computes the horizontal position is unknown, so for the shifted variants this is a prediction, not a measurement.</p>
+      </section>
+    </aside>
+  </div>
+
+  <h2 class="sec">Photos from the car</h2>
+  <div class="photos">
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1128.jpg" alt="AID, big dials: Google Maps without a card, native right-turn arrow 20 m in the right dial, 0:11 and 2.7 km in the left, speed sign 50 in the top bar; position marker near the right edge of the window">
+      <figcaption><b>24 Oct, <code>url-map-hybrid</code>, big dials.</b> Native arrow "20 m" in the right dial, 0:11 / 2.7 km in the left, speed sign 50 from the VW camera. Marker about 150–165 frame columns right of the window centre, next to the right dial.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1127.jpg" alt="AID, small dials: same scene, 2.7 km and 0:11 bar above the map, position marker right of centre">
+      <figcaption><b>24 Oct, <code>url-map-hybrid</code>, small dials.</b> Distance/time bar above the map, arrow in the right dial. Marker height is right; horizontally it is again right of centre.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1111.jpg" alt="AID, small dials: Google Maps with a toward Długa card, 1.8 km and 0:06 bar, 100 m zoom scale">
+      <figcaption><b>23 Oct, <code>url-card-hybrid</code>.</b> Google card "toward Długa", marker visible, zoom overlay "100 m". The card is large; 240×144 mm does not shrink it.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1105.jpg" alt="AID: Google Maps with a card, position marker cut off by the bottom edge of the map window">
+      <figcaption><b>23 Oct, <code>url-card-hybrid-tall</code>.</b> First variant: Google marker cut off at the bottom of the window (safe area down to row 460).</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1102.jpg" alt="AID: first CarPlay map without guidance, Kaufland and OBI">
+      <figcaption><b>23 Oct, first picture.</b> Apple Maps without guidance, right after installing stage A.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1101.jpg" alt="AID: message Nawigacja w urządzeniu mobilnym jest aktywna (navigation on the mobile device is active)">
+      <figcaption><b>23 Oct, without NavActiveIgnore.</b> During Apple Maps guidance the cluster covers the map with a VW message. The nai package removes it (Google Maps does not trigger it).</figcaption>
+    </figure>
+  </div>
+
+  <h2 class="sec">What the model rests on</h2>
+  <div class="facts">
+    <article>
+      <h3>The frame is laid 1:1</h3>
+      <p>The 800×480 stream is not scaled: it sits on the panel pixel for pixel at x 320–1120, y 60–540. Switching dials only narrows the map window: frame columns 65–735 (small) and 148–652 (big), centred on column 400 in both. Rows 65–405 in both views.</p>
+      <p>Measured from the stock VW navigation on the AID in the car (21 Oct) and VW screenshots from the internet; accuracy about ±15 px.</p>
+    </article>
+    <article>
+      <h3>Panel measurements</h3>
+      <div class="tablebox">
+        <table>
+          <thead><tr><th>AID panel</th><th>small dials</th><th>big dials</th></tr></thead>
+          <tbody>
+            <tr><td>top bar down to</td><td>125 px</td><td>125 px</td></tr>
+            <tr><td>distance/time bar down to</td><td>171 px</td><td>171 px</td></tr>
+            <tr><td>bottom bar from</td><td>465 px</td><td>465 px</td></tr>
+            <tr><td>map window (x)</td><td>385–1055</td><td>468–972</td></tr>
+            <tr><td>left dial (centre, r)</td><td>260,310 · 195</td><td>292,285 · 240</td></tr>
+            <tr><td>right dial (centre, r)</td><td>1180,310 · 195</td><td>1148,285 · 240</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <article>
+      <h3>What the car taught us</h3>
+      <ul class="plain">
+        <li>The <code>…/instrumentcluster/map</code> URL works in Apple and Google Maps: no card.</li>
+        <li>Google puts the marker low and to the right in the safe area: the bottom of the safe area must be around row 404, not 450–460.</li>
+        <li>Declaring 240×144 mm did not shrink the Google card (no comparison with 160×96 mm was made).</li>
+        <li><code>showSpeedLimit=yes</code> shows nothing; <code>showETA=no</code> could not be judged because the card was replaced by the map alone.</li>
+        <li>The distance/time bar and the arrow are drawn by the cluster (BAP) from iAP2 RouteGuidance data; they do not cover the CarPlay picture except for the top strip of the window.</li>
+      </ul>
+    </article>
+  </div>
+</div>
+
+<script>
+const VIEWS = {
+  small: { name: "Small dials (wide map)", x0: 320, y0: 60, top: 125, bottom: 465, win: [385, 1055],
+           dials: [[260, 310, 195], [1180, 310, 195]] },
+  big:   { name: "Big dials", x0: 320, y0: 60, top: 125, bottom: 465, win: [468, 972],
+           dials: [[292, 285, 240], [1148, 285, 240]] }
+};
+const ETA_BOTTOM = 171;                 // panel px: native distance/time row under the clock bar
+const PUCK_FX = 0.90, PUCK_FY = 0.66;   // Google marker in the safe area, measured on IMG_1127/1128 (url-map-hybrid)
+const VARIANTS = [
+  { id: "mapClean", name: "1 · map-clean", gem: "map-clean", status: ["default", "ok"], url: "maps:/car/instrumentcluster/map",
+    safe: [200, 108, 400, 296], card: false,
+    note: "Map only, clean URL. Same layout as url-map-hybrid, which has the right marker height in the car; the speed-limit parameter showed nothing anyway." },
+  { id: "cardClean", name: "2 · card-clean", gem: "card-clean", status: ["to test", "mid"], url: "maps:/car/instrumentcluster",
+    safe: [200, 108, 400, 296], card: true,
+    note: "Map with the iPhone maneuver card, clean URL. Without showETA=no the iPhone may draw its own ETA bar on the card (duplicating the native VW bar). Useful when native guidance does not work." },
+  { id: "mapH", name: "3 · url-map-hybrid", gem: "url-map-hybrid", status: ["works in the car", "ok"], url: "maps:/car/instrumentcluster/map?showSpeedLimit=yes",
+    safe: [200, 108, 400, 296], card: false,
+    note: "Tested in the car, works. Map without a card; the showSpeedLimit=yes parameter shows nothing (signs come from the VW camera)." },
+  { id: "mapL40", name: "4 · map-clean-l40", gem: "map-clean-l40", status: ["do testu", "mid"], url: "maps:/car/instrumentcluster/map",
+    safe: [160, 108, 400, 296], card: false,
+    note: "Like map-clean, shifted slightly left (40 columns). By the measurement the marker ends up about 36 columns closer to the window centre." },
+  { id: "mapSq", name: "5 · map-square", gem: "map-square", status: ["do testu", "mid"], url: "maps:/car/instrumentcluster/map",
+    safe: [240, 60, 320, 340], card: false,
+    note: "Layout from the mathsls fork (MU1161/791): 320×340, closer to square, centred on column 400, clean URL. By the measurement the marker lands at about x 528 / y 284 (map-clean: 560 / 303)." },
+  { id: "hSpeed", name: "history: url-map-speed", gem: "(removed from menu)", status: ["history · marker too low", "bad"], url: "maps:/car/instrumentcluster/map?showSpeedLimit=yes",
+    safe: [160, 20, 480, 430], card: false,
+    note: "First map-only test (23 Oct): no card in Apple or Google Maps, Google marker at the bottom edge of the window." },
+  { id: "hTall", name: "history: url-card-hybrid-tall", gem: "(removed from menu)", status: ["history · marker cut off", "bad"], url: "maps:/car/instrumentcluster?showETA=no",
+    safe: [200, 108, 400, 352], card: true,
+    note: "First variant in the car (23 Oct). Safe-area bottom at row 460, under the bottom bar: Google marker cut off." }
+];
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+const el = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+const state = { view: "big", variant: "mapClean" };
+try { const s = JSON.parse(localStorage.getItem("aidFrameMap1") || "{}"); if (VIEWS[s.view]) state.view = s.view; if (VARIANTS.some(v => v.id === s.variant)) state.variant = s.variant; } catch (e) {}
+
+function rulers() {
+  const g = $("rulers");
+  for (let x = 0; x <= 1440; x += 180) {
+    g.append(el("line", { x1: x, x2: x, y1: -12, y2: -2, stroke: "var(--muted)" }));
+    const t = el("text", { x, y: -20, "text-anchor": "middle" }); t.textContent = x; g.append(t);
+  }
+  for (let y = 0; y <= 540; y += 90) {
+    g.append(el("line", { x1: -12, x2: -2, y1: y, y2: y, stroke: "var(--muted)" }));
+    const t = el("text", { x: -18, y: y + 4, "text-anchor": "end" }); t.textContent = y; g.append(t);
+  }
+  const cap = el("text", { x: 720, y: 590, "text-anchor": "middle" });
+  cap.textContent = "AID panel 1440 × 540 px · orange frame: CarPlay frame 800 × 480";
+  g.append(cap);
+}
+
+function drawDial(g, [cx, cy, r]) {
+  g.append(el("circle", { cx, cy, r, fill: "var(--dial)" }));
+  g.append(el("circle", { cx, cy, r: r - 6, fill: "none", stroke: "var(--dial-ring)", "stroke-width": 8 }));
+  g.append(el("circle", { cx, cy, r: r * 0.55, fill: "none", stroke: "var(--dial-ring)", "stroke-width": 3 }));
+  for (let i = 0; i <= 10; i++) {
+    const a = Math.PI * (0.75 + i * 0.15);
+    g.append(el("line", { x1: cx + Math.cos(a) * (r - 22), y1: cy + Math.sin(a) * (r - 22),
+                          x2: cx + Math.cos(a) * (r - 42), y2: cy + Math.sin(a) * (r - 42), stroke: "var(--dial-ink)", "stroke-width": 5 }));
+  }
+}
+
+function setRect(node, [x, y, w, h]) { node.setAttribute("x", x); node.setAttribute("y", y); node.setAttribute("width", w); node.setAttribute("height", h); }
+function rectHitsCircle([x, y, w, h], [cx, cy, r]) {
+  const nx = Math.max(x, Math.min(cx, x + w)), ny = Math.max(y, Math.min(cy, y + h));
+  return (nx - cx) ** 2 + (ny - cy) ** 2 < r * r;
+}
+function toPanel(V, [x, y, w, h]) { return [V.x0 + x, V.y0 + y, w, h]; }
+function occluders(V, rect, native) {
+  const [x, y, w, h] = rect, out = [];
+  if (y < V.top) out.push("top bar");
+  else if (native && y < ETA_BOTTOM) out.push("distance/time bar");
+  if (y + h > V.bottom) out.push("bottom bar");
+  if (x < V.win[0] || x + w > V.win[1]) out.push("map window frame");
+  if (rectHitsCircle(rect, V.dials[0])) out.push("left dial");
+  if (rectHitsCircle(rect, V.dials[1])) out.push("right dial");
+  return out;
+}
+
+function render() {
+  const V = VIEWS[state.view], v = VARIANTS.find(x => x.id === state.variant), native = $("tNative").checked;
+  $("stream").setAttribute("transform", `translate(${V.x0} ${V.y0})`);
+  setRect($("safeArea"), v.safe);
+  const [sx, sy, sw, sh] = v.safe;
+
+  const c = [sx + 4, sy + 4, sw - 12, 92];
+  $("card").style.display = v.card ? "" : "none";
+  setRect($("cardBg"), c);
+  $("cardText").setAttribute("x", c[0] + c[2] / 2); $("cardText").setAttribute("y", c[1] + 58); $("cardText").setAttribute("font-size", 36);
+
+  const px = sx + sw * PUCK_FX, py = sy + sh * PUCK_FY;
+  $("puckHalo").setAttribute("cx", px); $("puckHalo").setAttribute("cy", py);
+  $("puckArrow").setAttribute("d", `M${px} ${py - 18} L${px + 13} ${py + 16} L${px} ${py + 8} L${px - 13} ${py + 16} Z`);
+  $("route").setAttribute("d", `M${px} ${py} L${px} ${py - 90} L${px + 140} ${py - 150}`);
+
+  const [w0, w1] = V.win, bev = 40;
+  $("winMask").setAttribute("d", `M0 0 H1440 V540 H0 Z M${w0 + bev} ${V.top} H${w1 - bev} L${w1} ${V.top + bev} V${V.bottom} H${w0} V${V.top + bev} Z`);
+  $("topBar").setAttribute("height", V.top);
+  $("bottomBar").setAttribute("y", V.bottom); $("bottomBar").setAttribute("height", 540 - V.bottom);
+  const tt = $("topText"); tt.replaceChildren();
+  [["E", 600], ["20:12", 720], ["13.5°C", 860]].forEach(([s, x]) => { const t = el("text", { x, y: V.top * 0.68 }); t.textContent = s; tt.append(t); });
+  const bt = el("text", { x: 720, y: V.bottom + (540 - V.bottom) * 0.62, "font-size": 26 }); bt.textContent = "trip 600.2 km      131238 km"; tt.append(bt);
+  const dg = $("dials"); dg.replaceChildren(); V.dials.forEach(d => drawDial(dg, d));
+
+  setRect($("etaBg"), [w0 + bev, V.top, w1 - w0 - 2 * bev, ETA_BOTTOM - V.top]);
+  const et = $("etaText"); et.replaceChildren();
+  [["⊕ 2.7 km", w0 + bev + 100], ["◷ 0:11", w1 - bev - 90]].forEach(([s, x]) => { const t = el("text", { x, y: V.top + 33, "text-anchor": "middle" }); t.textContent = s; et.append(t); });
+  $("etaBar").style.display = native && $("tCluster").checked ? "" : "none";
+
+  // native arrow in the right dial, distance/time in the left (as on IMG_1127/1128)
+  const nd = $("nativeDials"); nd.replaceChildren();
+  if (native) {
+    const [rx, ry, rr] = V.dials[1], k = rr / 240;
+    nd.append(el("path", { d: `M${rx - 30 * k} ${ry + 45 * k} L${rx - 18 * k} ${ry - 25 * k} L${rx + 40 * k} ${ry - 25 * k} L${rx + 40 * k} ${ry - 38 * k} L${rx + 62 * k} ${ry - 18 * k} L${rx + 40 * k} ${ry + 2 * k} L${rx + 40 * k} ${ry - 11 * k} L${rx - 2 * k} ${ry - 11 * k} L${rx + 10 * k} ${ry + 45 * k} Z`, fill: "var(--dial-ink)" }));
+    const d1 = el("text", { x: rx, y: ry + 78 * k, "font-size": 24 }); d1.textContent = "20 m"; nd.append(d1);
+    const [lx, ly, lr] = V.dials[0], q = lr / 240;
+    const a = el("text", { x: lx, y: ly + 8 * q, "font-size": 40 * q }); a.textContent = "0:11"; nd.append(a);
+    const b = el("text", { x: lx, y: ly + 44 * q, "font-size": 26 * q }); b.textContent = "2.7 km"; nd.append(b);
+  }
+
+  $("streamOutline").style.display = $("tStream").checked ? "" : "none";
+  $("safeArea").style.display = $("tSafe").checked ? "" : "none";
+  $("cluster").style.display = $("tCluster").checked ? "" : "none";
+
+  $("vName").textContent = v.name;
+  const st = $("vStatus"); st.className = "status " + v.status[1]; st.textContent = v.status[0];
+  $("vUrl").textContent = v.url;
+  $("vSafe").textContent = `${v.safe.join(", ")} · bottom ${sy + sh}`;
+  $("vRows").textContent = `rows 65–405 · columns ${Math.round(V.win[0] - V.x0)}–${Math.round(V.win[1] - V.x0)}`;
+  $("vGem").textContent = v.gem.startsWith("(") ? v.gem : `Zmien wariant na: ${v.gem}`;
+  $("vNote").textContent = v.note;
+
+  const checks = $("checks"); checks.replaceChildren();
+  const add = (okState, text) => {
+    const li = document.createElement("li");
+    const m = document.createElement("span"); m.className = okState === true ? "ok" : okState === false ? "bad" : "mid";
+    m.textContent = okState === true ? "✓" : okState === false ? "✕" : "–";
+    const t = document.createElement("span"); t.textContent = text;
+    li.append(m, t); checks.append(li);
+  };
+  if (v.card) {
+    const o = occluders(V, toPanel(V, c), native);
+    add(o.length === 0, o.length ? `Card partly under: ${o.join(", ")}` : "Card fully visible");
+  } else add(true, "No card: whole map visible, the native arrow shows the maneuver");
+  const op = occluders(V, toPanel(V, [px - 30, py - 30, 60, 60]), native);
+  add(op.length === 0, op.length ? `Marker under: ${op.join(", ")}` : "Marker inside the map window");
+  const off = Math.round(px - 400);
+  add(Math.abs(off) <= 60 ? true : null, `Marker ${Math.abs(off)} columns ${off >= 0 ? "right" : "left"} of the window centre (column 400)`);
+
+  for (const b of document.querySelectorAll("#viewSwitch button")) b.setAttribute("aria-pressed", String(b.dataset.id === state.view));
+  for (const b of document.querySelectorAll("#varSwitch button")) b.setAttribute("aria-pressed", String(b.dataset.id === state.variant));
+  try { localStorage.setItem("aidFrameMap1", JSON.stringify(state)); } catch (e) {}
+}
+
+function init() {
+  rulers();
+  for (const [id, V] of Object.entries(VIEWS)) {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.id = id; b.textContent = V.name;
+    b.addEventListener("click", () => { state.view = id; render(); }); $("viewSwitch").append(b);
+  }
+  for (const v of VARIANTS) {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.id = v.id; b.textContent = v.name;
+    b.addEventListener("click", () => { state.variant = v.id; render(); }); $("varSwitch").append(b);
+  }
+  ["tStream", "tSafe", "tCluster", "tNative"].forEach(id => $(id).addEventListener("change", render));
+  render();
+}
+init();
+</script>
+</body>
+</html>

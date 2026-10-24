@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa klatki AID 791</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: status first, then the AID panel model (1440x540 panel px, 800x480 stream laid 1:1) with the variant sheet beside it, then in-car photos and the measurements the model rests on */
+:root {
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --ink: #17202b;
+  --muted: #5b6878;
+  --line: #ccd4de;
+  --accent: #d9731a;
+  --safe: #1f7ae0;
+  --map: #2d4f8a;
+  --map-road: #b9c6dc;
+  --map-minor: #3e639e;
+  --route: #6fe0e8;
+  --black: #05070a;
+  --glass: #0b0f14;
+  --dial: #10161d;
+  --dial-ring: #8f9aa6;
+  --dial-ink: #eef2f6;
+  --bar: rgba(8, 11, 15, 0.92);
+  --card-bg: rgba(60, 170, 150, 0.92);
+  --card-ink: #ffffff;
+  --puck: #2f6bff;
+  --ok: #2e8b57;
+  --warn: #c0392b;
+  --display: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --panel: #171e26; --ink: #e6ebf0; --muted: #93a1b1; --line: #2a3542;
+    --accent: #f0923a; --safe: #5aa2ff; --ok: #4cc38a; --warn: #ff6b5e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #171e26; --ink: #e6ebf0; --muted: #93a1b1; --line: #2a3542;
+  --accent: #f0923a; --safe: #5aa2ff; --ok: #4cc38a; --warn: #ff6b5e; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 22px; }
+header h1 { font-family: var(--display); font-weight: 700; font-size: clamp(26px, 4vw, 36px); line-height: 1.1; margin: 0; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 75ch; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+h2.sec { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 6px 0 0; }
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.status-grid article { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.status-grid h3 { font-family: var(--display); font-weight: 600; font-size: 17px; margin: 0 0 8px; }
+.controls { display: grid; gap: 10px; }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ctl > span { font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); min-width: 92px; }
+.ctl button {
+  font-family: var(--body); font-size: 14px; font-weight: 500; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 11px; cursor: pointer;
+}
+.ctl button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.ctl button:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 14px; font-size: 14px; }
+.toggles label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 22px; align-items: start; }
+@media (max-width: 960px) { .main { grid-template-columns: 1fr; } }
+.stage { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.svgbox { overflow-x: auto; }
+#aid { display: block; width: 100%; min-width: 600px; height: auto; font-family: var(--mono); }
+.spec { display: grid; gap: 14px; min-width: 0; }
+.spec section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.spec h2 { font-family: var(--display); font-weight: 600; font-size: 19px; margin: 0 0 8px; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.status { display: inline-block; font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.ok { color: var(--ok); }
+.bad { color: var(--warn); }
+.mid { color: var(--accent); }
+.note { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 14px; }
+.checks li { display: grid; grid-template-columns: 18px 1fr; gap: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend svg { width: 18px; height: 12px; }
+.photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
+figure img { width: 100%; height: auto; border-radius: 6px; display: block; }
+figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.facts article { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.facts h3 { font-family: var(--display); font-weight: 600; font-size: 17px; margin: 0 0 6px; }
+.facts p { margin: 0 0 6px; font-size: 14px; }
+ul.plain { margin: 0; padding-left: 18px; font-size: 14px; }
+ul.plain li { margin: 2px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-variant-numeric: tabular-nums; }
+th { color: var(--muted); font-weight: 500; }
+.tablebox { overflow-x: auto; }
+code { font-family: var(--mono); font-size: 0.9em; }
+.lang { font-size: 13px; margin: 0 0 6px; }
+.lang a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <p class="lang"><a href="aid-frame-map.html" hreflang="en" lang="en">English version</a></p>
+    <div class="eyebrow">Passat B8 · MHI2 MU1161 · AID 791 12.3" · stan: październik 2026</div>
+    <h1>Mapa CarPlay i natywne prowadzenie na AID</h1>
+    <p>Co działa w aucie, jak klatka CarPlay 800×480 leży na panelu AID 1440×540 i który wariant <code>core.so</code> daje jaki układ. Model i pozycje znacznika są skalibrowane na zdjęciach z auta z 23–24.10.2026.</p>
+  </header>
+
+  <h2 class="sec">Stan w aucie</h2>
+  <div class="status-grid">
+    <article>
+      <h3>Działa</h3>
+      <ul class="plain">
+        <li>Mapa CarPlay w oknie mapy AID (Apple Maps i Google Maps, duże i małe tarcze), wariant <code>url-map-hybrid</code>: sama mapa, bez karty i bez znaku z iPhone'a; znaki pokazuje kamera VW. Domyślny <code>map-clean</code> ma ten sam układ.</li>
+        <li>Natywna strzałka manewru VW z dystansem do skrętu w prawej tarczy (pojawia się w ruchu; na postoju na starcie trasy nie ma manewru).</li>
+        <li>Natywny dystans i czas do celu na pasku nad mapą i w lewej tarczy.</li>
+        <li>Mapa zostaje przy prowadzeniu w Apple Maps (NavActiveIgnore).</li>
+        <li>Zoom mapy strzałkami na kierownicy, tytuł i wykonawca na AID, tryb dzień/noc.</li>
+      </ul>
+    </article>
+    <article>
+      <h3>Pakiety</h3>
+      <ul class="plain">
+        <li>Etap A: obraz na AID (<code>dio_manager</code> z nakładką, <code>core.so</code> wariantu). Zmiana wariantu podmienia jeden <code>core.so</code>, potem restart, bez „Potwierdz”.</li>
+        <li>System RG (paczka E): sterownik iAP2, <code>iap2.cfg</code>, czytnik prowadzenia.</li>
+        <li>Java: nai, np, rg, zoom, dn. Każda: „Wlacz: …”, restart, sprawdzenie i „Potwierdz” w tym samym starcie.</li>
+        <li>Karta instalacyjna z <code>installer/build_card_install.py</code> i osobna karta ratunkowa z <code>installer/build_rescue.py</code> (przywraca fabryczne HMI).</li>
+      </ul>
+    </article>
+    <article>
+      <h3>Do sprawdzenia</h3>
+      <ul class="plain">
+        <li>Warianty w aucie: <code>card-clean</code> (z kartą manewru), <code>map-clean-l40</code> (lekko w lewo) i <code>map-square</code> (układ mathsls, bliżej kwadratu).</li>
+        <li>Natywna strzałka w Waze.</li>
+      </ul>
+    </article>
+  </div>
+
+  <h2 class="sec">Model panelu</h2>
+  <div class="controls">
+    <div class="ctl" role="group" aria-label="Widok AID" id="viewSwitch"><span>Widok AID</span></div>
+    <div class="ctl" role="group" aria-label="Wariant core.so" id="varSwitch"><span>Wariant</span></div>
+    <div class="toggles">
+      <label><input type="checkbox" id="tStream" checked> zarys klatki 800×480</label>
+      <label><input type="checkbox" id="tSafe" checked> safe area</label>
+      <label><input type="checkbox" id="tCluster" checked> grafika zegarów</label>
+      <label><input type="checkbox" id="tNative" checked> natywne prowadzenie VW (pasek, strzałka)</label>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="stage">
+      <div class="svgbox">
+        <svg id="aid" viewBox="-70 -50 1580 660" role="img" aria-labelledby="aidTitle">
+          <title id="aidTitle">Panel AID 1440 na 540 pikseli z tarczami, paskami, natywnym prowadzeniem i nałożonym strumieniem CarPlay</title>
+          <defs>
+            <clipPath id="panelClip"><rect x="0" y="0" width="1440" height="540" rx="120" ry="120"></rect></clipPath>
+            <clipPath id="streamClip"><rect x="0" y="0" width="800" height="480"></rect></clipPath>
+          </defs>
+          <g id="rulers" font-size="13" fill="var(--muted)"></g>
+
+          <g clip-path="url(#panelClip)">
+            <rect x="0" y="0" width="1440" height="540" fill="var(--glass)"></rect>
+
+            <!-- CarPlay stream, in stream pixels, placed 1:1 at panel x 320, y 60 -->
+            <g id="stream">
+              <g clip-path="url(#streamClip)">
+                <rect width="800" height="480" fill="var(--map)"></rect>
+                <g stroke="var(--map-minor)" stroke-width="3" fill="none">
+                  <path d="M0 120 L800 150 M0 300 L800 270 M140 0 L210 480 M620 0 L560 480 M300 0 L330 480 M470 0 L500 480 M0 420 L800 400"></path>
+                </g>
+                <g stroke="var(--map-road)" stroke-width="12" fill="none" stroke-linecap="round">
+                  <path d="M0 210 L800 235"></path>
+                  <path d="M90 480 L260 330 L420 300"></path>
+                </g>
+                <path id="route" stroke="var(--route)" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+                <rect id="safeArea" fill="none" stroke="var(--safe)" stroke-width="4" stroke-dasharray="10 6"></rect>
+                <g id="card">
+                  <rect id="cardBg" rx="16" fill="var(--card-bg)"></rect>
+                  <text id="cardText" fill="var(--card-ink)" font-family="var(--display)" font-weight="700" text-anchor="middle">toward Długa</text>
+                </g>
+                <circle id="puckHalo" r="30" fill="var(--puck)" opacity="0.85"></circle>
+                <path id="puckArrow" fill="#ffffff"></path>
+              </g>
+              <rect id="streamOutline" width="800" height="480" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="14 8"></rect>
+            </g>
+
+            <!-- cluster graphics, in panel pixels -->
+            <g id="cluster">
+              <path id="winMask" fill="var(--glass)" fill-rule="evenodd" d=""></path>
+              <rect id="topBar" x="0" y="0" width="1440" fill="var(--bar)"></rect>
+              <rect id="bottomBar" x="0" width="1440" fill="var(--bar)"></rect>
+              <g id="etaBar">
+                <rect id="etaBg" fill="rgba(20, 26, 34, 0.80)"></rect>
+                <g id="etaText" fill="var(--dial-ink)" font-family="var(--body)" font-weight="600" font-size="26"></g>
+              </g>
+              <g id="topText" fill="var(--dial-ink)" font-family="var(--body)" font-weight="600" font-size="30" text-anchor="middle"></g>
+              <g id="dials"></g>
+              <g id="nativeDials" fill="var(--dial-ink)" font-family="var(--body)" font-weight="600" text-anchor="middle"></g>
+            </g>
+          </g>
+          <rect x="0" y="0" width="1440" height="540" rx="120" ry="120" fill="none" stroke="var(--ink)" stroke-width="3"></rect>
+        </svg>
+      </div>
+      <div class="legend">
+        <span><svg viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 2"></rect></svg> klatka 800×480 (część pod paskami i tarczami)</span>
+        <span><svg viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="none" stroke="var(--safe)" stroke-width="2" stroke-dasharray="4 2"></rect></svg> safe area wariantu</span>
+        <span><svg viewBox="0 0 18 12"><circle cx="9" cy="6" r="5" fill="var(--puck)"></circle></svg> znacznik pozycji (Google Maps, pozycja z pomiaru)</span>
+      </div>
+    </div>
+
+    <aside class="spec">
+      <section>
+        <h2 id="vName">Wariant</h2>
+        <span id="vStatus" class="status"></span>
+        <dl style="margin-top:10px">
+          <dt>URL</dt><dd id="vUrl"></dd>
+          <dt>safe area</dt><dd id="vSafe"></dd>
+          <dt>gęstość</dt><dd>240×144 mm · 3,33 px/mm</dd>
+          <dt>fps / IDR</dt><dd>30 / co 5</dd>
+          <dt>okno mapy</dt><dd id="vRows"></dd>
+          <dt>GEM</dt><dd id="vGem"></dd>
+        </dl>
+        <p class="note" id="vNote"></p>
+      </section>
+      <section>
+        <h2>W tym widoku</h2>
+        <ul class="checks" id="checks"></ul>
+        <p class="note">Znacznik stoi tam, gdzie zmierzono go na zdjęciach Google Maps w wariancie <code>url-map-hybrid</code>: ok. 90% szerokości i 66% wysokości safe area. Jak Google liczy pozycję w poziomie, nie wiemy, więc dla przesuniętych wariantów to prognoza, nie pomiar.</p>
+      </section>
+    </aside>
+  </div>
+
+  <h2 class="sec">Zdjęcia z auta</h2>
+  <div class="photos">
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1128.jpg" alt="AID, duże tarcze: mapa Google Maps bez karty, natywna strzałka skrętu w prawo 20 m w prawej tarczy, czas 0:11 i 2.7 km w lewej, znak 50 na górnym pasku; znacznik pozycji przy prawej krawędzi okna">
+      <figcaption><b>24.10, <code>url-map-hybrid</code>, duże tarcze.</b> Natywna strzałka „20 m” w prawej tarczy, 0:11 / 2.7 km w lewej, znak 50 z kamery VW. Znacznik ok. 150–165 kolumn klatki na prawo od środka okna, przy prawej tarczy.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1127.jpg" alt="AID, małe tarcze: ta sama scena, pasek 2.7 km i 0:11 nad mapą, znacznik pozycji na prawo od środka">
+      <figcaption><b>24.10, <code>url-map-hybrid</code>, małe tarcze.</b> Pasek dystans/czas nad mapą, strzałka w prawej tarczy. Znacznik w pionie dobrze, w poziomie też na prawo od środka.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1111.jpg" alt="AID, małe tarcze: Google Maps z kartą toward Długa, pasek 1.8 km i 0:06, skala zoomu 100 m">
+      <figcaption><b>23.10, <code>url-card-hybrid</code>.</b> Karta Google „toward Długa”, znacznik widoczny, nakładka zoomu „100 m”. Karta duża; 240×144 mm jej nie zmniejsza.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1105.jpg" alt="AID: Google Maps z kartą, znacznik pozycji ucięty dolną krawędzią okna mapy">
+      <figcaption><b>23.10, <code>url-card-hybrid-tall</code>.</b> Pierwszy wariant: znacznik Google ucięty dołem okna (safe area do wiersza 460).</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1102.jpg" alt="AID: pierwsza mapa CarPlay bez prowadzenia, Kaufland i OBI">
+      <figcaption><b>23.10, pierwszy obraz.</b> Apple Maps bez prowadzenia, zaraz po instalacji etapu A.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/aid-carplay-2026-10/IMG_1101.jpg" alt="AID: komunikat Nawigacja w urządzeniu mobilnym jest aktywna">
+      <figcaption><b>23.10, bez NavActiveIgnore.</b> Przy prowadzeniu w Apple Maps licznik zasłania mapę komunikatem VW. Paczka nai to usuwa (Google Maps go nie wywołuje).</figcaption>
+    </figure>
+  </div>
+
+  <h2 class="sec">Na czym stoi model</h2>
+  <div class="facts">
+    <article>
+      <h3>Klatka leży 1:1</h3>
+      <p>Strumień 800×480 nie jest skalowany: leży na panelu piksel w piksel w x 320–1120, y 60–540. Przełączenie tarcz zwęża tylko okno mapy: kolumny klatki 65–735 (małe) i 148–652 (duże), w obu środek na kolumnie 400. Wiersze 65–405 w obu widokach.</p>
+      <p>Pomiar z fabrycznej nawigacji VW na AID w aucie (21.10) i zrzutów VW z internetu; dokładność ok. ±15 px.</p>
+    </article>
+    <article>
+      <h3>Pomiary panelu</h3>
+      <div class="tablebox">
+        <table>
+          <thead><tr><th>panel AID</th><th>małe tarcze</th><th>duże tarcze</th></tr></thead>
+          <tbody>
+            <tr><td>górny pasek do</td><td>125 px</td><td>125 px</td></tr>
+            <tr><td>pasek dystans/czas do</td><td>171 px</td><td>171 px</td></tr>
+            <tr><td>dolny pasek od</td><td>465 px</td><td>465 px</td></tr>
+            <tr><td>okno mapy (x)</td><td>385–1055</td><td>468–972</td></tr>
+            <tr><td>lewa tarcza (środek, r)</td><td>260,310 · 195</td><td>292,285 · 240</td></tr>
+            <tr><td>prawa tarcza (środek, r)</td><td>1180,310 · 195</td><td>1148,285 · 240</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+    <article>
+      <h3>Czego nauczyło nas auto</h3>
+      <ul class="plain">
+        <li>Adres <code>…/instrumentcluster/map</code> działa w Apple i Google: bez karty.</li>
+        <li>Google stawia znacznik nisko i na prawo w safe area: dół safe area musi być ok. wiersza 404, a nie 450–460.</li>
+        <li>Deklaracja 240×144 mm nie zmniejszyła karty Google (porównanie z 160×96 mm nie zrobione).</li>
+        <li><code>showSpeedLimit=yes</code> nic nie pokazuje; <code>showETA=no</code> nie do oceny, bo kartę zastąpiła sama mapa.</li>
+        <li>Pasek dystans/czas i strzałkę rysuje licznik (BAP) z danych iAP2 RouteGuidance; obrazu CarPlay nie zasłaniają, poza górnym pasem okna.</li>
+      </ul>
+    </article>
+  </div>
+</div>
+
+<script>
+const VIEWS = {
+  small: { name: "Małe tarcze (szeroka mapa)", x0: 320, y0: 60, top: 125, bottom: 465, win: [385, 1055],
+           dials: [[260, 310, 195], [1180, 310, 195]] },
+  big:   { name: "Duże tarcze", x0: 320, y0: 60, top: 125, bottom: 465, win: [468, 972],
+           dials: [[292, 285, 240], [1148, 285, 240]] }
+};
+const ETA_BOTTOM = 171;                 // panel px: native distance/time row under the clock bar
+const PUCK_FX = 0.90, PUCK_FY = 0.66;   // Google marker in the safe area, measured on IMG_1127/1128 (url-map-hybrid)
+const VARIANTS = [
+  { id: "mapClean", name: "1 · map-clean", gem: "map-clean", status: ["domyślny", "ok"], url: "maps:/car/instrumentcluster/map",
+    safe: [200, 108, 400, 296], card: false,
+    note: "Sama mapa, czysty adres. Ten sam układ co url-map-hybrid, który w aucie ma dobrą wysokość znacznika; parametr ograniczenia prędkości i tak nic nie pokazywał." },
+  { id: "cardClean", name: "2 · card-clean", gem: "card-clean", status: ["do testu", "mid"], url: "maps:/car/instrumentcluster",
+    safe: [200, 108, 400, 296], card: true,
+    note: "Mapa z kartą manewru iPhone'a, czysty adres. Bez showETA=no iPhone może dorysować na karcie własny pasek ETA (dubel z natywnym paskiem VW). Przydatny, gdy natywne prowadzenie nie działa." },
+  { id: "mapH", name: "3 · url-map-hybrid", gem: "url-map-hybrid", status: ["w aucie · działa", "ok"], url: "maps:/car/instrumentcluster/map?showSpeedLimit=yes",
+    safe: [200, 108, 400, 296], card: false,
+    note: "Sprawdzony w aucie, działa. Mapa bez karty; parametr showSpeedLimit=yes nic nie pokazuje (znaki pokazuje kamera VW)." },
+  { id: "mapL40", name: "4 · map-clean-l40", gem: "map-clean-l40", status: ["do testu", "mid"], url: "maps:/car/instrumentcluster/map",
+    safe: [160, 108, 400, 296], card: false,
+    note: "Jak map-clean, przesunięty lekko w lewo (40 kolumn). Według pomiaru znacznik ok. 36 kolumn bliżej środka okna." },
+  { id: "mapSq", name: "5 · map-square", gem: "map-square", status: ["do testu", "mid"], url: "maps:/car/instrumentcluster/map",
+    safe: [240, 60, 320, 340], card: false,
+    note: "Układ forka mathsls (MU1161/791): 320×340, bliżej kwadratu, wyśrodkowany na kolumnie 400, czysty adres. Według pomiaru znacznik ok. x 528 / y 284 (map-clean: 560 / 303)." },
+  { id: "hSpeed", name: "historia: url-map-speed", gem: "(usunięty z menu)", status: ["historia · znacznik za nisko", "bad"], url: "maps:/car/instrumentcluster/map?showSpeedLimit=yes",
+    safe: [160, 20, 480, 430], card: false,
+    note: "Pierwszy test samej mapy (23.10): karty brak w Apple i Google, znacznik Google przy dolnej krawędzi okna." },
+  { id: "hTall", name: "historia: url-card-hybrid-tall", gem: "(usunięty z menu)", status: ["historia · znacznik ucięty", "bad"], url: "maps:/car/instrumentcluster?showETA=no",
+    safe: [200, 108, 400, 352], card: true,
+    note: "Pierwszy wariant w aucie (23.10). Dół safe area na wierszu 460, pod dolnym paskiem: znacznik Google ucięty." }
+];
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+const el = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+const state = { view: "big", variant: "mapClean" };
+try { const s = JSON.parse(localStorage.getItem("aidFrameMap1") || "{}"); if (VIEWS[s.view]) state.view = s.view; if (VARIANTS.some(v => v.id === s.variant)) state.variant = s.variant; } catch (e) {}
+
+function rulers() {
+  const g = $("rulers");
+  for (let x = 0; x <= 1440; x += 180) {
+    g.append(el("line", { x1: x, x2: x, y1: -12, y2: -2, stroke: "var(--muted)" }));
+    const t = el("text", { x, y: -20, "text-anchor": "middle" }); t.textContent = x; g.append(t);
+  }
+  for (let y = 0; y <= 540; y += 90) {
+    g.append(el("line", { x1: -12, x2: -2, y1: y, y2: y, stroke: "var(--muted)" }));
+    const t = el("text", { x: -18, y: y + 4, "text-anchor": "end" }); t.textContent = y; g.append(t);
+  }
+  const cap = el("text", { x: 720, y: 590, "text-anchor": "middle" });
+  cap.textContent = "panel AID 1440 × 540 px · pomarańczowa ramka: klatka CarPlay 800 × 480";
+  g.append(cap);
+}
+
+function drawDial(g, [cx, cy, r]) {
+  g.append(el("circle", { cx, cy, r, fill: "var(--dial)" }));
+  g.append(el("circle", { cx, cy, r: r - 6, fill: "none", stroke: "var(--dial-ring)", "stroke-width": 8 }));
+  g.append(el("circle", { cx, cy, r: r * 0.55, fill: "none", stroke: "var(--dial-ring)", "stroke-width": 3 }));
+  for (let i = 0; i <= 10; i++) {
+    const a = Math.PI * (0.75 + i * 0.15);
+    g.append(el("line", { x1: cx + Math.cos(a) * (r - 22), y1: cy + Math.sin(a) * (r - 22),
+                          x2: cx + Math.cos(a) * (r - 42), y2: cy + Math.sin(a) * (r - 42), stroke: "var(--dial-ink)", "stroke-width": 5 }));
+  }
+}
+
+function setRect(node, [x, y, w, h]) { node.setAttribute("x", x); node.setAttribute("y", y); node.setAttribute("width", w); node.setAttribute("height", h); }
+function rectHitsCircle([x, y, w, h], [cx, cy, r]) {
+  const nx = Math.max(x, Math.min(cx, x + w)), ny = Math.max(y, Math.min(cy, y + h));
+  return (nx - cx) ** 2 + (ny - cy) ** 2 < r * r;
+}
+function toPanel(V, [x, y, w, h]) { return [V.x0 + x, V.y0 + y, w, h]; }
+function occluders(V, rect, native) {
+  const [x, y, w, h] = rect, out = [];
+  if (y < V.top) out.push("górny pasek");
+  else if (native && y < ETA_BOTTOM) out.push("pasek dystans/czas");
+  if (y + h > V.bottom) out.push("dolny pasek");
+  if (x < V.win[0] || x + w > V.win[1]) out.push("ramka okna mapy");
+  if (rectHitsCircle(rect, V.dials[0])) out.push("lewa tarcza");
+  if (rectHitsCircle(rect, V.dials[1])) out.push("prawa tarcza");
+  return out;
+}
+
+function render() {
+  const V = VIEWS[state.view], v = VARIANTS.find(x => x.id === state.variant), native = $("tNative").checked;
+  $("stream").setAttribute("transform", `translate(${V.x0} ${V.y0})`);
+  setRect($("safeArea"), v.safe);
+  const [sx, sy, sw, sh] = v.safe;
+
+  const c = [sx + 4, sy + 4, sw - 12, 92];
+  $("card").style.display = v.card ? "" : "none";
+  setRect($("cardBg"), c);
+  $("cardText").setAttribute("x", c[0] + c[2] / 2); $("cardText").setAttribute("y", c[1] + 58); $("cardText").setAttribute("font-size", 36);
+
+  const px = sx + sw * PUCK_FX, py = sy + sh * PUCK_FY;
+  $("puckHalo").setAttribute("cx", px); $("puckHalo").setAttribute("cy", py);
+  $("puckArrow").setAttribute("d", `M${px} ${py - 18} L${px + 13} ${py + 16} L${px} ${py + 8} L${px - 13} ${py + 16} Z`);
+  $("route").setAttribute("d", `M${px} ${py} L${px} ${py - 90} L${px + 140} ${py - 150}`);
+
+  const [w0, w1] = V.win, bev = 40;
+  $("winMask").setAttribute("d", `M0 0 H1440 V540 H0 Z M${w0 + bev} ${V.top} H${w1 - bev} L${w1} ${V.top + bev} V${V.bottom} H${w0} V${V.top + bev} Z`);
+  $("topBar").setAttribute("height", V.top);
+  $("bottomBar").setAttribute("y", V.bottom); $("bottomBar").setAttribute("height", 540 - V.bottom);
+  const tt = $("topText"); tt.replaceChildren();
+  [["E", 600], ["20:12", 720], ["13.5°C", 860]].forEach(([s, x]) => { const t = el("text", { x, y: V.top * 0.68 }); t.textContent = s; tt.append(t); });
+  const bt = el("text", { x: 720, y: V.bottom + (540 - V.bottom) * 0.62, "font-size": 26 }); bt.textContent = "trip 600.2 km      131238 km"; tt.append(bt);
+  const dg = $("dials"); dg.replaceChildren(); V.dials.forEach(d => drawDial(dg, d));
+
+  setRect($("etaBg"), [w0 + bev, V.top, w1 - w0 - 2 * bev, ETA_BOTTOM - V.top]);
+  const et = $("etaText"); et.replaceChildren();
+  [["⊕ 2.7 km", w0 + bev + 100], ["◷ 0:11", w1 - bev - 90]].forEach(([s, x]) => { const t = el("text", { x, y: V.top + 33, "text-anchor": "middle" }); t.textContent = s; et.append(t); });
+  $("etaBar").style.display = native && $("tCluster").checked ? "" : "none";
+
+  // native arrow in the right dial, distance/time in the left (as on IMG_1127/1128)
+  const nd = $("nativeDials"); nd.replaceChildren();
+  if (native) {
+    const [rx, ry, rr] = V.dials[1], k = rr / 240;
+    nd.append(el("path", { d: `M${rx - 30 * k} ${ry + 45 * k} L${rx - 18 * k} ${ry - 25 * k} L${rx + 40 * k} ${ry - 25 * k} L${rx + 40 * k} ${ry - 38 * k} L${rx + 62 * k} ${ry - 18 * k} L${rx + 40 * k} ${ry + 2 * k} L${rx + 40 * k} ${ry - 11 * k} L${rx - 2 * k} ${ry - 11 * k} L${rx + 10 * k} ${ry + 45 * k} Z`, fill: "var(--dial-ink)" }));
+    const d1 = el("text", { x: rx, y: ry + 78 * k, "font-size": 24 }); d1.textContent = "20 m"; nd.append(d1);
+    const [lx, ly, lr] = V.dials[0], q = lr / 240;
+    const a = el("text", { x: lx, y: ly + 8 * q, "font-size": 40 * q }); a.textContent = "0:11"; nd.append(a);
+    const b = el("text", { x: lx, y: ly + 44 * q, "font-size": 26 * q }); b.textContent = "2.7 km"; nd.append(b);
+  }
+
+  $("streamOutline").style.display = $("tStream").checked ? "" : "none";
+  $("safeArea").style.display = $("tSafe").checked ? "" : "none";
+  $("cluster").style.display = $("tCluster").checked ? "" : "none";
+
+  $("vName").textContent = v.name;
+  const st = $("vStatus"); st.className = "status " + v.status[1]; st.textContent = v.status[0];
+  $("vUrl").textContent = v.url;
+  $("vSafe").textContent = `${v.safe.join(", ")} · dół ${sy + sh}`;
+  $("vRows").textContent = `wiersze 65–405 · kolumny ${Math.round(V.win[0] - V.x0)}–${Math.round(V.win[1] - V.x0)}`;
+  $("vGem").textContent = v.gem.startsWith("(") ? v.gem : `Zmien wariant na: ${v.gem}`;
+  $("vNote").textContent = v.note;
+
+  const checks = $("checks"); checks.replaceChildren();
+  const add = (okState, text) => {
+    const li = document.createElement("li");
+    const m = document.createElement("span"); m.className = okState === true ? "ok" : okState === false ? "bad" : "mid";
+    m.textContent = okState === true ? "✓" : okState === false ? "✕" : "–";
+    const t = document.createElement("span"); t.textContent = text;
+    li.append(m, t); checks.append(li);
+  };
+  if (v.card) {
+    const o = occluders(V, toPanel(V, c), native);
+    add(o.length === 0, o.length ? `Karta częściowo pod: ${o.join(", ")}` : "Karta w całości widoczna");
+  } else add(true, "Bez karty: cała mapa widoczna, manewr pokazuje natywna strzałka");
+  const op = occluders(V, toPanel(V, [px - 30, py - 30, 60, 60]), native);
+  add(op.length === 0, op.length ? `Znacznik pod: ${op.join(", ")}` : "Znacznik w oknie mapy");
+  const off = Math.round(px - 400);
+  add(Math.abs(off) <= 60 ? true : null, `Znacznik ${Math.abs(off)} kolumn ${off >= 0 ? "na prawo" : "na lewo"} od środka okna (kolumna 400)`);
+
+  for (const b of document.querySelectorAll("#viewSwitch button")) b.setAttribute("aria-pressed", String(b.dataset.id === state.view));
+  for (const b of document.querySelectorAll("#varSwitch button")) b.setAttribute("aria-pressed", String(b.dataset.id === state.variant));
+  try { localStorage.setItem("aidFrameMap1", JSON.stringify(state)); } catch (e) {}
+}
+
+function init() {
+  rulers();
+  for (const [id, V] of Object.entries(VIEWS)) {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.id = id; b.textContent = V.name;
+    b.addEventListener("click", () => { state.view = id; render(); }); $("viewSwitch").append(b);
+  }
+  for (const v of VARIANTS) {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.id = v.id; b.textContent = v.name;
+    b.addEventListener("click", () => { state.variant = v.id; render(); }); $("varSwitch").append(b);
+  }
+  ["tStream", "tSafe", "tCluster", "tNative"].forEach(id => $(id).addEventListener("change", render));
+  render();
+}
+init();
+</script>
+</body>
+</html>
