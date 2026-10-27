@@ -285,8 +285,8 @@ for SH in "$@"; do
     nmenu=$(ls "$SDB"/pmcp/menu/*.sh | wc -l | tr -d ' ')
     nref=$(grep -c '/net/mmx/fs/sda0/pmcp/menu/' "$SDB/esd/Launcher-sda0.esd")
     [ "$nmenu" -gt 20 ] && [ "$nmenu" = "$nref" ] && ok "menu scripts: $nmenu, menu entries: $nref" || bad "menu scripts $nmenu vs entries $nref"
-    grep -q "install map-clean" "$SDB/pmcp/menu/install-map-clean.sh" && grep -q '"2. Instaluj obraz CarPlay na AID: map-clean (etap A)' "$SDB/esd/Launcher-sda0.esd" \
-        && ok "main install button is map-clean" || bad "main install button"
+    grep -q "install map-square" "$SDB/pmcp/menu/install-map-square.sh" && grep -q '"2. Instaluj obraz CarPlay na AID: map-square (etap A)' "$SDB/esd/Launcher-sda0.esd" \
+        && ok "main install button is map-square" || bad "main install button"
     ORIG="$REPO/archives/mib-3.6.0/Launcher-sda0.esd"
     head -c "$(stat -f %z "$ORIG")" "$SDB/esd/Launcher-sda0.esd" | cmp -s - "$ORIG" && ok "M.I.B. menu content unchanged (only appended)" || bad "M.I.B. menu prefix changed"
     for ref in $(grep -o '/net/mmx/fs/sda0/pmcp/menu/[a-z0-9-]*\.sh' "$SDB/esd/Launcher-sda0.esd"); do

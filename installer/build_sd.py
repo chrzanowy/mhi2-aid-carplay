@@ -38,7 +38,7 @@ JAVA_PACKAGES = [("nai", "NavActiveIgnore (mapa na AID przy prowadzeniu w iPhoni
 # In-car set (chosen in the car, 2026-10-24): 1 clean map (default), 2 clean card, 3 map with showSpeedLimit (the variant the
 # unit has had since 2026-10-23, name kept), 4 clean map 40 columns left. All with url-map-hybrid's area.
 VARIANTS = ["map-clean", "card-clean", "url-map-hybrid", "map-clean-l40", "map-square"]
-START_VARIANT = "map-clean"   # main GEM button: chosen in the car 2026-10-24 (map without card, native VW guidance)
+START_VARIANT = "map-square"   # main GEM button: chosen in the car 2026-10-25 after a longer drive (best of the five)
 
 STOCK = {
     "IAP2DRV": (BACKUP / "armle/lib/dll/ipod-drvr-iap2.so", "7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c", 739925),

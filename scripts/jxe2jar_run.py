@@ -9,6 +9,11 @@ The converter (stdlib-only: struct/io/zipfile/argparse) is pinned at commit
 script directory is not on sys.path, so its src dir is added explicitly here. The .jxe is
 only read; the output jar must not exist yet. --check counts .class entries and verifies
 the CAFEBABE magic and class-file version of each.
+
+The converter stamps every entry with the time of the run. The output is rewritten with one fixed timestamp
+(same entries, order, bytes and attributes), so the jar's SHA-256 depends only on the .jxe and the converter
+(normalised MU1161 jar: 573b603a...; same classes as the earlier time-stamped a0cc737c... jar).
+  python3 -I jxe2jar_run.py --normalise in.jar out.jar   (normalise an existing jar)
 """
 import os
 import runpy
@@ -35,9 +40,22 @@ def check(jar):
         print("  bad:", name)
 
 
+def normalise(src, dst):
+    if os.path.exists(dst):
+        sys.exit(f"refusing to overwrite {dst}")
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst + ".tmp", "w") as zout:
+        for old in zin.infolist():
+            new = zipfile.ZipInfo(old.filename, date_time=(1980, 1, 1, 0, 0, 0))
+            new.compress_type, new.external_attr, new.create_system = old.compress_type, old.external_attr, 3
+            zout.writestr(new, zin.read(old))
+    os.replace(dst + ".tmp", dst)
+
+
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--check":
         return check(sys.argv[2])
+    if len(sys.argv) == 4 and sys.argv[1] == "--normalise":
+        return normalise(*(os.path.abspath(p) for p in sys.argv[2:]))
     if len(sys.argv) != 4:
         sys.exit(__doc__)
     src, jxe, out = (os.path.abspath(p) for p in sys.argv[1:])
@@ -48,6 +66,9 @@ def main():
     sys.path.insert(0, src)
     sys.argv = [os.path.join(src, "jxe2jar.py"), jxe, out]
     runpy.run_path(sys.argv[0], run_name="__main__")
+    os.rename(out, out + ".raw")
+    normalise(out + ".raw", out)
+    os.remove(out + ".raw")
     check(out)
 
 

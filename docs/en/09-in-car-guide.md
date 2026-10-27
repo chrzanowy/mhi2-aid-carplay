@@ -55,10 +55,10 @@ screen) shows the unit's state and changes nothing.
 
 ### Step 3. Install the CarPlay picture on the AID (stage A)
 
-1. **"2. Instaluj obraz CarPlay na AID: map-clean (etap A)"** (install the CarPlay picture on the AID, stage A) → expect
-   `PMCP_INSTALL_OK stage=A variant=map-clean ...`.
-   (`map-clean` is the default variant: map only, without the iPhone's manoeuvre card, position marker at the right height;
-   after step 8 VW shows the manoeuvre, ETA and distance natively.)
+1. **"2. Instaluj obraz CarPlay na AID: map-square (etap A)"** (install the CarPlay picture on the AID, stage A) → expect
+   `PMCP_INSTALL_OK stage=A variant=map-square ...`.
+   (`map-square` is the default variant: the mathsls fork's layout, map only, closer to square; it was the best of the five
+   after a longer drive. After step 8 VW shows the manoeuvre, ETA and distance natively.)
 2. Full unit restart (knob ~10 s).
 3. Connect the iPhone (CarPlay), open Apple Maps or Google Maps and **start guidance to a destination**. Switch the AID view to navigation/map.
    AID controls in this car (right side of the steering wheel): **view buttons** (cluster layout), **OK** between them,
@@ -69,13 +69,13 @@ screen) shows the unit's state and changes nothing.
 
 **If the AID shows no picture:**
 1. On the iPhone: Settings → General → CarPlay → this car → **"Forget This Car"**, reconnect.
-2. Still nothing: GEM → submenu **`pmcp_zmien_wariant`** (change variant) → "Zmien wariant na: map-square" (change variant to:
-   map-square; the mathsls fork's layout, which works for others), restart.
+2. Still nothing: GEM → submenu **`pmcp_zmien_wariant`** (change variant) → "Zmien wariant na: map-clean" (change variant to:
+   map-clean; wider and lower map window), restart.
 3. Another layout (`pmcp_zmien_wariant`, each change → restart, no "Potwierdz" (confirm); layouts: [AID frame map](../aid-frame-map.html)):
    `card-clean` (with the iPhone's card, while native guidance is not working yet), `url-map-hybrid` (map with the
    speed-limit parameter, which showed nothing in the car), `map-clean-l40` (map 40 columns to the left),
-   `map-square` (the mathsls fork's layout: narrower and taller, closer to square; marker about 30 columns left and 20 rows up).
-   Back to the default: "Zmien wariant na: map-clean".
+   `map-clean` (wider and lower than map-square: 200 / 108 / 400 / 296).
+   Back to the default: "Zmien wariant na: map-square".
 
 Changing the variant swaps only one file (`core.so`) and does not touch Java. Stage A does not touch the HMI: the worst outcome is no
 CarPlay picture; GEM and "Przywroc pliki fabryczne" (restore factory files) always work.
@@ -187,7 +187,7 @@ The only allowed firmware update is the official K4525. Never cross-flash firmwa
 ## Cheat sheet
 
 ```
-PHASE 1:  card 2 (test, log WYNIK=OK) → card 1: Sprawdz (STOCK) → Instaluj map-clean → restart → AID?
+PHASE 1:  card 2 (test, log WYNIK=OK) → card 1: Sprawdz (STOCK) → Instaluj map-square → restart → AID?
 PHASE 2:  ODBLOKUJ_ETAP_B (computer) → [Wlacz X → restart → test → Potwierdz] for: nai, np, (System RG → restart → CarPlay OK) rg, zoom, dn
 FAILURE:  knob 10 s → stock boot;  bad set confirmed → card 2 → Przywroc
 ```

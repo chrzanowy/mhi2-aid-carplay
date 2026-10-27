@@ -52,13 +52,47 @@ The stream is 800×480 and lies 1:1 on the AID panel. Safe area values are x / y
 
 | Variant | URL | Safe area | Notes |
 |---|---|---|---|
-| `map-clean` (default) | `maps:/car/instrumentcluster/map` | 200 / 108 / 400 / 296 | map only, VW shows guidance natively |
+| `map-clean` | `maps:/car/instrumentcluster/map` | 200 / 108 / 400 / 296 | map only, VW shows guidance natively |
 | `card-clean` | `maps:/car/instrumentcluster` | 200 / 108 / 400 / 296 | with the iPhone's manoeuvre card |
 | `url-map-hybrid` | `…/map?showSpeedLimit=yes` | 200 / 108 / 400 / 296 | speed-limit parameter (no effect seen) |
 | `map-clean-l40` | `maps:/car/instrumentcluster/map` | 160 / 108 / 400 / 296 | 40 columns to the left |
-| `map-square` | `maps:/car/instrumentcluster/map` | 240 / 60 / 320 / 340 | mathsls's MU1161 layout, closer to square |
+| `map-square` (default) | `maps:/car/instrumentcluster/map` | 240 / 60 / 320 / 340 | mathsls's MU1161 layout, closer to square; best after a longer drive |
 
 All variants declare a physical size of 240×144 mm. Switching a variant swaps one file (`core.so`) and needs a restart.
+
+## Download and install
+
+**[Download the latest release](https://github.com/chrzanowy/mhi2-aid-carplay/releases/latest)**: the file
+`mhi2-aid-carplay-cards-<build id>.zip`. It holds both SD cards ready to use. No programs to install, Windows or Mac.
+
+1. Unpack the zip and open `README-FIRST.txt`. It walks you through everything in plain English.
+2. Double-click `Copy-to-SD-Windows.bat` (Windows) or `Copy-to-SD-macOS.command` (Mac). It copies a card onto an
+   **empty** FAT32 SD card, checks every file and ejects the card. It never formats a card or deletes anything.
+   Make card 2 (rescue) first, then card 1 (install).
+3. In the car: follow part 2 of `README-FIRST.txt` (full guide with details: [in-car guide](docs/en/09-in-car-guide.md)).
+
+Before you start you need [M.I.B. installed on the unit and a backup](docs/en/01-mib-install-backup.md). The installer
+on the card checks every file of your head unit first. On any other firmware it stops and changes nothing.
+
+Check the download against `SHA256SUMS.txt` from the same release if you want to be sure it is complete.
+
+## Build the cards yourself (advanced)
+
+Instead of the ready-made cards, you can build them from your own unit's M.I.B. backup (macOS; Linux works for
+building). The result is byte-identical to the release.
+
+```sh
+mkdir ~/mhi2-workspace && cd ~/mhi2-workspace
+git clone https://github.com/chrzanowy/mhi2-aid-carplay.git
+cd mhi2-aid-carplay
+./install.sh                # or double-click Install-macOS.command in Finder
+```
+
+`install.sh` goes through 11 numbered steps. Each one says what it does and why, and shows every command it runs:
+it checks your computer and your backup (train `MHI2_ER_VWG13_P4512` / MU1161, every file by SHA-256), downloads the
+pinned sources, builds and tests everything (including power loss at every write step), builds the two card folders
+and can write them to SD cards. On any mismatch it stops and says what to do. The full log is in
+`logs/install-<date>.log`. `python3 -I release/make_release.py build dist` then packs the release zip.
 
 ## Installer
 
@@ -81,7 +115,7 @@ Installer design: [`docs/en/07-installer.md`](docs/en/07-installer.md).
 
 ## Building
 
-This repository ships **no binaries** and nothing from Volkswagen firmware. Every build reads its inputs from a
+This repository (the source) ships **no binaries** and nothing from Volkswagen firmware. Every build reads its inputs from a
 workspace next to this repository and checks each input by SHA-256:
 
 ```

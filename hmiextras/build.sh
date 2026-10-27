@@ -15,7 +15,8 @@ sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pin() { [ "$(sha "$1")" = "$2" ] || fail "hash $1"; }
 
-pin "$STOCK_JAR" a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599
+# converted MU1161 lsd.jar: a0cc737c (time-stamped) or 573b603a (same classes, jxe2jar_run.py fixed timestamps)
+[ "$(sha "$STOCK_JAR")" = a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599 ] || pin "$STOCK_JAR" 573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576
 pin "$ASM_DIR/asm-9.7.jar" adf46d5e34940bdf148ecdd26a9ee8eea94496a72034ff7141066b3eea5c4e9d
 pin "$ASM_DIR/asm-tree-9.7.jar" 62f4b3bc436045c1acb5c3ba2d8ec556ec3369093d7f5d06c747eb04b56d52b1
 pin "$ASM_DIR/asm-analysis-9.7.jar" 7bc6bcbc21379948a0c8c467fb0f864206e5b818f6bc0b546872f5c9f941556f

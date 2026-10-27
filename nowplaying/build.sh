@@ -12,6 +12,7 @@ H=$(cd "$(dirname "$0")" && pwd)
 BT="$H/../buildtools"     # Guard (try/catch around every hook call), RefCheck (J9 API check)
 : "${ASM_DIR:?set ASM_DIR to a directory with asm-9.7, asm-tree-9.7, asm-analysis-9.7}"
 JAR_SHA=a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599   # MU1161, our backup
+JAR_SHA_ALT=573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576   # same classes, jxe2jar_run.py with fixed timestamps
 
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -19,7 +20,8 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 [ "$(sha "$ASM_DIR/asm-9.7.jar")" = adf46d5e34940bdf148ecdd26a9ee8eea94496a72034ff7141066b3eea5c4e9d ] || fail "asm-9.7.jar hash"
 [ "$(sha "$ASM_DIR/asm-tree-9.7.jar")" = 62f4b3bc436045c1acb5c3ba2d8ec556ec3369093d7f5d06c747eb04b56d52b1 ] || fail "asm-tree-9.7.jar hash"
 [ "$(sha "$ASM_DIR/asm-analysis-9.7.jar")" = 7bc6bcbc21379948a0c8c467fb0f864206e5b818f6bc0b546872f5c9f941556f ] || fail "asm-analysis-9.7.jar hash"
-[ "$(sha "$STOCK_JAR")" = "$JAR_SHA" ] || fail "converted jar is not the pinned MU1161 jar"
+JAR_GOT=$(sha "$STOCK_JAR")
+[ "$JAR_GOT" = "$JAR_SHA" ] || [ "$JAR_GOT" = "$JAR_SHA_ALT" ] || fail "converted jar is not the pinned MU1161 jar"
 
 CP="$ASM_DIR/asm-9.7.jar:$ASM_DIR/asm-tree-9.7.jar:$ASM_DIR/asm-analysis-9.7.jar"
 CLASSES="de/vw/mib/asl/internal/carplay/target/HsmTarget
@@ -70,7 +72,7 @@ java -Xverify:all -cp "$W/test:$W/pmcp-np.jar:$STOCK_JAR" com.pmcp.np.TestNp > "
 tail -1 "$W/test/result.txt"
 
 {
-    echo "stock_jar_sha256=$JAR_SHA"
+    echo "stock_jar_sha256=$JAR_GOT"
     for c in $CLASSES; do echo "stock $c $(sha "$W/stock/$c.class")"; done
     for f in $(cd "$W/out" && find . -name '*.class' | sort); do echo "out ${f#./} $(sha "$W/out/$f")"; done
     echo "jar_sha256=$(sha "$W/pmcp-np.jar")"

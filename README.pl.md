@@ -53,13 +53,30 @@ Strumień ma 800×480 i leży 1:1 na panelu AID. Safe area: x / y / szerokość 
 
 | Wariant | URL | Safe area | Uwagi |
 |---|---|---|---|
-| `map-clean` (domyślny) | `maps:/car/instrumentcluster/map` | 200 / 108 / 400 / 296 | sama mapa, prowadzenie pokazuje VW natywnie |
+| `map-clean` | `maps:/car/instrumentcluster/map` | 200 / 108 / 400 / 296 | sama mapa, prowadzenie pokazuje VW natywnie |
 | `card-clean` | `maps:/car/instrumentcluster` | 200 / 108 / 400 / 296 | z kartą manewru iPhone'a |
 | `url-map-hybrid` | `…/map?showSpeedLimit=yes` | 200 / 108 / 400 / 296 | parametr ograniczenia prędkości (bez efektu) |
 | `map-clean-l40` | `maps:/car/instrumentcluster/map` | 160 / 108 / 400 / 296 | 40 kolumn w lewo |
-| `map-square` | `maps:/car/instrumentcluster/map` | 240 / 60 / 320 / 340 | układ mathsls dla MU1161, bliżej kwadratu |
+| `map-square` (domyślny) | `maps:/car/instrumentcluster/map` | 240 / 60 / 320 / 340 | układ mathsls dla MU1161, bliżej kwadratu; najlepszy po dłuższej jeździe |
 
 Wszystkie warianty deklarują rozmiar fizyczny 240×144 mm. Zmiana wariantu podmienia jeden plik (`core.so`) i wymaga restartu.
+
+## Pobieranie i instalacja
+
+**[Pobierz najnowsze wydanie](https://github.com/chrzanowy/mhi2-aid-carplay/releases/latest)**: plik
+`mhi2-aid-carplay-cards-<build id>.zip` z gotowymi obiema kartami SD. Nic nie trzeba instalować, Windows albo Mac.
+
+1. Rozpakuj zip i otwórz `README-FIRST.txt` (po angielsku, krok po kroku).
+2. Dwuklik na `Copy-to-SD-Windows.bat` (Windows) albo `Copy-to-SD-macOS.command` (Mac): kopiuje kartę na **pustą**
+   kartę SD FAT32, sprawdza każdy plik i wysuwa kartę. Niczego nie formatuje ani nie usuwa. Najpierw karta 2
+   (ratunkowa), potem karta 1 (instalacyjna).
+3. W aucie: część 2 w `README-FIRST.txt` (szczegóły: [tutorial w aucie](docs/pl/09-tutorial-w-aucie.md)).
+
+Wcześniej potrzebny jest [M.I.B. w radiu i backup](docs/pl/01-mib-instalacja-backup.md). Instalator na karcie najpierw
+sprawdza każdy plik radia; przy innym firmware zatrzymuje się i niczego nie zmienia.
+
+Samodzielne zbudowanie kart z własnego backupu (zaawansowane, macOS): `./install.sh`, szczegóły w
+[README.md](README.md#build-the-cards-yourself-advanced).
 
 ## Instalator
 
@@ -82,7 +99,7 @@ Projekt instalatora: [`docs/pl/07-instalator.md`](docs/pl/07-instalator.md).
 
 ## Budowanie
 
-Repo **nie zawiera binarek** ani niczego z firmware'u Volkswagena. Każdy build czyta wejścia z katalogu roboczego obok
+Repo (źródła) **nie zawiera binarek** ani niczego z firmware'u Volkswagena. Każdy build czyta wejścia z katalogu roboczego obok
 repo i sprawdza każde wejście hashem SHA-256:
 
 ```

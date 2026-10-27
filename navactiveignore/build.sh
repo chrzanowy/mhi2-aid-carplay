@@ -17,7 +17,8 @@ BT="$H/../buildtools"     # Guard (try/catch around every hook call), RefCheck (
 case "$PROFILE" in
     K4525) JAR_SHA=f996e81650e9d748a4d6d3d072f1739bbd718d7b55a27dc9acb80b21b5ec1a2b; CARPLAY_PROP=2910009; AA_PROP=2910005 ;;
     # Our car's backup (2026-10-21). The five patched classes are byte-identical to K4525.
-    MU1161) JAR_SHA=a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599; CARPLAY_PROP=2910009; AA_PROP=2910005 ;;
+    # a0cc737c = time-stamped conversion, 573b603a = the same classes from jxe2jar_run.py (fixed timestamps)
+    MU1161) JAR_SHA=a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599; JAR_SHA_ALT=573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576; CARPLAY_PROP=2910009; AA_PROP=2910005 ;;
     *) echo "unknown profile $PROFILE" >&2; exit 2 ;;
 esac
 
@@ -28,7 +29,8 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 [ "$(sha "$ASM_DIR/asm-9.7.jar")" = adf46d5e34940bdf148ecdd26a9ee8eea94496a72034ff7141066b3eea5c4e9d ] || fail "asm-9.7.jar hash"
 [ "$(sha "$ASM_DIR/asm-tree-9.7.jar")" = 62f4b3bc436045c1acb5c3ba2d8ec556ec3369093d7f5d06c747eb04b56d52b1 ] || fail "asm-tree-9.7.jar hash"
 [ "$(sha "$ASM_DIR/asm-analysis-9.7.jar")" = 7bc6bcbc21379948a0c8c467fb0f864206e5b818f6bc0b546872f5c9f941556f ] || fail "asm-analysis-9.7.jar hash"
-[ "$(sha "$STOCK_JAR")" = "$JAR_SHA" ] || fail "converted jar is not the pinned $PROFILE jar"
+JAR_GOT=$(sha "$STOCK_JAR")
+[ "$JAR_GOT" = "$JAR_SHA" ] || [ "$JAR_GOT" = "${JAR_SHA_ALT:-none}" ] || fail "converted jar is not the pinned $PROFILE jar"
 
 CP="$ASM_DIR/asm-9.7.jar:$ASM_DIR/asm-tree-9.7.jar:$ASM_DIR/asm-analysis-9.7.jar"
 CLASSES="de/esolutions/fw/comm/dsi/carplay/impl/DSICarplayProxy
@@ -85,7 +87,7 @@ tail -1 "$W/test/result.txt"
 
 {
     echo "profile=$PROFILE"
-    echo "stock_jar_sha256=$JAR_SHA"
+    echo "stock_jar_sha256=$JAR_GOT"
     echo "carplay_nav_property=$CARPLAY_PROP"
     echo "aa_nav_property=$AA_PROP"
     for c in $CLASSES; do echo "stock $c $(sha "$W/stock/$c.class")"; done

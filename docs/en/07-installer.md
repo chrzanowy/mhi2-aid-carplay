@@ -62,11 +62,11 @@ Safe area = x / y / width / height on the 800×480 stream:
 
 | Variant | URL | Safe area | Description |
 |---|---|---|---|
-| **`map-clean`** | `maps:/car/instrumentcluster/map` | 200 / 108 / 400 / 296 | **default (main button).** Map only, VW shows guidance natively |
+| `map-clean` | `maps:/car/instrumentcluster/map` | 200 / 108 / 400 / 296 | Map only, VW shows guidance natively |
 | `card-clean` | `maps:/car/instrumentcluster` | 200 / 108 / 400 / 296 | with the iPhone's manoeuvre card |
 | `url-map-hybrid` | `…/map?showSpeedLimit=yes` | 200 / 108 / 400 / 296 | speed-limit parameter (no visible effect) |
 | `map-clean-l40` | `maps:/car/instrumentcluster/map` | 160 / 108 / 400 / 296 | shifted 40 columns to the left |
-| `map-square` | `maps:/car/instrumentcluster/map` | 240 / 60 / 320 / 340 | mathsls's MU1161 layout, closer to square |
+| **`map-square`** | `maps:/car/instrumentcluster/map` | 240 / 60 / 320 / 340 | **default (main button), chosen after a longer drive.** mathsls's MU1161 layout, closer to square |
 
 ## Fail-closed gates (what must match before anything is written)
 
@@ -128,7 +128,7 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
      diagnostics that work even when `pmcp.sh` stops at its self test;
    - "1. Sprawdz karte i radio (tylko odczyt)" (check card and unit, read-only) → `verify`;
    - "Status instalacji (tylko odczyt)" (installation status, read-only);
-   - "2. Instaluj obraz CarPlay na AID: map-clean (etap A)" (install CarPlay video on the AID, stage A);
+   - "2. Instaluj obraz CarPlay na AID: map-square (etap A)" (install CarPlay video on the AID, stage A);
    - "Przywroc pliki fabryczne" (restore factory files);
    - submenus `pmcp_inne_warianty` (install with another variant) and `pmcp_zmien_wariant` (`switch`, e.g.
      "Zmien wariant na: map-clean" (change variant to));
@@ -143,7 +143,7 @@ The labels have no Polish diacritics (it is not known whether GEM and its parser
 First-time order:
 1. Rescue card on a healthy unit (below) → log `WYNIK=OK` (result OK).
 2. "Sprawdz…" (`verify`): read-only. Expected `PMCP_VERIFY_OK state=STOCK`.
-3. "Instaluj… map-clean" (stage A), then a full restart. If the AID shows no CarPlay picture: on the iPhone, Settings → General →
+3. "Instaluj… map-square" (stage A), then a full restart. If the AID shows no CarPlay picture: on the iPhone, Settings → General →
    CarPlay → the car → "Forget This Car", and reconnect (the iPhone remembers the car's old displays).
    For another map layout: "Zmien wariant na: …".
 4. Stage B: empty file `pmcp/ODBLOKUJ_ETAP_B` on the card → one package at a time: "Wlacz: …" → restart (trial boot) →
@@ -171,7 +171,7 @@ QNX) and `ksh` (ksh93). The exit status is the number of failed checks. They cov
 - rescue card: a healthy unit is unchanged; a `JAVA` unit → stock `lsd.sh`, JARs removed, `DISABLED`; a unit with System RG →
   stock driver and `iap2.cfg`, `SYSTEM_ON` and `last-boot` removed; no backup copy or no `lsd.sh` → an honest `WYNIK=NIEPEWNY`
   (result uncertain);
-- GEM menu: number of scripts = number of menu entries, syntax, allowed actions, main button = `map-clean`, the version with build
+- GEM menu: number of scripts = number of menu entries, syntax, allowed actions, main button = `map-square`, the version with build
   id identical in `pmcp.sh`, the menu and `BUILD-MANIFEST`.
 
 `installer/test/fault_inject.sh SD_BUILD mksh`: the power-loss test (above).

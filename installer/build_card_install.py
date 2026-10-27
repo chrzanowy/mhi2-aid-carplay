@@ -36,7 +36,7 @@ Wszystko robisz w zielonym menu (GEM), jedna akcja naraz:
 Kolejnosc (szczegoly: 07-instalator.md w dokumentacji projektu):
   0. NAJPIERW test karty ratunkowej (osobna karta) na zdrowym radiu -> log z WYNIK=OK do sprawdzenia.
   1. "1. Sprawdz karte i radio (tylko odczyt)"  -> verify
-  2. Etap A (obraz na AID): glowny przycisk wariantu map-clean -> restart radia.
+  2. Etap A (obraz na AID): glowny przycisk wariantu map-square -> restart radia.
      Brak obrazu na AID: w iPhonie "Zapomnij to auto" i sparuj ponownie; potem "zmien wariant".
   3. Etap B (Java) jest ZABLOKOWANY, dopoki na karcie nie ma pustego pliku pmcp/ODBLOKUJ_ETAP_B
      (tworzymy go dopiero po tescie karty ratunkowej).

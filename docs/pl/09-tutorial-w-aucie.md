@@ -52,9 +52,9 @@ Gdy coś jest niejasne, **„0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)�
 
 ### Krok 3. Instalacja obrazu CarPlay na AID (etap A)
 
-1. **„2. Instaluj obraz CarPlay na AID: map-clean (etap A)”** → oczekiwane `PMCP_INSTALL_OK stage=A variant=map-clean ...`.
-   (`map-clean` to wariant domyślny: sama mapa bez karty manewru iPhone'a, znacznik w dobrej wysokości; manewr, ETA i dystans
-   pokazuje natywnie VW po kroku 8.)
+1. **„2. Instaluj obraz CarPlay na AID: map-square (etap A)”** → oczekiwane `PMCP_INSTALL_OK stage=A variant=map-square ...`.
+   (`map-square` to wariant domyślny: układ forka mathsls, sama mapa, bliżej kwadratu; najlepszy z pięciu po dłuższej jeździe.
+   Manewr, ETA i dystans pokazuje natywnie VW po kroku 8.)
 2. Pełny restart radia (pokrętło ~10 s).
 3. Podłącz iPhone'a (CarPlay), włącz Apple Maps albo Google Maps i **uruchom prowadzenie do celu**. Na AID przełącz widok na nawigację/mapę.
    Sterowanie AID w tym aucie (prawa strona kierownicy): **przyciski widoku** (układ licznika), między nimi **OK**,
@@ -65,12 +65,12 @@ Gdy coś jest niejasne, **„0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)�
 
 **Jeśli na AID nie ma obrazu:**
 1. W iPhonie: Ustawienia → Ogólne → CarPlay → to auto → **„Zapomnij to auto”**, podłącz ponownie.
-2. Dalej nic: GEM → podmenu **`pmcp_zmien_wariant`** → „Zmien wariant na: map-square” (układ forka mathsls, który działa u innych), restart.
+2. Dalej nic: GEM → podmenu **`pmcp_zmien_wariant`** → „Zmien wariant na: map-clean” (szersze i niższe okno mapy), restart.
 3. Inny układ (`pmcp_zmien_wariant`, każda zmiana → restart, bez „Potwierdz”; układy: [mapa ramki AID](../aid-frame-map.pl.html)):
    `card-clean` (z kartą iPhone'a, gdy natywne prowadzenie jeszcze nie działa), `url-map-hybrid` (mapa z parametrem
    ograniczenia prędkości, który w aucie nic nie pokazał), `map-clean-l40` (mapa 40 kolumn w lewo),
-   `map-square` (układ forka mathsls: węższy i wyższy, bliżej kwadratu; znacznik ok. 30 kolumn w lewo i 20 wierszy wyżej).
-   Powrót do domyślnego: „Zmien wariant na: map-clean”.
+   `map-clean` (szerszy i niższy niż map-square: 200 / 108 / 400 / 296).
+   Powrót do domyślnego: „Zmien wariant na: map-square”.
 
 Zmiana wariantu podmienia tylko jeden plik (`core.so`), Javy nie dotyka. Etap A nie rusza HMI: najgorszy skutek to brak obrazu
 CarPlay; GEM i „Przywroc pliki fabryczne” działają zawsze.
@@ -176,7 +176,7 @@ Jedyna dozwolona aktualizacja firmware to oficjalna K4525. Nigdy nie wgrywaj fir
 ## Ściąga
 
 ```
-FAZA 1:  karta 2 (test, log WYNIK=OK) → karta 1: Sprawdz (STOCK) → Instaluj map-clean → restart → AID?
+FAZA 1:  karta 2 (test, log WYNIK=OK) → karta 1: Sprawdz (STOCK) → Instaluj map-square → restart → AID?
 FAZA 2:  ODBLOKUJ_ETAP_B (komputer) → [Wlacz X → restart → test → Potwierdz] dla: nai, np, (System RG → restart → CarPlay OK) rg, zoom, dn
 AWARIA:  pokrętło 10 s → start fabryczny;  potwierdzony zły zestaw → karta 2 → Przywroc
 ```

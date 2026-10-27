@@ -60,11 +60,11 @@ Warianty `core.so` (`switch` zmienia tylko ten plik, potem restart, bez „Potwi
 
 | Wariant | URL | Safe area | Opis |
 |---|---|---|---|
-| **`map-clean`** | `maps:/car/instrumentcluster/map` | 200 / 108 / 400 / 296 | **domyślny (główny przycisk).** Sama mapa, VW pokazuje prowadzenie natywnie |
+| `map-clean` | `maps:/car/instrumentcluster/map` | 200 / 108 / 400 / 296 | Sama mapa, VW pokazuje prowadzenie natywnie |
 | `card-clean` | `maps:/car/instrumentcluster` | 200 / 108 / 400 / 296 | z kartą manewru iPhone'a |
 | `url-map-hybrid` | `…/map?showSpeedLimit=yes` | 200 / 108 / 400 / 296 | parametr ograniczenia prędkości (bez widocznego efektu) |
 | `map-clean-l40` | `maps:/car/instrumentcluster/map` | 160 / 108 / 400 / 296 | przesunięty o 40 kolumn w lewo |
-| `map-square` | `maps:/car/instrumentcluster/map` | 240 / 60 / 320 / 340 | układ mathsls dla MU1161, bliżej kwadratu |
+| **`map-square`** | `maps:/car/instrumentcluster/map` | 240 / 60 / 320 / 340 | **domyślny (główny przycisk), wybrany po dłuższej jeździe.** Układ mathsls dla MU1161, bliżej kwadratu |
 
 ## Bramki fail-closed (co musi się zgadzać, zanim cokolwiek zostanie zapisane)
 
@@ -122,7 +122,7 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
    - „0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)”: diagnostyka tylko do odczytu, działa nawet wtedy, gdy `pmcp.sh` zatrzyma się na self teście;
    - „1. Sprawdz karte i radio (tylko odczyt)” → `verify`;
    - „Status instalacji (tylko odczyt)”;
-   - „2. Instaluj obraz CarPlay na AID: map-clean (etap A)”;
+   - „2. Instaluj obraz CarPlay na AID: map-square (etap A)”;
    - „Przywroc pliki fabryczne”;
    - podmenu `pmcp_inne_warianty` (instalacja innym wariantem) i `pmcp_zmien_wariant` (`switch`, np. „Zmien wariant na: map-clean”);
    - podmenu `pmcp_etap_B_java`: System RG wlacz/wylacz, Wlacz/Wylacz paczkę, Potwierdz, Ponow probny start.
@@ -136,7 +136,7 @@ Etykiety są bez polskich znaków (nie wiadomo, czy GEM i jego parser je obsług
 Kolejność pierwszego razu:
 1. Karta ratunkowa na zdrowym radiu (niżej) → log `WYNIK=OK`.
 2. „Sprawdz…” (`verify`): tylko odczyt. Oczekiwane `PMCP_VERIFY_OK state=STOCK`.
-3. „Instaluj… map-clean” (etap A), potem pełny restart. Jeśli na AID nie ma obrazu CarPlay: w iPhonie Ustawienia → Ogólne →
+3. „Instaluj… map-square” (etap A), potem pełny restart. Jeśli na AID nie ma obrazu CarPlay: w iPhonie Ustawienia → Ogólne →
    CarPlay → auto → „Zapomnij to auto” i podłączyć ponownie (iPhone pamięta stare wyświetlacze auta).
    Inny układ mapy: „Zmien wariant na: …”.
 4. Etap B: pusty plik `pmcp/ODBLOKUJ_ETAP_B` na karcie → jedna paczka naraz: „Wlacz: …” → restart (start próbny) →
@@ -163,7 +163,7 @@ shelle `mksh` (rodzina pdksh, jak QNX) i `ksh` (ksh93). Kod wyjścia = liczba ni
   (katalog już przeniesiony) nie blokuje narzędzia;
 - karta ratunkowa: zdrowe radio bez zmian; radio `JAVA` → fabryczny `lsd.sh`, JAR-y usunięte, `DISABLED`; radio z Systemem RG →
   fabryczny sterownik i `iap2.cfg`, `SYSTEM_ON` i `last-boot` usunięte; brak kopii albo brak `lsd.sh` → uczciwe `WYNIK=NIEPEWNY`;
-- menu GEM: liczba skryptów = liczba wpisów menu, składnia, dozwolone akcje, główny przycisk = `map-clean`,
+- menu GEM: liczba skryptów = liczba wpisów menu, składnia, dozwolone akcje, główny przycisk = `map-square`,
   wersja z ID buildu ta sama w `pmcp.sh`, menu i `BUILD-MANIFEST`.
 
 `installer/test/fault_inject.sh SD_BUILD mksh`: test zaników zasilania (wyżej).
