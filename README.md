@@ -68,10 +68,11 @@ All variants declare a physical size of 240×144 mm. Switching a variant swaps o
 1. Unpack the zip and open `README-FIRST.txt`. It walks you through everything in plain English.
 2. Double-click `Copy-to-SD-Windows.bat` (Windows) or `Copy-to-SD-macOS.command` (Mac). It copies a card onto an
    **empty** FAT32 SD card, checks every file and ejects the card. It never formats a card or deletes anything.
-   Make card 2 (rescue) first, then card 1 (install).
-3. In the car: follow part 2 of `README-FIRST.txt` (full guide with details: [in-car guide](docs/en/09-in-car-guide.md)).
-   The green menu's main screen has the simple path: check, install the map, install all features (one trial start),
-   confirm. After the rescue card test, the copy helper's option 3 checks its result and unlocks the features.
+   Make card 1 (install) and card 2 (rescue, for emergencies).
+3. In the car, one visit, card 1 only (part 2 of `README-FIRST.txt`, details: [in-car guide](docs/en/09-in-car-guide.md)):
+   **1. Check → 2. Install map → restart → map OK? → 3. Install all features → restart (trial start) → test →
+   4. Confirm → restart.** It works like this from then on.
+   Card 2 is only for an emergency after Confirm. After use it disarms itself; the copy helper's option 3 re-arms it.
 
 Before you start you need [M.I.B. installed on the unit and a backup](docs/en/01-mib-install-backup.md). The installer
 on the card checks every file of your head unit first. On any other firmware it stops and changes nothing.

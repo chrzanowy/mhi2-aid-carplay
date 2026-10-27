@@ -38,37 +38,30 @@ fi
 # <<< pmcp
 """
 
-README = """KARTA RATUNKOWA pmcp (Passat B8, MHI2 MU1161, M.I.B. 3.6.0)
-==============================================================
+README = """CARD 2 - RESCUE: CarPlay map on the AID (VW MHI2 MU1161, M.I.B. 3.6.0)
+========================================================================
 
-Kiedy: po wlaczeniu paczki Java (etap B) HMI nie wstaje: czarny ekran albo logo w kolko,
-nie da sie wejsc do zielonego menu. Najpierw sprobuj: pokretlo glosnosci ~10 s (restart);
-niepotwierdzony zestaw JAR-ow laduje sie tylko raz (start probny). Ta karta jest druga siatka
-bezpieczenstwa: na wypadek, gdyby zepsuty zestaw zostal potwierdzony.
+When: after "Install all features" the head unit screen stays black or keeps restarting, and
+holding the volume knob ~10 s does not help (normally an unconfirmed start falls back to factory
+by itself; this card is the second safety net).
 
-Jak dziala: Swdlautorun.txt w katalogu glownym -> radio samo wchodzi w tryb aktualizacji
-(RUN_MODE=swdl; nasz blok w lsd.sh w tym trybie nic nie laduje, HMI aktualizacji jest fabryczne)
--> M.I.B. 3.6.0 -> Launcher/stuff.sh -> pmcp-ratunek/pmcp-ratunek.sh, ktory:
-  1. przywraca fabryczny lsd.sh (kopia z /mnt/app/carplaymaps/rollback/),
-  2. usuwa nasze JAR-y (NavActiveIgnore.jar, pmcp-*.jar),
-  3. zapisuje /mnt/persist/pmcp/DISABLED (nasz blok w lsd.sh nic nie laduje),
-  4. przywraca fabryczny sterownik iAP2 i iap2.cfg, jesli byl wlaczony System RG (paczka E).
-Obraz CarPlay (etap A) zostaje. Potem w GEM: pmcp -> "Przywroc pliki fabryczne".
-Radio przy okazji instaluje ponownie M.I.B. 3.6.0 (ta sama wersja co teraz), jak przy SD#1.
+What it does: insert it in slot SD1 and wait up to 60 s. The unit enters update mode by itself
+(answer Continue if asked; do NOT pull the card while it updates). It then:
+  1. puts back the factory lsd.sh,
+  2. removes our Java files (NavActiveIgnore.jar, pmcp-*.jar),
+  3. writes /mnt/persist/pmcp/DISABLED (nothing of ours loads at start),
+  4. puts back the factory iAP2 driver and iap2.cfg if the route guidance system was on.
+The map picture stays. Afterwards, in the green menu: "Remove everything (back to factory files)".
+The unit also re-installs M.I.B. 3.6.0 on the way, as when M.I.B. was installed.
 
-TO MUSI BYC OSOBNA KARTA. Nie kopiuj na nia pmcp/. Nie zostawiaj jej w aucie.
-Po kazdym uzyciu M.I.B. sam ja rozbraja (Swdlautorun.txt -> _Swdlautorun.txt).
-Ponowne uzbrojenie: zmien nazwe z powrotem na Swdlautorun.txt.
+When the normal screen is back: remove the card. Its result is in PMCP_RATUNEK_LOG.txt on this
+card ("WYNIK=OK" = result OK).
 
-TEST NA ZDROWYM AUCIE (przed odblokowaniem etapu B):
- 1. Zasilanie jak przy SD#1 (prostownik albo silnik na zewnatrz), zaplon ON, radio dziala.
- 2. Wloz karte do SD1 i czekaj (do ~60 s): radio samo przejdzie w tryb aktualizacji, moze sie
-    kilka razy zrestartowac. Pytanie w menu aktualizacji: Continue / Dalej. Nie wyjmuj karty.
- 3. Gdy radio wroci do normalnego ekranu: wyjmij karte.
- 4. Na karcie: PMCP_RATUNEK_LOG.txt musi konczyc sie linia "=== PMCP RATUNEK koniec ===",
-    przed nia "WYNIK=OK". Na karcie ma byc _Swdlautorun.txt (rozbrojona).
-    Daj mi ten log do sprawdzenia. Dopiero wtedy tworzymy na karcie pmcp plik ODBLOKUJ_ETAP_B.
- 5. Uzbroj karte ponownie i odloz.
+After each use M.I.B. disarms the card (Swdlautorun.txt -> _Swdlautorun.txt), so it cannot loop.
+To re-arm it: on a computer run the copy helper and choose 3, or rename _Swdlautorun.txt back to
+Swdlautorun.txt yourself.
+
+This must be a SEPARATE card. Do not copy pmcp/ onto it. Keep it OUT of the car until needed.
 """
 
 

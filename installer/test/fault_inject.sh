@@ -30,7 +30,6 @@ fresh_unit() {
     cp "$BK/eso/hmi/lsd/jars/"* "$U/eso/hmi/lsd/jars/"
     echo "factory persist content" > "$W/unit/mnt/persist/etc/ffs3.2ver"
     cp -R "$SDB/pmcp" "$W/sd"
-    touch "$W/sd/ODBLOKUJ_ETAP_B"
     awk -v inc="$H/fault_inject.inc" '{print} /^unset LD_PRELOAD$/ && !done {while ((getline l < inc) > 0) print l; done=1}' \
         "$W/sd/pmcp.sh" > "$W/sd/pmcp-fi.sh"
 }

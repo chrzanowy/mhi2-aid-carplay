@@ -286,7 +286,6 @@ def esd_block(version, top, adv, inst, sw, java):
            '#', '#' * 91, 'screen pmcp_CarPlay_AID =>M.I.B.<=', '']
     out += kv(version) + kv("Every action checks all files first and changes nothing on a mismatch. Photograph each result.")
     out += kv("After 2 and after 3: restart the unit (hold the volume knob ~10 s).")
-    out += kv("3 is locked until the rescue card test (copy helper on the computer, option 3).")
     for n, _, l in top:
         out += sc(n, l)
     out += ['screen pmcp_advanced pmcp_CarPlay_AID', '']
@@ -300,7 +299,6 @@ def esd_block(version, top, adv, inst, sw, java):
     for n, _, l in sw:
         out += sc(n, l)
     out += ['screen pmcp_etap_B_java pmcp_advanced', '']
-    out += kv("Zablokowane, dopoki na karcie nie ma pliku pmcp/ODBLOKUJ_ETAP_B (po tescie karty ratunkowej).")
     out += kv("Pierwszy start po zmianie jest probny: jesli wszystko dziala, w tym starcie nacisnij 4. Confirm.")
     out += kv("Bez potwierdzenia nastepny start jest fabryczny (potem: 5. Try again).")
     out += kv("Czarny ekran: pokretlo glosnosci 10 s, nastepny start bez naszych JAR-ow.")

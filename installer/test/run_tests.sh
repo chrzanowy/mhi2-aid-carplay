@@ -47,7 +47,6 @@ fresh_unit() {
     echo "factory persist content" > "$W/unit/mnt/persist/etc/ffs3.2ver"
     cp -R "$SDB/pmcp" "$W/sd"
 }
-unlock() { touch "$W/sd/ODBLOKUJ_ETAP_B"; }
 
 run() { PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 rc_is() { [ "$(cat "$W/rc")" = "$1" ] && ok "exit $1" || { bad "exit $(cat "$W/rc"), wanted $1"; sed 's/^/       | /' "$W/out" | tail -5; }; }
@@ -65,9 +64,9 @@ for SH in "$@"; do
     run install nonsense; rc_is 1; expect_out "PMCP_FAIL=UNKNOWN_VARIANT_nonsense" "unknown variant"
     [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
 
-    echo "[2b] Java actions: locked without the unlock file, need stage A"
-    run java-on nai; rc_is 1; expect_out "STAGE_B_LOCKED_TEST_THE_RESCUE_CARD_FIRST" "locked"
-    unlock; run java-on nai; rc_is 1; expect_out "JAVA_NEEDS_STAGE_A_STATE_STOCK" "needs stage A"
+    echo "[2b] Java actions: no unlock file needed, but they need stage A"
+    run java-on nai; rc_is 1; expect_out "JAVA_NEEDS_STAGE_A_STATE_STOCK" "needs stage A"
+    grep -q "STAGE_B_LOCKED" "$W/out" && bad "Java still locked" || ok "no lock without an unlock file"
     run java-on nonsense; rc_is 1; expect_out "UNKNOWN_JAVA_PACKAGE_nonsense" "unknown package"
     [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
 
@@ -135,7 +134,6 @@ for SH in "$@"; do
 
     echo "[3e] route guidance (package E): system part and Java package"
     run java-on rg; rc_is 1; expect_out "JAVA_RG_NEEDS_RG_SYSTEM_ON" "java rg refused without RG system"
-    rm "$W/sd/ODBLOKUJ_ETAP_B"; run rg-system-on; rc_is 1; expect_out "STAGE_B_LOCKED" "rg-system-on locked like the Java packages"; unlock
     run rg-system-on; rc_is 0; expect_out "PMCP_RG_SYSTEM_ON_OK" "rg-system-on ok"
     [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = 76926bde9bdf1e06fdfe57fd324bbd8772bcb2a98a58ac444b4822e25a331b48 ] && ok "patched driver active" || bad "driver"
     [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = c61407d9c6cd0d2529afedad0c9a120d5da5a504739e273bbb3dbea1e0b9b491 ] && ok "iap2.cfg with [ident]" || bad "cfg"
@@ -214,7 +212,7 @@ for SH in "$@"; do
     [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
 
     echo "[13] interrupted state (dio back to factory by hand): PARTIAL, restore completes"
-    fresh_unit; factory=$(snapshot "$W/unit"); unlock
+    fresh_unit; factory=$(snapshot "$W/unit")
     run install map-clean; rc_is 0; run java-on nai; rc_is 0
     cp "$BK/eso/bin/apps/dio_manager" "$W/unit/mnt/app/eso/bin/apps/dio_manager"
     run status; expect_out "Unit state: PARTIAL" "PARTIAL detected"
@@ -223,7 +221,7 @@ for SH in "$@"; do
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "factory tree after PARTIAL restore" || bad "tree differs"
 
     echo "[13a] rescue-card result (factory lsd.sh, JAR gone, DISABLED): VIDEO, java-on again works, restore completes"
-    fresh_unit; factory=$(snapshot "$W/unit"); unlock
+    fresh_unit; factory=$(snapshot "$W/unit")
     run install map-clean-l40; rc_is 0; run java-on nai; rc_is 0
     cp "$BK/eso/hmi/lsd/lsd.sh" "$U/eso/hmi/lsd/lsd.sh"; rm "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar"
     mkdir -p "$W/unit/mnt/persist/pmcp"; touch "$W/unit/mnt/persist/pmcp/DISABLED"
@@ -241,7 +239,7 @@ for SH in "$@"; do
     [ ! -e "$W/unit/mnt/persist/pmcp" ] && ok "old ok/trial markers removed by install" || bad "old markers kept"
 
     echo "[13d] restore interrupted after carplaymaps was moved away: tool still works"
-    fresh_unit; factory=$(snapshot "$W/unit"); unlock
+    fresh_unit; factory=$(snapshot "$W/unit")
     run install map-clean; rc_is 0
     mv "$U/carplaymaps" "$U/.carplaymaps-old-777"; cp "$BK/eso/bin/apps/dio_manager" "$U/eso/bin/apps/dio_manager"
     run status; expect_out "Unit state: STOCK" "STOCK with only a leftover dir"
@@ -257,7 +255,7 @@ for SH in "$@"; do
     chmod 700 "$W/unit/sdlog"
 
     echo "[13c] JAR with a wrong hash in the unit: not JAVA, restore still works"
-    fresh_unit; factory=$(snapshot "$W/unit"); unlock
+    fresh_unit; factory=$(snapshot "$W/unit")
     run install map-clean; rc_is 0; run java-on nai; rc_is 0
     printf 'Z' | dd of="$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" bs=1 seek=100 conv=notrunc 2>/dev/null
     run status; expect_out "Unit state: PARTIAL" "tampered JAR detected"
@@ -369,7 +367,7 @@ for SH in "$@"; do
         && ok "log on the card: WYNIK=OK ... koniec" || bad "log missing or incomplete"
     [ -z "$(ls "$W/rr/net/rcc/dev/shmem")" ] && ok "RAM log moved and cleared" || bad "RAM log left"
 
-    fresh_unit; unlock; run install map-clean; rc_is 0; run java-on nai; rc_is 0
+    fresh_unit; run install map-clean; rc_is 0; run java-on nai; rc_is 0
     rescue
     [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = $STOCK_LSD ] && ok "JAVA unit: factory lsd.sh back" || bad "lsd.sh not restored"
     [ ! -e "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" ] && ok "JAR removed" || bad "JAR left"
@@ -379,13 +377,13 @@ for SH in "$@"; do
     grep -q "WYNIK=OK" "$W/med/PMCP_RATUNEK_LOG.txt" && ok "WYNIK=OK" || bad "no WYNIK=OK"
     run restore; rc_is 0; expect_out "PMCP_RESTORE_OK" "GEM restore after rescue"
 
-    fresh_unit; unlock; run install map-clean; rc_is 0; run java-on nai; rc_is 0
+    fresh_unit; run install map-clean; rc_is 0; run java-on nai; rc_is 0
     rm "$U/carplaymaps/rollback/lsd.sh"
     rescue
     [ ! -e "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" ] && [ -e "$W/unit/mnt/persist/pmcp/DISABLED" ] && ok "no factory copy: JAR removed + DISABLED" || bad "fallback failed"
     grep -q "WYNIK=NIEPEWNY" "$W/med/PMCP_RATUNEK_LOG.txt" && ok "honest WYNIK=NIEPEWNY when lsd.sh still has our block" || bad "should be NIEPEWNY"
 
-    fresh_unit; unlock; run install map-clean; rc_is 0; run rg-system-on; rc_is 0; run java-on rg; rc_is 0
+    fresh_unit; run install map-clean; rc_is 0; run rg-system-on; rc_is 0; run java-on rg; rc_is 0
     mkdir -p "$W/unit/mnt/persist/pmcp"; echo "set=$RG use=trial" > "$W/unit/mnt/persist/pmcp/last-boot"
     rescue
     [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = 7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c ] && ok "RG: factory iAP2 driver back" || bad "driver not restored"
@@ -395,7 +393,7 @@ for SH in "$@"; do
     run java-confirm; rc_is 1; expect_out "JAVA_NEEDS\|JAVA_CONFIRM_NEEDS_JAVA_STATE\|NOT_IN_TRIAL\|DISABLED" "no confirm after a rescue"
     run restore; rc_is 0; expect_out "PMCP_RESTORE_OK" "GEM restore after an RG rescue"
 
-    fresh_unit; unlock; run install map-clean; rc_is 0; run java-on nai; rc_is 0
+    fresh_unit; run install map-clean; rc_is 0; run java-on nai; rc_is 0
     rm "$U/eso/hmi/lsd/lsd.sh"; rm "$U/carplaymaps/rollback/lsd.sh"
     rescue
     grep -q "WYNIK=NIEPEWNY" "$W/med/PMCP_RATUNEK_LOG.txt" && ok "lsd.sh missing: WYNIK=NIEPEWNY, not OK" || bad "missing lsd.sh reported OK"
@@ -406,9 +404,7 @@ for SH in "$@"; do
         PMCP_TEST_ROOT="$W/unit" $SH "$W/all-on.sh" > "$W/out" 2>&1; echo $? > "$W/rc"
     }
     fresh_unit; factory=$(snapshot "$W/unit")
-    allon; rc_is 0; expect_out "PMCP_FAIL=ALL_ON_STOPPED_AT_rg-system-on_" "locked: stops at the first step"
-    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "locked: unit unchanged" || bad "locked all-on changed the unit"
-    unlock; allon; expect_out "PMCP_FAIL=ALL_ON_STOPPED_AT_rg-system-on_" "without the map (stage A): stops at the first step"
+    allon; rc_is 0; expect_out "PMCP_FAIL=ALL_ON_STOPPED_AT_rg-system-on_" "without the map (stage A): stops at the first step"
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "without the map: unit unchanged" || bad "all-on without stage A changed the unit"
     run install map-square; rc_is 0
     allon; rc_is 0; expect_out "PMCP_ALL_ON_OK" "all features on"; expect_out "PMCP_RG_SYSTEM_ON_OK" "RG system on"

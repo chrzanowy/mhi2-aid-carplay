@@ -11,7 +11,7 @@ Kartę instalacyjną składa `installer/build_card_install.py`, kartę ratunkow�
 |---|---|---|
 | 0 Karta ratunkowa | nic w radiu (osobna karta z `installer/build_rescue.py`) | sprawdzona w aucie (`WYNIK=OK`) |
 | A Obraz CarPlay + warianty `core.so` | `dio_manager` → wrapper, `/mnt/app/carplaymaps` | działa |
-| B Mechanizm Java + NavActiveIgnore | jeden stały blok w `lsd.sh` + JAR | działa; odblokowanie plikiem `pmcp/ODBLOKUJ_ETAP_B` na karcie |
+| B Mechanizm Java + NavActiveIgnore | jeden stały blok w `lsd.sh` + JAR | działa; przycisk „3. Install all features” na ekranie głównym (od v1.2.0 bez odblokowania) |
 | C Parametry mapy iPhone'a w URL | tylko `core.so` (wariant `url-map-hybrid`, `showSpeedLimit=yes`) | w menu; na tej jednostce parametr nic nie pokazuje |
 | D Tytuł i wykonawca | JAR `pmcp-np.jar` (`HsmTarget` + `CurrentStationInfo`) | działa ([`nowplaying/`](../../nowplaying/)) |
 | E Natywne prowadzenie (port Tomasza) | „System RG” (sterownik iAP2, `iap2.cfg`, czytnik) + JAR `pmcp-rg.jar` | działa ([`rg/`](../../rg/)) |
@@ -94,7 +94,7 @@ Kolejność przełączania:
 - `java-off`: `HMI_BOOT` → usunięcie JAR-a; ostatnia paczka: najpierw fabryczny `lsd.sh`, potem JAR i `HMI_BOOT`;
 - `restore`: `lsd.sh` → `dio_manager` → JAR-y → System RG → znaczniki próby → `carplaymaps` jednym `mv` do `.carplaymaps-old-<pid>`,
   dopiero potem `rm -rf`.
-- System RG (`rg-system-on`) jest zablokowany jak etap B, `/mnt/system` wraca na read-only po zapisie.
+- System RG (`rg-system-on`): `/mnt/system` wraca na read-only po zapisie.
 
 **Test zaników zasilania** (`installer/test/fault_inject.sh`): dla każdej akcji łańcucha
 install → java-on nai → java-on np → rg-system-on → java-on rg → switch → java-off np → java-off rg → rg-system-off → java-off nai → restore
@@ -108,7 +108,7 @@ Wymaga: M.I.B. zainstalowany ([01-mib-instalacja-backup.md](01-mib-instalacja-ba
 `installer/build_card_install.py`: kompletna karta = nietknięte drzewo `MIB_V3.6.0.zip` (autorun rozbrojony, `_Swdlautorun.txt`) +
 build SD z `installer/build_sd.py` (`pmcp/`, `esd/Launcher-sda0.esd`), złożona przez
 `python3 -I installer/build_card_install.py <build SD> <katalog karty>` (każdy plik buildu sprawdzony z `BUILD-MANIFEST.txt`, odmowa przy
-uzbrojonym autorunie, plikach karty ratunkowej albo `ODBLOKUJ_ETAP_B`). Hashe wszystkich plików: `PMCP_CARD_MANIFEST.txt`, instrukcja
+uzbrojonym autorunie albo plikach karty ratunkowej). Hashe wszystkich plików: `PMCP_CARD_MANIFEST.txt`, instrukcja
 `PMCP_INSTRUKCJA.txt`. Kopiujesz **całą zawartość** katalogu na pustą kartę (FAT32), zamiast dogrywać `pmcp/` na kartę M.I.B. ręcznie.
 
 Jak to działa: jednostka ma w GEM symlink `engdefs/z_Launcher-sda0.esd` → **plik menu na karcie**
@@ -118,33 +118,34 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
 
 1. Na komputerze: skopiuj całą zawartość katalogu karty instalacyjnej na pustą kartę (katalog główny karty).
    Sprawdź w GEM w nagłówku ekranu pmcp wersję: musi być ta z pierwszej linii `BUILD-MANIFEST.txt`.
-2. W aucie: GEM → `=>M.I.B.<=` → **`pmcp_CarPlay_AID`**:
-   - „0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)”: diagnostyka tylko do odczytu, działa nawet wtedy, gdy `pmcp.sh` zatrzyma się na self teście;
+2. W aucie: GEM → `=>M.I.B.<=` → **`pmcp_CarPlay_AID`**. Ekran główny (po angielsku):
    - „1. Check card and unit (read-only)” → `verify`;
-   - „Status (read-only)”;
-   - „2. Install the CarPlay map on the AID”;
-   - „Remove everything (back to factory files)”;
-   - ekran główny „3. Install all features”: System RG i wszystkie paczki Java naraz (jeden zestaw, jeden start próbny,
-     potem „4. Confirm”); zatrzymuje się na pierwszym błędzie, „już włączone” liczy się jako zrobione;
-   - podmenu `pmcp_advanced` z „0. Diagnostyka” i podmenu `pmcp_inne_warianty` (instalacja innym wariantem) i `pmcp_zmien_wariant` (`switch`, np. „Zmien wariant na: map-clean”);
-   - podmenu `pmcp_advanced` → `pmcp_etap_B_java`: System RG wlacz/wylacz, Wlacz/Wylacz paczkę (Confirm i Try again są na ekranie głównym).
-     Akcje odmawiają, dopóki na karcie nie ma pliku `pmcp/ODBLOKUJ_ETAP_B` (po teście karty ratunkowej).
+   - „2. Install the CarPlay map on the AID” → `install map-square` (etap A);
+   - „3. Install all features: arrows, ETA, zoom, song title” → skrypt menu `all-on.sh`: `rg-system-on`, potem `java-on`
+     nai, np, rg, zoom, dn po kolei (jeden zestaw, jeden start próbny); stop na pierwszym `PMCP_FAIL`, `*_ALREADY_*` liczy
+     się jako zrobione;
+   - „4. Confirm: everything works (only in the first start after 3)” → `java-confirm`;
+   - „5. Try again: the next start is a new trial” → `java-retry`;
+   - „Status (read-only)”, „Remove everything (back to factory files)” → `restore`;
+   - podmenu `pmcp_advanced`: „0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)” (działa nawet wtedy, gdy `pmcp.sh`
+     zatrzyma się na self teście) oraz podmenu `pmcp_inne_warianty` (instalacja innym układem), `pmcp_zmien_wariant`
+     (`switch`, np. „Zmien wariant na: map-clean”) i `pmcp_etap_B_java` (System RG wlacz/wylacz, Wlacz/Wylacz pojedynczą paczkę).
+   Żadna akcja nie wymaga pliku odblokowania (do v1.1.0 akcje Java i System RG wymagały `pmcp/ODBLOKUJ_ETAP_B`).
 3. Wynik jest na ekranie GEM. Karta SD jest w GEM tylko do odczytu (nawet `mount -uw` się nie udaje), więc logu nie da się
    zapisać na kartę: instalator wypisuje `PMCP_WARN=SD_LOG_NOT_WRITABLE` i działa dalej. **Rób zdjęcia ekranu.** Jeśli karta
    jest zapisywalna, log trafia do `/pmcp/log/pmcp-<akcja>-<pid>.log`.
 
 Etykiety są bez polskich znaków (nie wiadomo, czy GEM i jego parser je obsługują).
 
-Kolejność pierwszego razu:
-1. Karta ratunkowa na zdrowym radiu (niżej) → log `WYNIK=OK`.
-2. „Sprawdz…” (`verify`): tylko odczyt. Oczekiwane `PMCP_VERIFY_OK state=STOCK`.
-3. „Instaluj… map-square” (etap A), potem pełny restart. Jeśli na AID nie ma obrazu CarPlay: w iPhonie Ustawienia → Ogólne →
-   CarPlay → auto → „Zapomnij to auto” i podłączyć ponownie (iPhone pamięta stare wyświetlacze auta).
-   Inny układ mapy: „Zmien wariant na: …”.
-4. Etap B: pusty plik `pmcp/ODBLOKUJ_ETAP_B` na karcie → jedna paczka naraz: „Wlacz: …” → restart (start próbny) →
-   sprawdzić HMI i funkcję → **w tym samym starcie** „4. Confirm”. Bez potwierdzenia następny start jest fabryczny.
-   Dla paczki E najpierw „System RG: wlacz”, restart, sprawdzić, czy CarPlay się łączy, dopiero potem „Wlacz: Prowadzenie”.
-5. Wycofanie: „Remove everything (back to factory files)” i restart.
+Kolejność (jedna wizyta w aucie):
+1. „1. Check card and unit” (`verify`): tylko odczyt. Oczekiwane `PMCP_VERIFY_OK state=STOCK`.
+2. „2. Install the CarPlay map on the AID” (etap A), potem pełny restart. Jeśli na AID nie ma obrazu CarPlay: w iPhonie
+   Ustawienia → Ogólne → CarPlay → auto → „Zapomnij to auto” i podłączyć ponownie (iPhone pamięta stare wyświetlacze auta).
+   Inny układ mapy: `pmcp_advanced` → „Zmien wariant na: …”.
+3. Tylko gdy mapa działa: „3. Install all features” → restart (start próbny) → sprawdzić HMI i funkcje → **w tym samym starcie**
+   „4. Confirm” → restart. Bez potwierdzenia następny start jest fabryczny.
+4. Wycofanie: „Remove everything (back to factory files)” i restart.
+Karta ratunkowa jest na awarię po potwierdzeniu; wcześniejszy test jest opcjonalny.
 
 Szczegółowy przewodnik po kolejnych krokach w aucie: [09-tutorial-w-aucie.md](09-tutorial-w-aucie.md).
 
@@ -186,8 +187,9 @@ radio samo wchodzi w tryb aktualizacji (`RUN_MODE=swdl`; nasz blok nic wtedy nie
 Obraz (etap A) zostaje, resztę sprząta potem „Remove everything” w GEM. Na zdrowym radiu bez pmcp skrypt nic nie zmienia, tylko zapisuje log
 `PMCP_RATUNEK_LOG.txt`. Autorun M.I.B. w trybie aktualizacji P4512 działa bez interakcji z HMI (sprawdzone w aucie, `WYNIK=OK`).
 
-**Odblokowanie etapu B:** test karty na zdrowym aucie → log `PMCP_RATUNEK_LOG.txt` z `WYNIK=OK` → pusty plik
-`pmcp/ODBLOKUJ_ETAP_B` na karcie instalacyjnej. Bez niego akcje Java i System RG odmawiają (`STAGE_B_LOCKED_…`).
+Po użyciu M.I.B. rozbraja kartę (`Swdlautorun.txt` → `_Swdlautorun.txt`), więc nie zapętli się. Ponowne uzbrojenie na
+komputerze (pomocnik kopiowania, opcja 3, albo ręczna zmiana nazwy). Od v1.2.0 instalator nie wymaga testu karty ratunkowej
+przed akcjami Java; jest zalecany, nie wymuszany.
 
 ## Zabezpieczenia startu J9 z naszymi JAR-ami
 

@@ -36,8 +36,8 @@ PART 1 - MAKE THE TWO SD CARDS (on your computer, about 5 minutes)
                 (if Windows says "Windows protected your PC": "More info" -> "Run anyway")
        Mac:     right-click  Copy-to-SD-macOS.command  -> Open -> Open
                 (if the Mac refuses: System Settings -> Privacy & Security -> "Open Anyway")
-  3. The helper asks what to do. Choose 2 to make CARD 2 (RESCUE) first, then start it again
-     and choose 1 for CARD 1 (INSTALL). Insert an empty card when it asks.
+  3. The helper asks what to do. Choose 1 to make CARD 1 (INSTALL), then start it again and
+     choose 2 for CARD 2 (RESCUE). Insert an empty card when it asks.
      It copies the files, checks every single one, and ejects the card.
      It never formats and never deletes anything. A card that is not empty is refused.
   4. Write on the cards with a pen:
@@ -61,14 +61,9 @@ PART 2 - IN THE CAR
       with PMCP_..._OK (good) or PMCP_FAIL (nothing was changed, or it was undone).
     - "Restart" = hold the volume knob for about 10 seconds.
 
-  PHASE 1 - map picture on the dashboard
+  Take both cards to the car. You only need CARD 1. CARD 2 (rescue) is for emergencies.
 
-  Step 1. Test the rescue card (CARD 2) once, while everything works.
-    Insert CARD 2 and wait up to 60 seconds. The unit goes into update mode by itself and
-    may restart a few times. If it asks a question, choose Continue. When the normal screen
-    is back, remove the card. (Its result is checked on the computer in step 4.)
-
-  Step 2. Check (changes nothing)
+  Step 1. Check (changes nothing)
     Insert CARD 1. Hold the MENU button about 10 seconds -> green menu opens.
     Go to  =>M.I.B.<=  ->  pmcp_CarPlay_AID.
     The top line must show:  @@VERSION@@
@@ -76,38 +71,49 @@ PART 2 - IN THE CAR
     Expected:  PMCP_VERIFY_OK state=STOCK
     Anything else: STOP, take a photo, ask for help. Nothing was changed.
 
-  Step 3. Install the map picture
-    Press  "2. Install the CarPlay map on the AID".
-    Expected:  PMCP_INSTALL_OK ...    Then restart (volume knob 10 s).
+  Step 2. Install the map
+    Press  "2. Install the CarPlay map on the AID".   Expected:  PMCP_INSTALL_OK ...
+    Restart (volume knob 10 s).
     Connect the iPhone, start navigation in Apple Maps or Google Maps, and switch the
     dashboard to the navigation/map view (buttons on the right side of the steering wheel).
     No picture on the dashboard? On the iPhone: Settings -> General -> CarPlay -> your car ->
-    "Forget This Car", then connect again.
+    "Forget This Car", then connect again. Still nothing: do not go on to step 3.
 
-  PHASE 2 - arrows, arrival time, song title, zoom (only if phase 1 went well)
-
-  Step 4. On your computer: start the copy helper again and choose 3. It shows the result of
-    the rescue card test (it must say WYNIK=OK, "result OK"), re-arms the rescue card, and
-    then unlocks the features on CARD 1. If the test did not pass, it stops: do not continue.
-
-  Step 5. In the car, with CARD 1: press  "3. Install all features: arrows, ETA, zoom, song title".
+  Step 3. Install the rest (only if the map works)
+    Green menu -> pmcp_CarPlay_AID -> "3. Install all features: arrows, ETA, zoom, song title".
     Expected:  PMCP_ALL_ON_OK
-    Restart (volume knob 10 s). This first start is a TRIAL.
-    Check: CarPlay connects, the map is on the dashboard, and during navigation the VW
-    turn arrow, distance and arrival time appear (the arrow shows once the car moves).
-      - Everything works: open the green menu again and press
-        "4. Confirm: everything works" - IN THE SAME START, without switching the car off.
-        Done: from now on it loads at every start.
-      - Something is wrong, or the screen stays black: just restart again (volume knob 10 s).
+    Restart (volume knob 10 s). This start is a TRIAL.
+
+  Step 4. Test, then confirm
+    Check: CarPlay connects, the map is on the dashboard, and during navigation the VW turn
+    arrow, distance and arrival time appear (the arrow shows once the car moves).
+      - Everything works: open the green menu and press "4. Confirm: everything works"
+        IN THIS SAME START (do not switch the car off before it).
+      - Something is wrong, or the screen stays black: just restart (volume knob 10 s).
         Without Confirm the next start is the original factory one. Nothing to fix.
         To try once more: "5. Try again", then restart.
+
+  Step 5. Restart once more (volume knob 10 s). Done: it works like this from now on.
 
   To remove everything: "Remove everything (back to factory files)", then restart.
   "Status (read-only)" shows what is installed.
 
-  EMERGENCY (black screen that does not come back after several restarts):
-    insert CARD 2 (rescue) and wait. It removes the phase 2 changes by itself.
-    Then in the green menu: "Remove everything (back to factory files)".
+------------------------------------------------------------------------------------------
+EMERGENCY - CARD 2 (RESCUE)
+------------------------------------------------------------------------------------------
+  Only if, after you pressed Confirm, the screen stays black or keeps restarting, and holding
+  the volume knob ~10 s does not help:
+    1. Insert CARD 2 in slot SD1 and wait up to 60 seconds. The unit goes into update mode by
+       itself and may restart a few times. If it asks a question, choose Continue.
+       Do NOT pull the card while it updates.
+    2. When the normal screen is back, remove the card. The features are off again; the map
+       picture stays. In the green menu: "Remove everything (back to factory files)" if you
+       want to undo the map too.
+    3. The card disarms itself after use, so it cannot run again by accident. To make it ready
+       for the next time: on your computer start the copy helper and choose 3 (it also shows
+       the result of the run; WYNIK=OK = result OK).
+  Optional: you can test CARD 2 once on a working unit before step 1. It changes nothing on a
+  unit without our files. Re-arm it afterwards with the copy helper, option 3.
 
   Single features and other map layouts are in the submenu  pmcp_advanced  (Polish labels,
   explained in docs/in-car-guide.md).

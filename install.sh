@@ -530,25 +530,18 @@ Cards
 The main screen is in English. The submenu pmcp_advanced is in Polish (see the in-car guide).
 On the rescue card log: WYNIK=OK = result OK, RATUNEK = rescue, koniec = end
 
-Phase 1 (picture on the AID, no Java)
-  1. Test card 2 on the healthy unit: insert it, wait up to 60 s, the unit enters update mode by itself
-     (answer Continue). When it is back to normal, remove it. On a computer: PMCP_RATUNEK_LOG.txt must end with
-     "=== PMCP RATUNEK koniec ===" with "WYNIK=OK" before it. Rename _Swdlautorun.txt back to Swdlautorun.txt
-     (re-arm) and put the card away. Anything else: STOP.
-  2. Card 1 in SD1. Hold MENU ~10 s -> =>M.I.B.<= -> pmcp_CarPlay_AID. Header = $VERSION.
+In the car, one visit, card 1 only (photograph the screen after every action):
+  1. Card 1 in SD1. Hold MENU ~10 s -> =>M.I.B.<= -> pmcp_CarPlay_AID. Header = $VERSION.
      "1. Check card and unit (read-only)" -> expect PMCP_VERIFY_OK state=STOCK.
-  3. "2. Install the CarPlay map on the AID" -> expect PMCP_INSTALL_OK.
-     Restart: hold the volume knob ~10 s. Start guidance in Apple/Google Maps, AID view = navigation map.
-     No picture: iPhone Settings > General > CarPlay > this car > Forget This Car, reconnect.
-  Photograph the screen after every action (the card is read-only in GEM, there is no log file).
-
-Phase 2 (Java packages: native arrows, ETA, title, zoom, day/night)
-  4. Only after a good step 1 and a working step 3: create an EMPTY file pmcp/ODBLOKUJ_ETAP_B on card 1
-     (macOS: touch /Volumes/<card>/pmcp/ODBLOKUJ_ETAP_B). It unlocks stage B.
-  5. "3. Install all features: arrows, ETA, zoom, song title" -> PMCP_ALL_ON_OK -> restart -> trial boot.
-     If everything works, in the SAME boot press "4. Confirm: everything works".
-     Without Confirm the next boot is factory again (safe). Black screen: hold the volume knob ~10 s.
+  2. "2. Install the CarPlay map on the AID" -> PMCP_INSTALL_OK. Restart (volume knob ~10 s).
+     Start guidance in Apple/Google Maps, AID view = navigation map. No picture: iPhone Settings > General >
+     CarPlay > this car > Forget This Car, reconnect. No map: stop here.
+  3. "3. Install all features: arrows, ETA, zoom, song title" -> PMCP_ALL_ON_OK. Restart: trial start.
+  4. Test. Everything works: "4. Confirm: everything works" in the SAME start. Then restart once more: done.
+     Without Confirm the next start is factory again (safe). Black screen: hold the volume knob ~10 s.
   Undo everything: "Remove everything (back to factory files)".
+Card 2 (rescue) only for an emergency after Confirm: insert it, wait, remove it when the normal screen is back.
+It disarms itself after use; re-arm it on a computer (rename _Swdlautorun.txt to Swdlautorun.txt).
 
 Log of this build: $LOG
 EOF

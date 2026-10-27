@@ -23,29 +23,24 @@ ZIP_SHA = "4bfc6e725b5cc60c3c8c73081609dabfe1a2016b5d8671e2438592e673a98086"
 PREFIX = "M.I.B._More-Incredible-Bash-3.6.0/"
 MIB_ESD_SHA = "22739f7226f36d089e2e0485fe2b6874aba2ee6b7b57c807de7bc25c0fdc9121"   # = build_sd.py MIB_ESD
 
-README = """KARTA INSTALACYJNA pmcp (Passat B8, MHI2 MU1161, AID 791) - wersja %(ver)s
+README = """CARD 1 - INSTALL: CarPlay map on the AID (VW MHI2 MU1161, AID 791) - build %(ver)s
 ====================================================================================
 
-To jest karta M.I.B. 3.6.0 (ta sama wersja co zainstalowana) z dogranym instalatorem pmcp.
-Nic nie uruchamia sie samo (_Swdlautorun.txt jest rozbrojony - NIE zmieniaj mu nazwy).
-Wszystko robisz w zielonym menu (GEM), jedna akcja naraz:
+This is M.I.B. 3.6.0 plus the CarPlay-on-AID installer. Nothing starts by itself
+(_Swdlautorun.txt is disarmed - do NOT rename it). Everything runs from the green menu (GEM):
 
-  Karta do slotu SD1. GEM -> =>M.I.B.<= -> pmcp_CarPlay_AID
-  Naglowek ekranu musi pokazac wersje: %(ver)s
+  Card in slot SD1. Hold MENU ~10 s -> =>M.I.B.<= -> pmcp_CarPlay_AID
+  The header must show: %(ver)s
 
-Kolejnosc (szczegoly: 07-instalator.md w dokumentacji projektu):
-  0. NAJPIERW test karty ratunkowej (osobna karta) na zdrowym radiu -> log z WYNIK=OK do sprawdzenia.
-  1. "1. Sprawdz karte i radio (tylko odczyt)"  -> verify
-  2. Etap A (obraz na AID): glowny przycisk wariantu map-square -> restart radia.
-     Brak obrazu na AID: w iPhonie "Zapomnij to auto" i sparuj ponownie; potem "zmien wariant".
-  3. Etap B (Java) jest ZABLOKOWANY, dopoki na karcie nie ma pustego pliku pmcp/ODBLOKUJ_ETAP_B
-     (tworzymy go dopiero po tescie karty ratunkowej).
-     Potem paczki Java po jednej: wlacz -> restart -> w trakcie tego startu GEM "Potwierdz".
-     Bez potwierdzenia nastepny start jest fabryczny.
-  4. Wycofanie wszystkiego: "Przywroc pliki fabryczne".
+  1. Check card and unit (read-only)        -> PMCP_VERIFY_OK state=STOCK
+  2. Install the CarPlay map on the AID     -> restart (volume knob ~10 s), check the map
+  3. Install all features                   -> restart: this first start is a TRIAL
+  4. Confirm: everything works              -> press it in that same start; restart; done
+     (no Confirm, or black screen: restart again -> factory start, nothing to fix)
+  Remove everything (back to factory files) -> undo it all
 
-Wyniki: na ekranie GEM i w pmcp/log/ na tej karcie - przynies mi logi.
-Nie kopiuj tu karty ratunkowej (pmcp-ratunek/, Swdlautorun.txt).
+Photograph each result (the card is read-only in GEM, there is no log file).
+Do not copy the rescue card (pmcp-ratunek/, Swdlautorun.txt) onto this card.
 """
 
 

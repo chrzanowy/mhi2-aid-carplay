@@ -41,41 +41,29 @@ function Eject($root) {
     try { (New-Object -ComObject Shell.Application).Namespace(17).ParseName($root).InvokeVerb("Eject"); Ok "card ejected" }
     catch { Say "    Use 'Safely Remove Hardware' (taskbar) before removing the card." }
 }
-function UnlockFlow {
+function RearmFlow {
     Say ""
-    Say "  Step 1 of 2: the rescue card test result"
-    $r = WaitCard 'PMCP_RESCUE_MANIFEST.txt' 'CARD 2 (RESCUE), after the test in the car,'
+    $r = WaitCard 'PMCP_RESCUE_MANIFEST.txt' 'CARD 2 (RESCUE)'
     Say ("    card: " + $r)
     $rlog = Join-Path $r 'PMCP_RATUNEK_LOG.txt'
-    if (-not (Test-Path -LiteralPath $rlog)) {
-        Fail "There is no test result on the rescue card yet." "Do step 1 of PART 2 in the car first (insert card 2, wait, Continue)."
+    if (Test-Path -LiteralPath $rlog) {
+        $lines = @([System.IO.File]::ReadAllLines($rlog) | ForEach-Object { $_.TrimEnd() } | Where-Object { $_ -ne '' })
+        Say "    result of its last run (end of PMCP_RATUNEK_LOG.txt):"
+        $lines | Select-Object -Last 4 | ForEach-Object { Say ("      | " + $_) }
+        if (@($lines | Where-Object { $_ -like '*WYNIK=OK*' }).Count -gt 0) { Ok "the rescue card worked (WYNIK=OK = result OK)" }
+        else { Write-Host "  [WARN] no WYNIK=OK in the log: the last run did not finish cleanly. Keep the log and ask for help." -ForegroundColor Yellow }
     }
-    $lines = @([System.IO.File]::ReadAllLines($rlog) | ForEach-Object { $_.TrimEnd() } | Where-Object { $_ -ne '' })
-    Say "    last lines of the rescue log:"
-    $lines | Select-Object -Last 4 | ForEach-Object { Say ("      | " + $_) }
-    $passed = @($lines | Where-Object { $_ -like '*WYNIK=OK*' }).Count -gt 0
-    if (-not $passed -or $lines.Count -eq 0 -or -not ($lines[-1] -like '*=== PMCP RATUNEK koniec ===*')) {
-        Fail "The rescue card test did NOT pass (no WYNIK=OK at the end of the log)." `
-             "Do not unlock the features. Keep the log file PMCP_RATUNEK_LOG.txt and ask for help."
-    }
-    Ok "rescue test passed (WYNIK=OK)"
     $off = Join-Path $r '_Swdlautorun.txt'; $on = Join-Path $r 'Swdlautorun.txt'
-    if ((Test-Path -LiteralPath $off) -and -not (Test-Path -LiteralPath $on)) { Rename-Item -LiteralPath $off -NewName 'Swdlautorun.txt' }
-    if (-not (Test-Path -LiteralPath $on)) { Fail "The rescue card has no autostart file." "Make CARD 2 again with option 2." }
-    Ok "rescue card re-armed (it will start by itself again when inserted)"
+    if (Test-Path -LiteralPath $on) {
+        Ok "the rescue card is already armed"
+    } else {
+        if (-not (Test-Path -LiteralPath $off)) { Fail "The rescue card has no autostart file." "Make CARD 2 again with option 2." }
+        Rename-Item -LiteralPath $off -NewName 'Swdlautorun.txt'
+        Ok "rescue card re-armed: it starts by itself again when inserted"
+    }
     Eject $r
-    Say "    Keep it OUT of the car. Label: RESCUE - DO NOT INSERT"
-    Say ""
-    Say "  Step 2 of 2: unlock the features on CARD 1"
-    $c = WaitCard 'PMCP_CARD_MANIFEST.txt' 'CARD 1 (INSTALL)'
-    Say ("    card: " + $c)
-    $pm = Join-Path $c 'pmcp'
-    if (-not (Test-Path -LiteralPath $pm)) { Fail "This card has no pmcp folder." "Make CARD 1 again with option 1." }
-    [System.IO.File]::WriteAllBytes((Join-Path $pm 'ODBLOKUJ_ETAP_B'), [byte[]]@())
-    Ok "features unlocked on CARD 1 (file pmcp\ODBLOKUJ_ETAP_B)"
-    Eject $c
     Say ""; Line
-    Say "  DONE. Next in the car: green menu -> pmcp_CarPlay_AID -> 3. Install all features."
+    Say "  DONE. Keep CARD 2 OUT of the car until you need it. Label: RESCUE - DO NOT INSERT"
     Line
     Finish 0
 }
@@ -87,9 +75,9 @@ try {
     Say "  What do you want to do?"
     Say "    2 = make CARD 2, RESCUE  (make this one first; only for emergencies, it starts by itself)"
     Say "    1 = make CARD 1, INSTALL (used from the green menu in the car)"
-    Say "    3 = after the rescue card test in the car: check its result, re-arm it, unlock features on CARD 1"
+    Say "    3 = re-arm CARD 2 after it was used (shows the result of its last run)"
     $choice = Ask "Type 1, 2 or 3 and press Enter"
-    if ($choice -eq '3') { UnlockFlow }
+    if ($choice -eq '3') { RearmFlow }
     switch ($choice) {
         '1' { $Src = Join-Path $Here 'card1-install'; $Man = 'PMCP_CARD_MANIFEST.txt'; $Name = 'CARD 1 (INSTALL)'; $Label = 'INSTALL' }
         '2' { $Src = Join-Path $Here 'card2-rescue'; $Man = 'PMCP_RESCUE_MANIFEST.txt'; $Name = 'CARD 2 (RESCUE)'; $Label = 'RESCUE - DO NOT INSERT' }

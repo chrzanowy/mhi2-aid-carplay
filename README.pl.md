@@ -68,11 +68,12 @@ Wszystkie warianty deklarują rozmiar fizyczny 240×144 mm. Zmiana wariantu podm
 
 1. Rozpakuj zip i otwórz `README-FIRST.txt` (po angielsku, krok po kroku).
 2. Dwuklik na `Copy-to-SD-Windows.bat` (Windows) albo `Copy-to-SD-macOS.command` (Mac): kopiuje kartę na **pustą**
-   kartę SD FAT32, sprawdza każdy plik i wysuwa kartę. Niczego nie formatuje ani nie usuwa. Najpierw karta 2
-   (ratunkowa), potem karta 1 (instalacyjna).
-3. W aucie: część 2 w `README-FIRST.txt` (szczegóły: [tutorial w aucie](docs/pl/09-tutorial-w-aucie.md)).
-   Ekran główny zielonego menu to prosta ścieżka: sprawdź, zainstaluj mapę, zainstaluj wszystkie funkcje (jeden start
-   próbny), potwierdź. Po teście karty ratunkowej opcja 3 pomocnika kopiowania sprawdza wynik i odblokowuje funkcje.
+   kartę SD FAT32, sprawdza każdy plik i wysuwa kartę. Niczego nie formatuje ani nie usuwa. Zrób kartę 1
+   (instalacyjną) i kartę 2 (ratunkową, na awarię).
+3. W aucie, jedna wizyta, tylko karta 1 (część 2 w `README-FIRST.txt`, szczegóły: [tutorial w aucie](docs/pl/09-tutorial-w-aucie.md)):
+   **1. Check → 2. Install map → restart → mapa OK? → 3. Install all features → restart (start próbny) → test →
+   4. Confirm → restart.** Od tej chwili tak już zostaje.
+   Karta 2 jest tylko na awarię po potwierdzeniu. Po użyciu sama się rozbraja; opcja 3 pomocnika kopiowania ją uzbraja.
 
 Wcześniej potrzebny jest [M.I.B. w radiu i backup](docs/pl/01-mib-instalacja-backup.md). Instalator na karcie najpierw
 sprawdza każdy plik radia; przy innym firmware zatrzymuje się i niczego nie zmienia.

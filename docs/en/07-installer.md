@@ -12,7 +12,7 @@ manifest and the `pmcp.sh` template). The install card is assembled by `installe
 |---|---|---|
 | 0 Rescue card | nothing on the unit (separate card from `installer/build_rescue.py`) | tested in the car (`WYNIK=OK`) |
 | A CarPlay video + `core.so` variants | `dio_manager` → wrapper, `/mnt/app/carplaymaps` | works |
-| B Java mechanism + NavActiveIgnore | one fixed block in `lsd.sh` + JAR | works; unlocked by the file `pmcp/ODBLOKUJ_ETAP_B` on the card |
+| B Java mechanism + NavActiveIgnore | one fixed block in `lsd.sh` + JAR | works; main-screen button "3. Install all features" (no unlock needed since v1.2.0) |
 | C iPhone map parameters in the URL | `core.so` only (variant `url-map-hybrid`, `showSpeedLimit=yes`) | in the menu; the parameter shows nothing on this unit |
 | D Track title and artist | JAR `pmcp-np.jar` (`HsmTarget` + `CurrentStationInfo`) | works ([`nowplaying/`](../../nowplaying/)) |
 | E Native guidance (port of Tomasz's work) | "System RG" (iAP2 driver, `iap2.cfg`, reader) + JAR `pmcp-rg.jar` | works ([`rg/`](../../rg/)) |
@@ -98,7 +98,7 @@ Swap order:
 - `java-off`: `HMI_BOOT` → JAR removed; for the last package: stock `lsd.sh` first, then JAR and `HMI_BOOT`;
 - `restore`: `lsd.sh` → `dio_manager` → JARs → System RG → trial markers → `carplaymaps` moved with one `mv` to
   `.carplaymaps-old-<pid>`, and only then `rm -rf`.
-- System RG (`rg-system-on`) is locked like stage B; `/mnt/system` goes back to read-only after the write.
+- System RG (`rg-system-on`): `/mnt/system` goes back to read-only after the write.
 
 **Power-loss test** (`installer/test/fault_inject.sh`): for every action of the chain
 install → java-on nai → java-on np → rg-system-on → java-on rg → switch → java-off np → java-off rg → rg-system-off → java-off nai → restore
@@ -112,7 +112,7 @@ Requires: M.I.B. installed ([01-mib-install-backup.md](01-mib-install-backup.md)
 `installer/build_card_install.py`: a complete card = the untouched `MIB_V3.6.0.zip` tree (autorun disarmed, `_Swdlautorun.txt`) +
 the SD build from `installer/build_sd.py` (`pmcp/`, `esd/Launcher-sda0.esd`), assembled with
 `python3 -I installer/build_card_install.py <SD build> <card dir>` (every build file is checked against `BUILD-MANIFEST.txt`; it
-refuses an armed autorun, rescue-card files or `ODBLOKUJ_ETAP_B`). Hashes of all files: `PMCP_CARD_MANIFEST.txt`, instructions:
+refuses an armed autorun or rescue-card files). Hashes of all files: `PMCP_CARD_MANIFEST.txt`, instructions:
 `PMCP_INSTRUKCJA.txt`. You copy **the whole content** of the directory to an empty card (FAT32) instead of adding `pmcp/` to an
 M.I.B. card by hand.
 
@@ -123,34 +123,35 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
 
 1. On the computer: copy the whole content of the install card directory to an empty card (card root).
    Check the version in the header of the pmcp screen in GEM: it must match the first line of `BUILD-MANIFEST.txt`.
-2. In the car: GEM → `=>M.I.B.<=` → **`pmcp_CarPlay_AID`**:
-   - "0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)" (diagnostics, read-only, take photos of the screen): read-only
-     diagnostics that work even when `pmcp.sh` stops at its self test;
+2. In the car: GEM → `=>M.I.B.<=` → **`pmcp_CarPlay_AID`**. Main screen (English):
    - "1. Check card and unit (read-only)" → `verify`;
-   - "Status (read-only)";
-   - "2. Install the CarPlay map on the AID" (stage A, variant map-square);
-   - "Remove everything (back to factory files)";
-   - main screen "3. Install all features": runs System RG on and every Java package on in one go (one set, one trial
-     boot, then "4. Confirm"); stops at the first failure, "already on" counts as done;
-   - submenu `pmcp_advanced` with "0. Diagnostyka" and the submenus `pmcp_inne_warianty` (install with another variant) and `pmcp_zmien_wariant` (`switch`, e.g.
-     "Zmien wariant na: map-clean" (change variant to));
-   - submenu `pmcp_advanced` → `pmcp_etap_B_java`: System RG wlacz/wylacz (on/off), Wlacz/Wylacz (enable/disable) a package (Confirm and Try again are on the main screen). The actions refuse until the card holds the file `pmcp/ODBLOKUJ_ETAP_B` (after the rescue card test).
+   - "2. Install the CarPlay map on the AID" → `install map-square` (stage A);
+   - "3. Install all features: arrows, ETA, zoom, song title" → menu script `all-on.sh`: `rg-system-on`, then
+     `java-on` nai, np, rg, zoom, dn, one after another (one set, one trial boot); stops at the first `PMCP_FAIL`,
+     `*_ALREADY_*` counts as done;
+   - "4. Confirm: everything works (only in the first start after 3)" → `java-confirm`;
+   - "5. Try again: the next start is a new trial" → `java-retry`;
+   - "Status (read-only)", "Remove everything (back to factory files)" → `restore`;
+   - submenu `pmcp_advanced`: "0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)" (read-only diagnostics that work even
+     when `pmcp.sh` stops at its self test), and the submenus `pmcp_inne_warianty` (install with another layout),
+     `pmcp_zmien_wariant` (`switch`, e.g. "Zmien wariant na: map-clean") and `pmcp_etap_B_java` (System RG wlacz/wylacz,
+     Wlacz/Wylacz a single package).
+   No action needs an unlock file (until v1.1.0 the Java and System RG actions needed `pmcp/ODBLOKUJ_ETAP_B`).
 3. The result is on the GEM screen. The SD card is read-only in GEM (even `mount -uw` fails), so the log cannot be written to the
    card: the installer prints `PMCP_WARN=SD_LOG_NOT_WRITABLE` and carries on. **Photograph the screen.** If the card is writable,
    the log goes to `/pmcp/log/pmcp-<action>-<pid>.log`.
 
 The labels have no Polish diacritics (it is not known whether GEM and its parser handle them).
 
-First-time order:
-1. Rescue card on a healthy unit (below) → log `WYNIK=OK` (result OK).
-2. "Sprawdz…" (`verify`): read-only. Expected `PMCP_VERIFY_OK state=STOCK`.
-3. "Instaluj… map-square" (stage A), then a full restart. If the AID shows no CarPlay picture: on the iPhone, Settings → General →
-   CarPlay → the car → "Forget This Car", and reconnect (the iPhone remembers the car's old displays).
-   For another map layout: "Zmien wariant na: …".
-4. Stage B: empty file `pmcp/ODBLOKUJ_ETAP_B` on the card → one package at a time: "Wlacz: …" → restart (trial boot) →
-   check the HMI and the feature → **in the same boot** "4. Confirm". Without confirmation the next boot is stock.
-   For package E, first "System RG: wlacz", restart, check that CarPlay connects, and only then "Wlacz: Prowadzenie" (guidance).
-5. Rollback: "Remove everything (back to factory files)" and restart.
+Order (one visit to the car):
+1. "1. Check card and unit" (`verify`): read-only. Expected `PMCP_VERIFY_OK state=STOCK`.
+2. "2. Install the CarPlay map on the AID" (stage A), then a full restart. If the AID shows no CarPlay picture: on the iPhone,
+   Settings → General → CarPlay → the car → "Forget This Car", and reconnect (the iPhone remembers the car's old displays).
+   For another map layout: `pmcp_advanced` → "Zmien wariant na: …".
+3. Only if the map works: "3. Install all features" → restart (trial boot) → check the HMI and the features →
+   **in the same boot** "4. Confirm" → restart. Without confirmation the next boot is stock.
+4. Rollback: "Remove everything (back to factory files)" and restart.
+The rescue card is for emergencies after Confirm; testing it first is optional.
 
 Step-by-step guide for the car: [09-in-car-guide.md](09-in-car-guide.md).
 
@@ -194,8 +195,9 @@ The video (stage A) stays; "Remove everything" in GEM cleans up the rest afterwa
 nothing and only writes the log `PMCP_RATUNEK_LOG.txt`. The M.I.B. autorun in P4512 update mode works without any HMI interaction
 (checked in the car, `WYNIK=OK`).
 
-**Unlocking stage B:** test the card on a healthy car → log `PMCP_RATUNEK_LOG.txt` with `WYNIK=OK` → empty file
-`pmcp/ODBLOKUJ_ETAP_B` on the install card. Without it the Java and System RG actions refuse (`STAGE_B_LOCKED_…`).
+After use M.I.B. disarms the card (`Swdlautorun.txt` → `_Swdlautorun.txt`) so it cannot loop. Re-arming is done on a
+computer (copy helper option 3, or renaming the file by hand). Since v1.2.0 the installer no longer requires a rescue test
+before the Java actions; it is recommended, not enforced.
 
 ## Safeguards for starting J9 with our JARs
 

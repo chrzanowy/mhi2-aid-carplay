@@ -1,200 +1,180 @@
 # In-car guide: step-by-step installation (Passat B8, MHI2 MU1161, AID 791)
 
-Installer version: **`pmcp-0.2.0-mu1161-791-…`** (the suffix is a hash of your build, written in the first line of
-`BUILD-MANIFEST.txt` and in `PMCP_INSTRUKCJA.txt` on the card).
-Button labels below are exactly as they appear in GEM: Polish without diacritics. At first use each one is followed by
-its meaning in parentheses.
+Installer version: **`pmcp-0.2.0-mu1161-791-…`** (the suffix identifies the build; it is the first line of
+`BUILD-MANIFEST.txt` and is shown in `PMCP_INSTRUKCJA.txt` on card 1 and at the top of the green menu screen).
+The main screen of the green menu is in English. The submenu `pmcp_advanced` keeps the original Polish labels without
+diacritics; each one is translated in parentheses below.
+
+Everything is done in **one visit to the car**:
+
+```
+card 1:  1. Check  →  2. Install map  →  restart  →  map OK?  →  3. Install all features  →  restart (trial)
+         →  test  →  4. Confirm (same start)  →  restart  →  works from now on
+```
 
 ## Cards
 
-| Card | Label (suggested) | What it does | Note |
+| Card | Label | What it does | Note |
 |---|---|---|---|
-| **1 – install** (`installer/build_card_install.py`) | `MIB` | M.I.B. 3.6.0 + the pmcp installer, everything from GEM, one action at a time | nothing starts by itself; keep the unit backup on it as well |
-| **2 – rescue** (`installer/build_rescue.py`) | `RATUNEK` | when inserted, the unit enters update mode **by itself** and restores the stock HMI (undoes the Java changes) | mark it "DO NOT INSERT"; do not leave it in the slot |
+| **1 – install** | `INSTALL` | M.I.B. 3.6.0 + the installer, everything from the green menu, one action at a time | nothing starts by itself |
+| **2 – rescue** | `RESCUE - DO NOT INSERT` | when inserted, the unit enters update mode **by itself** and undoes the Java changes | emergencies only; keep it out of the slot |
 
-Always **only one card in the unit**, always slot **SD1**.
+Both cards are made with the copy helper from the release zip (`README-FIRST.txt`). Always **only one card in the unit**,
+always slot **SD1**.
 
 ## Rules for every step
 
 - Power: battery charger/booster, or the engine running (outdoors). Ignition ON.
-- **Do not interrupt** a GEM action (no "Back", do not pull the card) until the result is on the screen.
+- **Do not interrupt** an action in the green menu (no "Back", do not pull the card) until the result is on the screen.
 - Every action ends with a `PMCP_..._OK` line (good) or `PMCP_FAIL ...` (nothing was changed, or it was rolled back). On `FAIL`
   do not press anything else; take a photo of the screen.
-- The SD card is read-only in GEM, so the installer cannot write its log to the card (it prints `PMCP_WARN=SD_LOG_NOT_WRITABLE`
-  and continues). **Photograph the result of every action.**
-- Entering GEM: hold **MENU for ~10 s** → `=>M.I.B.<=` → **`pmcp_CarPlay_AID`**. The header must show the version
+- The SD card is read-only in the green menu, so the installer cannot write its log to the card (it prints
+  `PMCP_WARN=SD_LOG_NOT_WRITABLE` and continues). **Photograph the result of every action.**
+- Entering the green menu: hold **MENU for ~10 s** → `=>M.I.B.<=` → **`pmcp_CarPlay_AID`**. The header must show the version
   of your build (`pmcp-0.2.0-mu1161-791-…`); a different version = stop.
-- "Full unit restart" = **hold the volume knob for ~10 s** (the unit switches off and boots again). Switching the car off and on
+- "Restart" = **hold the volume knob for ~10 s** (the unit switches off and boots again). Switching the car off and on
   again right away is not a restart (the unit has not gone to sleep yet).
 
 ---
 
-# PHASE 1 – rescue test + picture on the AID (no Java)
+## Step 1. Check the card and the unit (read-only)
 
-### Step 1. Test the rescue card (card 2) on a healthy unit
+1. Insert **card 1**. Green menu → `=>M.I.B.<=` → `pmcp_CarPlay_AID`.
+2. **"1. Check card and unit (read-only)"**. Takes a few seconds (hashes are computed by the unit's factory `sha1sum`).
+3. Expected result: **`PMCP_VERIFY_OK state=STOCK`**. Nothing on the unit changes. On any other firmware the check stops here.
 
-1. The unit works normally. Insert **card 2 (`RATUNEK`)** into SD1 and wait (up to ~60 s).
-2. The unit enters update mode by itself and may restart several times. On the question in the update menu → **Continue**.
-   Do not pull the card.
-3. When the unit is back on its normal screen → remove card 2.
-4. Check card 2 on a computer: `PMCP_RATUNEK_LOG.txt` ends with `=== PMCP RATUNEK koniec ===`, preceded by `WYNIK=OK`
-   (result OK); the card has `_Swdlautorun.txt` (the card disarmed itself).
-5. After checking, re-arm card 2 (rename `_Swdlautorun.txt` to `Swdlautorun.txt`) and put it away.
+If anything is unclear, **"0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)"** (diagnostics, read-only, photograph the
+screen; submenu `pmcp_advanced`) shows the unit's state and changes nothing.
 
-If the unit did not enter update mode by itself, or the log shows anything other than `WYNIK=OK`: **stop**, do not go on to phase 2.
+## Step 2. Install the map (stage A)
 
-### Step 2. Check the card and the unit (read-only)
-
-1. Insert **card 1 (`MIB`)**. GEM → `=>M.I.B.<=` → `pmcp_CarPlay_AID`.
-2. **"1. Check card and unit (read-only)"**. Takes a few seconds (hashes are computed
-   by the unit's factory `sha1sum`).
-3. Expected result: **`PMCP_VERIFY_OK state=STOCK`**. Nothing on the unit changes.
-
-If anything is unclear, **"0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)"** (submenu `pmcp_advanced`) (diagnostics, read-only, photograph the
-screen) shows the unit's state and changes nothing.
-
-### Step 3. Install the CarPlay picture on the AID (stage A)
-
-1. **"2. Install the CarPlay map on the AID"** (stage A) → expect
-   `PMCP_INSTALL_OK stage=A variant=map-square ...`.
-   (`map-square` is the default variant: the mathsls fork's layout, map only, closer to square; it was the best of the five
-   after a longer drive. After step 8 VW shows the manoeuvre, ETA and distance natively.)
-2. Full unit restart (knob ~10 s).
-3. Connect the iPhone (CarPlay), open Apple Maps or Google Maps and **start guidance to a destination**. Switch the AID view to navigation/map.
-   AID controls in this car (right side of the steering wheel): **view buttons** (cluster layout), **OK** between them,
-   **up/down** next to them (cluster tabs/menu). The left side of the wheel is for driver assistance (not the AID).
+1. **"2. Install the CarPlay map on the AID"** → expect `PMCP_INSTALL_OK stage=A variant=map-square ...`.
+   (`map-square` is the default layout: the mathsls fork's layout, map only, closer to square; it was the best of five
+   after a longer drive. After step 3 VW shows the manoeuvre, ETA and distance natively.)
+2. Restart (knob ~10 s).
+3. Connect the iPhone (CarPlay), open Apple Maps or Google Maps and **start guidance to a destination**. Switch the AID view to
+   navigation/map. AID controls in this car (right side of the steering wheel): **view buttons** (cluster layout), **OK**
+   between them, **up/down** next to them (cluster tabs/menu). The left side of the wheel is for driver assistance.
    Select the **Navigation** tab (up/down), then step through the layouts with the view buttons: the CarPlay map appears in
    the small centre dial and in the large full-width layout.
-4. Check: CarPlay map on the AID, nothing running under the VW dials and bars. Take a straight-on photo of the AID.
+4. Check: CarPlay map on the AID, nothing running under the VW dials and bars.
 
 **If the AID shows no picture:**
 1. On the iPhone: Settings → General → CarPlay → this car → **"Forget This Car"**, reconnect.
-2. Still nothing: GEM → submenu **`pmcp_advanced` → `pmcp_zmien_wariant`** (change variant) → "Zmien wariant na: map-clean" (change variant to:
-   map-clean; wider and lower map window), restart.
-3. Another layout (`pmcp_zmien_wariant`, each change → restart, no "4. Confirm" (confirm); layouts: [AID frame map](../aid-frame-map.html)):
-   `card-clean` (with the iPhone's card, while native guidance is not working yet), `url-map-hybrid` (map with the
-   speed-limit parameter, which showed nothing in the car), `map-clean-l40` (map 40 columns to the left),
-   `map-clean` (wider and lower than map-square: 200 / 108 / 400 / 296).
+2. Still nothing: green menu → **`pmcp_advanced` → `pmcp_zmien_wariant`** (change layout) → "Zmien wariant na: map-clean"
+   (change layout to map-clean: wider and lower map window), restart.
+3. Other layouts in the same submenu (each change → restart; layouts: [AID frame map](../aid-frame-map.html)):
+   `card-clean` (with the iPhone's manoeuvre card), `url-map-hybrid` (map with the speed-limit parameter, which showed
+   nothing in the car), `map-clean-l40` (map 40 columns to the left), `map-clean` (200 / 108 / 400 / 296).
    Back to the default: "Zmien wariant na: map-square".
 
-Changing the variant swaps only one file (`core.so`) and does not touch Java. Stage A does not touch the HMI: the worst outcome is no
-CarPlay picture; GEM and "Remove everything (back to factory files)" always work.
+Do not go on to step 3 without a map on the AID. Stage A does not touch how the head unit screen starts: the worst
+outcome is no CarPlay picture, and the green menu with "Remove everything (back to factory files)" always works.
 
-### Step 4. Status
+## Step 3. Install all features
 
-1. **"Status (read-only)"** → should show `state=VIDEO`. Photograph the screen.
-2. Go on to phase 2 only when step 1 gave `WYNIK=OK` and the picture on the AID is fine.
+**"3. Install all features: arrows, ETA, zoom, song title"** → expect **`PMCP_ALL_ON_OK`**.
+
+It runs, one after another: the route guidance system (patched iAP2 driver, `iap2.cfg`, reader) and the five Java
+packages (NavActiveIgnore, song title, guidance, zoom, day/night). They all land in **one set**, so there is one trial start
+and one confirmation. It stops at the first failure (`PMCP_FAIL=ALL_ON_STOPPED_AT_...`; the steps before it stay done, the
+screen says which). Pressing it again when everything is on changes nothing.
+
+## Step 4. Trial start, test, confirm
+
+Java changes how the head unit screen starts, so the new set goes through a **trial start**:
+
+```
+3. Install all features  →  restart  →  TRIAL START (the set loads once)
+                                              │
+                        everything works? ────┤
+                            YES                │ NO / black screen
+            in the SAME start, green menu:     │ knob ~10 s → next start is factory
+            "4. Confirm: everything works"     │ (nothing confirmed, nothing to fix)
+            → the set loads at every start     │
+```
+
+1. Restart (knob ~10 s). This start is the trial.
+2. Check:
+   - the unit starts normally (screen, radio, menus) and **CarPlay connects** (wired; plug/unplug once);
+   - guidance in Apple Maps: the CarPlay map **stays** on the AID (NavActiveIgnore); time and distance to destination on the
+     VW bar and in the left dial; the turn arrow and the distance to the manoeuvre (the arrow appears once the car moves).
+     Google Maps and Waze: check whether they work too (it is not known whether they send this data);
+   - CarPlay music (Spotify/Apple Music): title and artist in the AID media view;
+   - map view on the AID: a **short** press of the up/down arrow on the wheel zooms in/out (holding does nothing);
+   - day/night: after a start in daylight with the lights off (not AUTO) the AID map is light; with the lights on, dark.
+3. Everything works → **"4. Confirm: everything works (only in the first start after 3)"** → `PMCP_JAVA_CONFIRM_OK`.
+   Only in the trial start (the installer checks this): do not switch the car off between the restart and Confirm.
+4. Something is wrong or the screen stays black → restart (knob ~10 s): the next start is factory. To try again:
+   **"5. Try again: the next start is a new trial"**, restart. To find out which feature is the problem, enable them one at a
+   time ([advanced](#advanced-one-feature-at-a-time)).
+
+## Step 5. Restart
+
+Restart once more. From now on the set loads at every start. **"Status (read-only)"** shows `state=JAVA`, the set and
+`This boot: set=... use=yes`.
 
 ---
 
-# PHASE 2 – Java packages (features on the AID)
+# Emergency: card 2 (rescue)
 
-Java packages change how the HMI (the head unit screen) starts, so each one goes through a **trial boot**:
+Only if, after Confirm, the screen stays black or keeps restarting and the knob does not help:
 
-```
-Wlacz: X  →  full restart  →  TRIAL BOOT (the set loads once)
-                                   │
-             everything works? ────┤
-                 YES                │ NO / black screen
-     in the SAME boot, GEM:         │ knob ~10 s → next boot is stock
-     "4. Confirm: ..."              │ (confirm nothing), then GEM: "Wylacz: X"
-     → the set loads every time     │
-```
+1. Insert **card 2** into SD1 and wait (up to ~60 s). The unit enters update mode by itself and may restart several times.
+   On the question in the update menu → **Continue**. Do not pull the card while it updates.
+2. When the unit is back on its normal screen → remove card 2. The Java part and the route guidance system are undone
+   (factory `lsd.sh`, our JARs removed, `/mnt/persist/pmcp/DISABLED`, factory iAP2 driver and `iap2.cfg`); the map stays.
+3. Card 1 → "Remove everything (back to factory files)" if you want the map gone as well.
+4. M.I.B. disarms card 2 after use (`Swdlautorun.txt` → `_Swdlautorun.txt`), so it cannot loop. Re-arm it on a computer:
+   copy helper, option **3** (it also shows the result: `PMCP_RATUNEK_LOG.txt`, `WYNIK=OK` = result OK, ending with
+   `=== PMCP RATUNEK koniec ===`).
 
-- **Without "4. Confirm" every following boot is stock** (without our JARs). To try again →
-  "5. Try again: the next start is a new trial", restart.
-- "4. Confirm" works **only in a trial boot** (the installer checks this). Do not switch the car off between the restart and the confirmation.
-- Every "Wlacz" (enable) creates a new set (packages enabled earlier stay in it) → another trial boot and another "4. Confirm".
-  "Wylacz" (disable) goes back to the set without that package: if that set was confirmed before, it loads straight away; if not, it is a trial too.
-  After a restart **"Status"** shows a line `This boot: set=... use=trial` (trial boot, "4. Confirm" needed) or `use=yes` (set confirmed).
-- **One package at a time**, photograph the result after each one.
-
-### Step 5. Unlock phase 2 (on a computer)
-
-Only after a good log in step 1 and a working step 3. Easiest: run the copy helper from the release zip and choose **3**.
-It checks the rescue log (`WYNIK=OK` and the end line), re-arms card 2 and creates the empty file **`pmcp/ODBLOKUJ_ETAP_B`**
-on card 1. By hand: create that empty file yourself (e.g. `touch /Volumes/MIB/pmcp/ODBLOKUJ_ETAP_B`). Without it every
-phase 2 button refuses.
-
-**Quick path (recommended):** main screen **"3. Install all features: arrows, ETA, zoom, song title"** → `PMCP_ALL_ON_OK`
-→ restart → one trial boot with everything → if CarPlay, the map and the guidance work: **"4. Confirm: everything works"**
-in the same boot. That replaces steps 6 to 10.
-
-Steps 6 to 10 below enable the packages one at a time instead (useful to find which one misbehaves). They are in the
-submenu **`pmcp_advanced` → `pmcp_etap_B_java`**.
-
-### Step 6. NavActiveIgnore – map on the AID while the iPhone is guiding
-
-1. **"Wlacz: NavActiveIgnore (mapa na AID przy prowadzeniu w iPhonie)"** (enable NavActiveIgnore, map on the AID during iPhone
-   guidance) → `PMCP_JAVA_ON_OK package=nai set=...`.
-2. Full restart → trial boot.
-3. Check: the unit starts normally (screen, FM radio, menus, VW navigation, CarPlay). Start guidance in Apple Maps: the CarPlay map
-   **stays** on the AID (without the package the AID may switch to the "navigation on phone" screen).
-4. OK → **"4. Confirm: everything works (only in the first start after 3)"** (
-   trial boot only) → `PMCP_JAVA_CONFIRM_OK`.
-
-### Step 7. Track title and artist
-
-1. **"Wlacz: Tytul i wykonawca utworu CarPlay na AID"** (enable CarPlay track title and artist on the AID) → restart → trial boot.
-2. Check: music from CarPlay (Spotify/Apple Music) → title and artist in the AID media view. The rest of the HMI as in step 6.
-3. OK → "4. Confirm".
-
-### Step 8. Guidance: arrows, distance, time (two stages)
-
-**8a. RG system** (CarPlay/iAP2 driver, not Java):
-1. **"System RG: wlacz (sterownik iAP2, iap2.cfg, czytnik)"** (RG system: enable; iAP2 driver, iap2.cfg, reader) → `PMCP_RG_SYSTEM_ON_OK`.
-2. Full restart. Check **only that CarPlay connects normally** (wired, plug/unplug a few times).
-3. CarPlay does not work → **"System RG: wylacz (fabryczny sterownik i iap2.cfg)"** (RG system: disable; stock driver and
-   iap2.cfg), restart, photograph the screen. No "4. Confirm" (this is not Java).
-
-**8b. Java package:**
-1. **"Wlacz: Prowadzenie: strzalki, dystans, czas na AID (wymaga Systemu RG)"** (enable guidance: arrows, distance, time on
-   the AID; needs the RG system) → restart → trial boot.
-2. Check: guidance in Apple Maps → on the AID time and distance to destination (VW bar and left dial), turn arrow and
-   distance to the manoeuvre (the arrow appears once the car moves). Google Maps and Waze: check whether it works too
-   (it is not known whether they send this data).
-3. OK → "4. Confirm".
-
-### Step 9. Map zoom from the steering wheel
-
-1. **"Wlacz: Zoom mapy CarPlay strzalkami na kierownicy"** (enable CarPlay map zoom with the steering-wheel arrows) → restart → trial boot.
-2. Check: map view on the AID, a **short** press of the up/down arrow on the wheel → zooms in/out. Holding does nothing.
-   Watch whether it gets in the way of the cluster menu (same arrows).
-3. OK → "4. Confirm".
-
-### Step 10. Day/night for the AID map
-
-1. **"Wlacz: Dzien/noc mapy CarPlay na AID (ponowne wyslanie po starcie)"** (enable day/night for the CarPlay map on the AID,
-   resent after boot) → restart → trial boot.
-2. Check: after boot the AID map is in the right mode (night with lights on/in the dark, day in daylight), also after a unit restart.
-   **The key case** (reported by another 791 owner, omonob #51): car outdoors in daylight, lights off
-   (not AUTO) → start → the map must be light. Without this package the map stays dark until you switch the lights on.
-   It is worth checking the same case once **before** enabling the package (after phase 1), to know whether your car has the problem at all.
-3. OK → "4. Confirm".
-
----
+Optional: card 2 can be tested once on a working unit before step 1. On a unit without our files it changes nothing of
+ours (M.I.B. 3.6.0 is installed again on the way). Re-arm it afterwards with option 3.
 
 # Rollback and failures
 
 | Situation | What to do |
 |---|---|
-| No picture on the AID | iPhone: "Forget This Car", reconnect; then another variant (step 3) |
-| A package misbehaves, HMI starts | GEM → `pmcp_etap_B_java` → "Wylacz: X" → restart → "Status": with `This boot: ... use=trial` check and "4. Confirm" |
-| Black screen / boot logo looping in a trial boot | knob ~10 s; the next boot is stock. Then "Wylacz: X" |
-| Black screen after confirming (a broken set was confirmed) | **card 2** (as in step 1). Then card 1 → "Remove everything (back to factory files)" |
-| CarPlay does not connect after the RG system | "System RG: wylacz", restart |
-| Roll back everything | "Remove everything (back to factory files)" → `PMCP_RESTORE_OK` → restart (stock unit) |
+| No picture on the AID | iPhone: "Forget This Car", reconnect; then another layout (step 2) |
+| Black screen / boot logo looping in the trial start | knob ~10 s; the next start is factory |
+| A feature misbehaves | restart without Confirm (factory), then enable features one at a time ([advanced](#advanced-one-feature-at-a-time)) |
+| CarPlay does not connect after step 3 | `pmcp_advanced` → `pmcp_etap_B_java` → "System RG: wylacz" (route guidance system off), restart |
+| Black screen after Confirm | **card 2** (emergency above), then card 1 → "Remove everything (back to factory files)" |
+| Roll back everything | "Remove everything (back to factory files)" → `PMCP_RESTORE_OK` → restart (factory unit) |
 | Any `PMCP_FAIL` or anything unclear | do not press anything else, photograph the screen, "0. Diagnostyka" (read-only) |
 
-Card 2 undoes only Java and the RG system (the stage A picture stays); "Remove everything (back to factory files)" cleans up the rest.
-After use card 2 disarms itself: re-arm it on a computer before the next use.
-
 The only allowed firmware update is the official K4525. Never cross-flash firmware from another model.
+
+---
+
+# Advanced: one feature at a time
+
+Instead of step 3, the features can be enabled one by one in **`pmcp_advanced` → `pmcp_etap_B_java`**. Every "Wlacz"
+(enable) makes a new set → restart → trial start → test → "4. Confirm". "Wylacz" (disable) goes back to the set without that
+package: if that set was confirmed before, it loads straight away; if not, it is a trial too. After a restart "Status" shows
+`This boot: set=... use=trial` (trial, Confirm needed) or `use=yes` (confirmed).
+
+1. **"Wlacz: NavActiveIgnore (mapa na AID przy prowadzeniu w iPhonie)"** (map stays on the AID while the iPhone guides).
+   Check: guidance in Apple Maps, the CarPlay map stays on the AID.
+2. **"Wlacz: Tytul i wykonawca utworu CarPlay na AID"** (CarPlay song title and artist on the AID).
+3. Route guidance, two parts:
+   - **"System RG: wlacz (sterownik iAP2, iap2.cfg, czytnik)"** (route guidance system on: iAP2 driver, iap2.cfg, reader;
+     not Java, no Confirm) → restart → check **only that CarPlay connects**. If not: **"System RG: wylacz (fabryczny sterownik
+     i iap2.cfg)"** (off: factory driver and iap2.cfg), restart, and skip the next item.
+   - **"Wlacz: Prowadzenie: strzalki, dystans, czas na AID (wymaga Systemu RG)"** (guidance: arrows, distance, time on the
+     AID; needs the route guidance system).
+4. **"Wlacz: Zoom mapy CarPlay strzalkami na kierownicy"** (map zoom with the steering-wheel arrows). Watch whether it gets
+   in the way of the cluster menu (same arrows).
+5. **"Wlacz: Dzien/noc mapy CarPlay na AID (ponowne wyslanie po starcie)"** (day/night for the AID map, resent after start).
+   The key case (reported by another 791 owner, omonob #51): car outdoors in daylight, lights off (not AUTO) → start → the
+   map must be light. Without this package the map stays dark until the lights are switched on.
 
 ## Cheat sheet
 
 ```
-PHASE 1:  card 2 (test, log WYNIK=OK) → card 1: Sprawdz (STOCK) → Instaluj map-square → restart → AID?
-PHASE 2:  ODBLOKUJ_ETAP_B (computer) → [Wlacz X → restart → test → 4. Confirm] for: nai, np, (System RG → restart → CarPlay OK) rg, zoom, dn
-FAILURE:  knob 10 s → stock boot;  bad set confirmed → card 2 → Remove everything
+INSTALL:    card 1 → 1. Check (STOCK) → 2. Install map → restart → map on the AID?
+            → 3. Install all features → restart (trial) → test → 4. Confirm → restart → done
+FAILURE:    trial start broken → knob 10 s → factory start;   after Confirm broken → card 2 → Remove everything
+RESCUE:     after using card 2: copy helper option 3 on a computer re-arms it
 ```
