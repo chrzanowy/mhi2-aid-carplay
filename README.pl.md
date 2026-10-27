@@ -71,6 +71,8 @@ Wszystkie warianty deklarują rozmiar fizyczny 240×144 mm. Zmiana wariantu podm
    kartę SD FAT32, sprawdza każdy plik i wysuwa kartę. Niczego nie formatuje ani nie usuwa. Najpierw karta 2
    (ratunkowa), potem karta 1 (instalacyjna).
 3. W aucie: część 2 w `README-FIRST.txt` (szczegóły: [tutorial w aucie](docs/pl/09-tutorial-w-aucie.md)).
+   Ekran główny zielonego menu to prosta ścieżka: sprawdź, zainstaluj mapę, zainstaluj wszystkie funkcje (jeden start
+   próbny), potwierdź. Po teście karty ratunkowej opcja 3 pomocnika kopiowania sprawdza wynik i odblokowuje funkcje.
 
 Wcześniej potrzebny jest [M.I.B. w radiu i backup](docs/pl/01-mib-instalacja-backup.md). Instalator na karcie najpierw
 sprawdza każdy plik radia; przy innym firmware zatrzymuje się i niczego nie zmienia.

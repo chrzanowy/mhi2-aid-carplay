@@ -27,18 +27,73 @@ function Ask($q) { return (Read-Host ("  ?  " + $q)).Trim() }
 function Sha($path) { return (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() }
 $System = @('System Volume Information', '$RECYCLE.BIN', '.fseventsd', '.Spotlight-V100', '.Trashes')
 
+# removable FAT32 drives that hold FILE (cards are recognised by their content, not by name)
+function WaitCard($file, $what) {
+    while ($true) {
+        Ask ("Insert " + $what + " and wait until it shows in File Explorer, then press Enter") | Out-Null
+        $found = @(Get-CimInstance Win32_LogicalDisk | Where-Object {
+            $_.DriveType -eq 2 -and $_.FileSystem -eq 'FAT32' -and (Test-Path -LiteralPath ($_.DeviceID + '\' + $file)) })
+        if ($found.Count -gt 0) { return ($found[0].DeviceID + '\') }
+        Say ("    " + $what + " was not found. Make sure it is inserted (and not another card).")
+    }
+}
+function Eject($root) {
+    try { (New-Object -ComObject Shell.Application).Namespace(17).ParseName($root).InvokeVerb("Eject"); Ok "card ejected" }
+    catch { Say "    Use 'Safely Remove Hardware' (taskbar) before removing the card." }
+}
+function UnlockFlow {
+    Say ""
+    Say "  Step 1 of 2: the rescue card test result"
+    $r = WaitCard 'PMCP_RESCUE_MANIFEST.txt' 'CARD 2 (RESCUE), after the test in the car,'
+    Say ("    card: " + $r)
+    $rlog = Join-Path $r 'PMCP_RATUNEK_LOG.txt'
+    if (-not (Test-Path -LiteralPath $rlog)) {
+        Fail "There is no test result on the rescue card yet." "Do step 1 of PART 2 in the car first (insert card 2, wait, Continue)."
+    }
+    $lines = @([System.IO.File]::ReadAllLines($rlog) | ForEach-Object { $_.TrimEnd() } | Where-Object { $_ -ne '' })
+    Say "    last lines of the rescue log:"
+    $lines | Select-Object -Last 4 | ForEach-Object { Say ("      | " + $_) }
+    $passed = @($lines | Where-Object { $_ -like '*WYNIK=OK*' }).Count -gt 0
+    if (-not $passed -or $lines.Count -eq 0 -or -not ($lines[-1] -like '*=== PMCP RATUNEK koniec ===*')) {
+        Fail "The rescue card test did NOT pass (no WYNIK=OK at the end of the log)." `
+             "Do not unlock the features. Keep the log file PMCP_RATUNEK_LOG.txt and ask for help."
+    }
+    Ok "rescue test passed (WYNIK=OK)"
+    $off = Join-Path $r '_Swdlautorun.txt'; $on = Join-Path $r 'Swdlautorun.txt'
+    if ((Test-Path -LiteralPath $off) -and -not (Test-Path -LiteralPath $on)) { Rename-Item -LiteralPath $off -NewName 'Swdlautorun.txt' }
+    if (-not (Test-Path -LiteralPath $on)) { Fail "The rescue card has no autostart file." "Make CARD 2 again with option 2." }
+    Ok "rescue card re-armed (it will start by itself again when inserted)"
+    Eject $r
+    Say "    Keep it OUT of the car. Label: RESCUE - DO NOT INSERT"
+    Say ""
+    Say "  Step 2 of 2: unlock the features on CARD 1"
+    $c = WaitCard 'PMCP_CARD_MANIFEST.txt' 'CARD 1 (INSTALL)'
+    Say ("    card: " + $c)
+    $pm = Join-Path $c 'pmcp'
+    if (-not (Test-Path -LiteralPath $pm)) { Fail "This card has no pmcp folder." "Make CARD 1 again with option 1." }
+    [System.IO.File]::WriteAllBytes((Join-Path $pm 'ODBLOKUJ_ETAP_B'), [byte[]]@())
+    Ok "features unlocked on CARD 1 (file pmcp\ODBLOKUJ_ETAP_B)"
+    Eject $c
+    Say ""; Line
+    Say "  DONE. Next in the car: green menu -> pmcp_CarPlay_AID -> 3. Install all features."
+    Line
+    Finish 0
+}
+
 try {
     Say ""
     Say "  CarPlay map on the AID - SD card copy helper"
     Line
-    Say "  Which card do you want to make?"
-    Say "    2 = CARD 2, RESCUE  (make this one first; only for emergencies, it starts by itself)"
-    Say "    1 = CARD 1, INSTALL (used from the green menu in the car)"
-    $choice = Ask "Type 1 or 2 and press Enter"
+    Say "  What do you want to do?"
+    Say "    2 = make CARD 2, RESCUE  (make this one first; only for emergencies, it starts by itself)"
+    Say "    1 = make CARD 1, INSTALL (used from the green menu in the car)"
+    Say "    3 = after the rescue card test in the car: check its result, re-arm it, unlock features on CARD 1"
+    $choice = Ask "Type 1, 2 or 3 and press Enter"
+    if ($choice -eq '3') { UnlockFlow }
     switch ($choice) {
         '1' { $Src = Join-Path $Here 'card1-install'; $Man = 'PMCP_CARD_MANIFEST.txt'; $Name = 'CARD 1 (INSTALL)'; $Label = 'INSTALL' }
         '2' { $Src = Join-Path $Here 'card2-rescue'; $Man = 'PMCP_RESCUE_MANIFEST.txt'; $Name = 'CARD 2 (RESCUE)'; $Label = 'RESCUE - DO NOT INSERT' }
-        default { Fail "Please type 1 or 2." "Start the helper again." }
+        default { Fail "Please type 1, 2 or 3." "Start the helper again." }
     }
     if (-not (Test-Path -LiteralPath (Join-Path $Src $Man))) {
         Fail ("The folder " + (Split-Path -Leaf $Src) + " is missing next to this helper.") `

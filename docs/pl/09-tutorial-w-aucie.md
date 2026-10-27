@@ -45,14 +45,14 @@ Jeśli radio nie weszło samo w tryb aktualizacji albo log jest inny niż `WYNIK
 ### Krok 2. Sprawdzenie karty i radia (tylko odczyt)
 
 1. Włóż **kartę 1 (`MIB`)**. GEM → `=>M.I.B.<=` → `pmcp_CarPlay_AID`.
-2. **„1. Sprawdz karte i radio (tylko odczyt)”**. Trwa kilka sekund (hashe liczy fabryczny `sha1sum` radia).
+2. **„1. Check card and unit (read-only)”**. Trwa kilka sekund (hashe liczy fabryczny `sha1sum` radia).
 3. Oczekiwany wynik: **`PMCP_VERIFY_OK state=STOCK`**. Nic w radiu się nie zmienia.
 
-Gdy coś jest niejasne, **„0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)”** pokazuje stan radia i niczego nie zmienia.
+Gdy coś jest niejasne, **„0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)”** (podmenu `pmcp_advanced`) pokazuje stan radia i niczego nie zmienia.
 
 ### Krok 3. Instalacja obrazu CarPlay na AID (etap A)
 
-1. **„2. Instaluj obraz CarPlay na AID: map-square (etap A)”** → oczekiwane `PMCP_INSTALL_OK stage=A variant=map-square ...`.
+1. **„2. Install the CarPlay map on the AID”** → oczekiwane `PMCP_INSTALL_OK stage=A variant=map-square ...`.
    (`map-square` to wariant domyślny: układ forka mathsls, sama mapa, bliżej kwadratu; najlepszy z pięciu po dłuższej jeździe.
    Manewr, ETA i dystans pokazuje natywnie VW po kroku 8.)
 2. Pełny restart radia (pokrętło ~10 s).
@@ -65,19 +65,19 @@ Gdy coś jest niejasne, **„0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)�
 
 **Jeśli na AID nie ma obrazu:**
 1. W iPhonie: Ustawienia → Ogólne → CarPlay → to auto → **„Zapomnij to auto”**, podłącz ponownie.
-2. Dalej nic: GEM → podmenu **`pmcp_zmien_wariant`** → „Zmien wariant na: map-clean” (szersze i niższe okno mapy), restart.
-3. Inny układ (`pmcp_zmien_wariant`, każda zmiana → restart, bez „Potwierdz”; układy: [mapa ramki AID](../aid-frame-map.pl.html)):
+2. Dalej nic: GEM → podmenu **`pmcp_advanced` → `pmcp_zmien_wariant`** → „Zmien wariant na: map-clean” (szersze i niższe okno mapy), restart.
+3. Inny układ (`pmcp_zmien_wariant`, każda zmiana → restart, bez „4. Confirm”; układy: [mapa ramki AID](../aid-frame-map.pl.html)):
    `card-clean` (z kartą iPhone'a, gdy natywne prowadzenie jeszcze nie działa), `url-map-hybrid` (mapa z parametrem
    ograniczenia prędkości, który w aucie nic nie pokazał), `map-clean-l40` (mapa 40 kolumn w lewo),
    `map-clean` (szerszy i niższy niż map-square: 200 / 108 / 400 / 296).
    Powrót do domyślnego: „Zmien wariant na: map-square”.
 
 Zmiana wariantu podmienia tylko jeden plik (`core.so`), Javy nie dotyka. Etap A nie rusza HMI: najgorszy skutek to brak obrazu
-CarPlay; GEM i „Przywroc pliki fabryczne” działają zawsze.
+CarPlay; GEM i „Remove everything (back to factory files)” działają zawsze.
 
 ### Krok 4. Status
 
-1. **„Status instalacji (tylko odczyt)”** → powinno być `state=VIDEO`. Zrób zdjęcie ekranu.
+1. **„Status (read-only)”** → powinno być `state=VIDEO`. Zrób zdjęcie ekranu.
 2. Do fazy 2 przechodź dopiero, gdy krok 1 dał `WYNIK=OK`, a obraz na AID jest w porządku.
 
 ---
@@ -92,24 +92,31 @@ Wlacz: X  →  pełny restart  →  START PRÓBNY (zestaw ładuje się 1 raz)
               wszystko działa? ────┤
                  TAK                │ NIE / czarny ekran
      w TYM SAMYM starcie GEM:       │ pokrętło ~10 s → następny start fabryczny
-     „Potwierdz: ...”               │ (nic nie potwierdzasz), potem GEM: „Wylacz: X”
+     „4. Confirm: ...”              │ (nic nie potwierdzasz), potem GEM: „Wylacz: X”
      → zestaw ładuje się zawsze     │
 ```
 
-- **Bez „Potwierdz” każdy następny start jest fabryczny** (bez naszych JAR-ów). Chcesz spróbować jeszcze raz →
-  „Ponow probny start obecnego zestawu”, restart.
-- „Potwierdz” działa **tylko w starcie próbnym** (sprawdzane przez instalator). Nie gaś auta między restartem a potwierdzeniem.
-- Każde „Wlacz” tworzy nowy zestaw (wcześniej włączone paczki zostają w nim) → znowu start próbny i znowu „Potwierdz”.
+- **Bez „4. Confirm” każdy następny start jest fabryczny** (bez naszych JAR-ów). Chcesz spróbować jeszcze raz →
+  „5. Try again: the next start is a new trial”, restart.
+- „4. Confirm” działa **tylko w starcie próbnym** (sprawdzane przez instalator). Nie gaś auta między restartem a potwierdzeniem.
+- Każde „Wlacz” tworzy nowy zestaw (wcześniej włączone paczki zostają w nim) → znowu start próbny i znowu „4. Confirm”.
   „Wylacz” wraca do zestawu bez tej paczki: jeśli ten zestaw był już kiedyś potwierdzony, ładuje się od razu, jeśli nie – też próbnie.
-  Po restarcie **„Status instalacji”** pokazuje linię `This boot: set=... use=trial` (start próbny, trzeba „Potwierdz”) albo `use=yes` (zestaw potwierdzony).
+  Po restarcie **„Status”** pokazuje linię `This boot: set=... use=trial` (start próbny, trzeba „4. Confirm”) albo `use=yes` (zestaw potwierdzony).
 - **Jedna paczka naraz**, po każdej zdjęcie wyniku z ekranu.
 
 ### Krok 5. Odblokowanie fazy 2 (na komputerze)
 
-Dopiero po dobrym logu z kroku 1 i działającym kroku 3: na karcie 1 załóż pusty plik **`pmcp/ODBLOKUJ_ETAP_B`**
-(np. `touch /Volumes/MIB/pmcp/ODBLOKUJ_ETAP_B`). Bez niego wszystkie przyciski fazy 2 odmawiają.
+Dopiero po dobrym logu z kroku 1 i działającym kroku 3. Najprościej: pomocnik kopiowania z paczki wydania, opcja **3**.
+Sprawdza log karty ratunkowej (`WYNIK=OK` i linia końcowa), ponownie uzbraja kartę 2 i zakłada na karcie 1 pusty plik
+**`pmcp/ODBLOKUJ_ETAP_B`**. Ręcznie: załóż ten pusty plik sam (np. `touch /Volumes/MIB/pmcp/ODBLOKUJ_ETAP_B`). Bez niego
+wszystkie przyciski fazy 2 odmawiają.
 
-Wszystkie akcje fazy 2 są w podmenu **`pmcp_etap_B_java`**.
+**Szybka ścieżka (zalecana):** ekran główny **„3. Install all features: arrows, ETA, zoom, song title”** → `PMCP_ALL_ON_OK`
+→ restart → jeden start próbny ze wszystkim → jeśli CarPlay, mapa i prowadzenie działają: **„4. Confirm: everything works”**
+w tym samym starcie. Zastępuje kroki 6–10.
+
+Kroki 6–10 niżej włączają paczki po jednej (przydatne, żeby znaleźć tę, która sprawia kłopot). Są w podmenu
+**`pmcp_advanced` → `pmcp_etap_B_java`**.
 
 ### Krok 6. NavActiveIgnore – mapa na AID przy prowadzeniu z iPhone'a
 
@@ -117,33 +124,33 @@ Wszystkie akcje fazy 2 są w podmenu **`pmcp_etap_B_java`**.
 2. Pełny restart → start próbny.
 3. Sprawdź: radio wstaje normalnie (ekran, radio FM, menu, nawigacja VW, CarPlay). W Apple Maps uruchom prowadzenie: mapa CarPlay
    **zostaje** na AID (bez paczki AID może przejść na ekran „nawigacja w telefonie”).
-4. OK → **„Potwierdz: HMI dziala z obecnym zestawem (tylko w starcie probnym)”** → `PMCP_JAVA_CONFIRM_OK`.
+4. OK → **„4. Confirm: everything works (only in the first start after 3)”** → `PMCP_JAVA_CONFIRM_OK`.
 
 ### Krok 7. Tytuł i wykonawca utworu
 
 1. **„Wlacz: Tytul i wykonawca utworu CarPlay na AID”** → restart → start próbny.
 2. Sprawdź: muzyka z CarPlay (Spotify/Apple Music) → na AID w widoku mediów tytuł i wykonawca. Reszta HMI jak w kroku 6.
-3. OK → „Potwierdz”.
+3. OK → „4. Confirm”.
 
 ### Krok 8. Prowadzenie: strzałki, dystans, czas (dwa etapy)
 
 **8a. System RG** (sterownik CarPlay/iAP2, nie Java):
 1. **„System RG: wlacz (sterownik iAP2, iap2.cfg, czytnik)”** → `PMCP_RG_SYSTEM_ON_OK`.
 2. Pełny restart. Sprawdź **tylko, czy CarPlay łączy się normalnie** (przewodowo, kilka razy podłącz/odłącz).
-3. CarPlay nie działa → **„System RG: wylacz (fabryczny sterownik i iap2.cfg)”**, restart, zdjęcie ekranu. Bez „Potwierdz” (to nie Java).
+3. CarPlay nie działa → **„System RG: wylacz (fabryczny sterownik i iap2.cfg)”**, restart, zdjęcie ekranu. Bez „4. Confirm” (to nie Java).
 
 **8b. Paczka Java:**
 1. **„Wlacz: Prowadzenie: strzalki, dystans, czas na AID (wymaga Systemu RG)”** → restart → start próbny.
 2. Sprawdź: prowadzenie w Apple Maps → na AID czas i dystans do celu (pasek VW i lewa tarcza), strzałka manewru i dystans
    do manewru (strzałka pojawia się, gdy auto ruszy). Google Maps i Waze: sprawdź, czy też działa (nie wiadomo, czy wysyłają te dane).
-3. OK → „Potwierdz”.
+3. OK → „4. Confirm”.
 
 ### Krok 9. Zoom mapy z kierownicy
 
 1. **„Wlacz: Zoom mapy CarPlay strzalkami na kierownicy”** → restart → start próbny.
 2. Sprawdź: widok mapy na AID, **krótkie** naciśnięcie strzałki góra/dół na kierownicy → przybliża/oddala. Przytrzymanie nic nie robi.
    Zwróć uwagę, czy to nie przeszkadza w menu licznika (te same strzałki).
-3. OK → „Potwierdz”.
+3. OK → „4. Confirm”.
 
 ### Krok 10. Dzień/noc mapy na AID
 
@@ -152,7 +159,7 @@ Wszystkie akcje fazy 2 są w podmenu **`pmcp_etap_B_java`**.
    **Najważniejszy przypadek** (zgłoszony przez innego właściciela 791, omonob #51): auto na zewnątrz w dzień, światła wyłączone
    (nie AUTO) → start → mapa ma być jasna. Bez tej paczki mapa zostaje ciemna, dopóki nie włączysz świateł.
    Warto sprawdzić to samo raz **przed** włączeniem paczki (po fazie 1), żeby wiedzieć, czy problem w ogóle u Ciebie występuje.
-3. OK → „Potwierdz”.
+3. OK → „4. Confirm”.
 
 ---
 
@@ -161,14 +168,14 @@ Wszystkie akcje fazy 2 są w podmenu **`pmcp_etap_B_java`**.
 | Sytuacja | Co robisz |
 |---|---|
 | Brak obrazu na AID | iPhone: „Zapomnij to auto”, podłącz ponownie; potem inny wariant (krok 3) |
-| Paczka działa źle, HMI wstaje | GEM → `pmcp_etap_B_java` → „Wylacz: X” → restart → „Status”: przy `This boot: ... use=trial` sprawdź i „Potwierdz” |
+| Paczka działa źle, HMI wstaje | GEM → `pmcp_etap_B_java` → „Wylacz: X” → restart → „Status”: przy `This boot: ... use=trial` sprawdź i „4. Confirm” |
 | Czarny ekran / logo w kółko w starcie próbnym | pokrętło ~10 s; następny start jest fabryczny. Potem „Wylacz: X” |
-| Czarny ekran po potwierdzeniu (zepsuty zestaw potwierdzony) | **karta 2** (jak w kroku 1). Potem karta 1 → „Przywroc pliki fabryczne” |
+| Czarny ekran po potwierdzeniu (zepsuty zestaw potwierdzony) | **karta 2** (jak w kroku 1). Potem karta 1 → „Remove everything (back to factory files)” |
 | CarPlay nie łączy się po Systemie RG | „System RG: wylacz”, restart |
-| Wszystko wycofać | „Przywroc pliki fabryczne” → `PMCP_RESTORE_OK` → restart (radio fabryczne) |
+| Wszystko wycofać | „Remove everything (back to factory files)” → `PMCP_RESTORE_OK` → restart (radio fabryczne) |
 | Cokolwiek `PMCP_FAIL` albo niejasne | nic dalej nie klikaj, zdjęcie ekranu, „0. Diagnostyka” (tylko odczyt) |
 
-Karta 2 cofa tylko Javę i System RG (obraz z etapu A zostaje); resztę sprząta „Przywroc pliki fabryczne”.
+Karta 2 cofa tylko Javę i System RG (obraz z etapu A zostaje); resztę sprząta „Remove everything (back to factory files)”.
 Po użyciu karta 2 sama się rozbraja: przed następnym razem trzeba ją znów uzbroić na komputerze.
 
 Jedyna dozwolona aktualizacja firmware to oficjalna K4525. Nigdy nie wgrywaj firmware z innego modelu (cross-flash).
@@ -177,6 +184,6 @@ Jedyna dozwolona aktualizacja firmware to oficjalna K4525. Nigdy nie wgrywaj fir
 
 ```
 FAZA 1:  karta 2 (test, log WYNIK=OK) → karta 1: Sprawdz (STOCK) → Instaluj map-square → restart → AID?
-FAZA 2:  ODBLOKUJ_ETAP_B (komputer) → [Wlacz X → restart → test → Potwierdz] dla: nai, np, (System RG → restart → CarPlay OK) rg, zoom, dn
-AWARIA:  pokrętło 10 s → start fabryczny;  potwierdzony zły zestaw → karta 2 → Przywroc
+FAZA 2:  ODBLOKUJ_ETAP_B (komputer) → [Wlacz X → restart → test → 4. Confirm] dla: nai, np, (System RG → restart → CarPlay OK) rg, zoom, dn
+AWARIA:  pokrętło 10 s → start fabryczny;  potwierdzony zły zestaw → karta 2 → Remove everything
 ```

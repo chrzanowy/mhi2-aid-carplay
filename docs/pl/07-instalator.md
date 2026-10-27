@@ -18,17 +18,17 @@ Kartę instalacyjną składa `installer/build_card_install.py`, kartę ratunkow�
 | F Zoom z kierownicy | JAR `pmcp-zoom.jar` (hook w `DSIKeyPanelDispatcher`, tylko krótkie naciśnięcie) | działa ([`hmiextras/`](../../hmiextras/)) |
 | G Dzień/noc mapy na AID | JAR `pmcp-dn.jar` (hooki w `ASLHandler`) | działa ([`hmiextras/`](../../hmiextras/)) |
 
-**Etap A nie dotyka HMI** (Java): najgorszy skutek to brak CarPlay/AA, a GEM i „Przywroc” działają.
+**Etap A nie dotyka HMI** (Java): najgorszy skutek to brak CarPlay/AA, a GEM i „Remove everything” działają.
 
 **Wszystko w Javie przechodzi przez jeden blok w `lsd.sh`** (przed startem J9, nic po nim) z próbnym startem:
 - blok czyta jeden plik: `/mnt/app/carplaymaps/HMI_BOOT` = `ID_ZESTAWU JAR JAR …` (ID = `nazwa-8 znaków sha` połączone `+`).
   `pmcp.sh` podmienia go jednym `mv`, więc przy zaniku zasilania start widzi stary albo nowy zestaw, nigdy mieszankę;
 - nowy zestaw ładuje się **raz** próbnie (`/mnt/persist/pmcp/trial.<ID>`);
-- zostaje na stałe **tylko po naciśnięciu w GEM „Potwierdz” w trakcie tego startu próbnego**. `lsd.sh` przy każdym starcie najpierw
+- zostaje na stałe **tylko po naciśnięciu w GEM „4. Confirm” w trakcie tego startu próbnego**. `lsd.sh` przy każdym starcie najpierw
   usuwa, potem zapisuje `/mnt/persist/pmcp/last-boot` (`set=<ID> use=trial|yes|no`); `java-confirm` wymaga `use=trial` dla bieżącego ID,
   braku `ok.<ID>` i braku `DISABLED`. Fabryczny start po nieudanej próbie nie może więc potwierdzić zepsutego zestawu;
 - **nie ma automatycznego potwierdzenia**. Żywy proces J9 nie dowodzi działającego HMI;
-- bez potwierdzenia **każdy następny start (np. reset pokrętłem) jest fabryczny**; ponowna próba: „Ponow probny start”;
+- bez potwierdzenia **każdy następny start (np. reset pokrętłem) jest fabryczny**; ponowna próba: „5. Try again”;
 - **w trybie aktualizacji (`RUN_MODE=swdl`) blok nic nie robi** (fabryczny `lsd.sh` uruchamia HMI także w tym trybie, z kopią `jars/`
   w `/ramdisk`). Karta ratunkowa zawsze trafia na fabryczne HMI;
 - `/mnt/persist/pmcp/DISABLED` (karta ratunkowa) wyłącza blok całkowicie.
@@ -55,7 +55,7 @@ Aktualne hashe `core.so` i JAR-ów są w manifeście, który generuje `installer
 Celowo pominięte: `libcardshim.so` mathsls (`zoomFactor` 1.5, `properties`/`uid` wyświetlacza). Wariant `map-square` przejmuje
 więc tylko układ safe area mathsls, nie całą ich konfigurację.
 
-Warianty `core.so` (`switch` zmienia tylko ten plik, potem restart, bez „Potwierdz”), wszystkie z `build_core.py`, wszystkie
+Warianty `core.so` (`switch` zmienia tylko ten plik, potem restart, bez „4. Confirm”), wszystkie z `build_core.py`, wszystkie
 240×144 mm. Safe area = x / y / szerokość / wysokość na strumieniu 800×480:
 
 | Wariant | URL | Safe area | Opis |
@@ -120,12 +120,14 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
    Sprawdź w GEM w nagłówku ekranu pmcp wersję: musi być ta z pierwszej linii `BUILD-MANIFEST.txt`.
 2. W aucie: GEM → `=>M.I.B.<=` → **`pmcp_CarPlay_AID`**:
    - „0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)”: diagnostyka tylko do odczytu, działa nawet wtedy, gdy `pmcp.sh` zatrzyma się na self teście;
-   - „1. Sprawdz karte i radio (tylko odczyt)” → `verify`;
-   - „Status instalacji (tylko odczyt)”;
-   - „2. Instaluj obraz CarPlay na AID: map-square (etap A)”;
-   - „Przywroc pliki fabryczne”;
-   - podmenu `pmcp_inne_warianty` (instalacja innym wariantem) i `pmcp_zmien_wariant` (`switch`, np. „Zmien wariant na: map-clean”);
-   - podmenu `pmcp_etap_B_java`: System RG wlacz/wylacz, Wlacz/Wylacz paczkę, Potwierdz, Ponow probny start.
+   - „1. Check card and unit (read-only)” → `verify`;
+   - „Status (read-only)”;
+   - „2. Install the CarPlay map on the AID”;
+   - „Remove everything (back to factory files)”;
+   - ekran główny „3. Install all features”: System RG i wszystkie paczki Java naraz (jeden zestaw, jeden start próbny,
+     potem „4. Confirm”); zatrzymuje się na pierwszym błędzie, „już włączone” liczy się jako zrobione;
+   - podmenu `pmcp_advanced` z „0. Diagnostyka” i podmenu `pmcp_inne_warianty` (instalacja innym wariantem) i `pmcp_zmien_wariant` (`switch`, np. „Zmien wariant na: map-clean”);
+   - podmenu `pmcp_advanced` → `pmcp_etap_B_java`: System RG wlacz/wylacz, Wlacz/Wylacz paczkę (Confirm i Try again są na ekranie głównym).
      Akcje odmawiają, dopóki na karcie nie ma pliku `pmcp/ODBLOKUJ_ETAP_B` (po teście karty ratunkowej).
 3. Wynik jest na ekranie GEM. Karta SD jest w GEM tylko do odczytu (nawet `mount -uw` się nie udaje), więc logu nie da się
    zapisać na kartę: instalator wypisuje `PMCP_WARN=SD_LOG_NOT_WRITABLE` i działa dalej. **Rób zdjęcia ekranu.** Jeśli karta
@@ -140,9 +142,9 @@ Kolejność pierwszego razu:
    CarPlay → auto → „Zapomnij to auto” i podłączyć ponownie (iPhone pamięta stare wyświetlacze auta).
    Inny układ mapy: „Zmien wariant na: …”.
 4. Etap B: pusty plik `pmcp/ODBLOKUJ_ETAP_B` na karcie → jedna paczka naraz: „Wlacz: …” → restart (start próbny) →
-   sprawdzić HMI i funkcję → **w tym samym starcie** „Potwierdz”. Bez potwierdzenia następny start jest fabryczny.
+   sprawdzić HMI i funkcję → **w tym samym starcie** „4. Confirm”. Bez potwierdzenia następny start jest fabryczny.
    Dla paczki E najpierw „System RG: wlacz”, restart, sprawdzić, czy CarPlay się łączy, dopiero potem „Wlacz: Prowadzenie”.
-5. Wycofanie: „Przywroc pliki fabryczne” i restart.
+5. Wycofanie: „Remove everything (back to factory files)” i restart.
 
 Szczegółowy przewodnik po kolejnych krokach w aucie: [09-tutorial-w-aucie.md](09-tutorial-w-aucie.md).
 
@@ -156,7 +158,7 @@ shelle `mksh` (rodzina pdksh, jak QNX) i `ksh` (ksh93). Kod wyjścia = liczba ni
   zły rozmiar `lsd.jxe`, zmieniony `lsd.sh` i obcy mod są odrzucane bez zmian w drzewie;
 - pełny łańcuch install → paczki Java (1, 2 i 5 naraz) → System RG → switch → restore daje drzewo **bajtowo identyczne** z fabrycznym;
 - **próbny start na prawdziwym bloku `lsd.sh`** połączony z `pmcp.sh`: próba → start bez potwierdzenia fabryczny →
-  „Potwierdz” odrzucone → retry → start w trybie `swdl` niczego nie ładuje i kasuje `last-boot` → potwierdzenie tylko w starcie próbnym →
+  „4. Confirm” odrzucone → retry → start w trybie `swdl` niczego nie ładuje i kasuje `last-boot` → potwierdzenie tylko w starcie próbnym →
   potwierdzony zestaw ładuje się zawsze → `DISABLED` wyłącza i blokuje potwierdzenie;
 - `lsd.sh` po łatce = fabryczny + jeden blok (sprawdzane `diff`);
 - pozostałości (`.carplaymaps-new-*`, `.carplaymaps-old-*`, `*.pmcp-*`, stare znaczniki `ok.*`) sprząta `install`; przerwany `restore`
@@ -181,7 +183,7 @@ radio samo wchodzi w tryb aktualizacji (`RUN_MODE=swdl`; nasz blok nic wtedy nie
 - `/mnt/persist/pmcp/DISABLED`, usunięcie `last-boot`;
 - System RG: fabryczny sterownik iAP2 i `iap2.cfg` z kopii (po rozmiarach), usunięcie `SYSTEM_ON`.
 
-Obraz (etap A) zostaje, resztę sprząta potem „Przywroc” w GEM. Na zdrowym radiu bez pmcp skrypt nic nie zmienia, tylko zapisuje log
+Obraz (etap A) zostaje, resztę sprząta potem „Remove everything” w GEM. Na zdrowym radiu bez pmcp skrypt nic nie zmienia, tylko zapisuje log
 `PMCP_RATUNEK_LOG.txt`. Autorun M.I.B. w trybie aktualizacji P4512 działa bez interakcji z HMI (sprawdzone w aucie, `WYNIK=OK`).
 
 **Odblokowanie etapu B:** test karty na zdrowym aucie → log `PMCP_RATUNEK_LOG.txt` z `WYNIK=OK` → pusty plik
@@ -192,4 +194,4 @@ Obraz (etap A) zostaje, resztę sprząta potem „Przywroc” w GEM. Na zdrowym 
 Klasy w wersji 46, odwołania sprawdzone względem klas `java/*` jednostki (RefCheck), każde wywołanie z kodu fabrycznego osłonięte
 (narzędzia w [`buildtools/`](../../buildtools/)). Skrypty używają konstrukcji ksh z instalatora mathsls (backticki, `while read`,
 heredoc, `case`, `read` z przekierowaniem). Zabezpieczenie na wypadek błędu: próbny start z ręcznym potwierdzeniem, potem karta
-ratunkowa. Czarny ekran w starcie próbnym (przed „Potwierdz”): pokrętło głośności 10 s, następny start jest bez naszych JAR-ów.
+ratunkowa. Czarny ekran w starcie próbnym (przed „4. Confirm”): pokrętło głośności 10 s, następny start jest bez naszych JAR-ów.

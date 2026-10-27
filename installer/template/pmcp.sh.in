@@ -614,7 +614,7 @@ do_java_on() {
     [ "$STATE" = JAVA ] || fail "POST_JAVA_ON_STATE_${STATE}_RUN_RESTORE"
     flush
     say "PMCP_JAVA_ON_OK package=$ARG set=`boot_set_id`"
-    say "Reboot the unit. The first boot is a trial: if everything works, press Potwierdz in GEM during that boot."
+    say "Reboot the unit. The first boot is a trial: if everything works, press 4. Confirm in GEM during that boot."
     say "Without it, or if the screen does not come back (hold the volume knob ~10 s), the next boot is factory."
 }
 

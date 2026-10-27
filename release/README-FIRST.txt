@@ -36,8 +36,8 @@ PART 1 - MAKE THE TWO SD CARDS (on your computer, about 5 minutes)
                 (if Windows says "Windows protected your PC": "More info" -> "Run anyway")
        Mac:     right-click  Copy-to-SD-macOS.command  -> Open -> Open
                 (if the Mac refuses: System Settings -> Privacy & Security -> "Open Anyway")
-  3. The helper asks which card to make. Make CARD 2 (RESCUE) first, then run it again
-     for CARD 1 (INSTALL). Insert an empty card when it asks.
+  3. The helper asks what to do. Choose 2 to make CARD 2 (RESCUE) first, then start it again
+     and choose 1 for CARD 1 (INSTALL). Insert an empty card when it asks.
      It copies the files, checks every single one, and ejects the card.
      It never formats and never deletes anything. A card that is not empty is refused.
   4. Write on the cards with a pen:
@@ -61,72 +61,53 @@ PART 2 - IN THE CAR
       with PMCP_..._OK (good) or PMCP_FAIL (nothing was changed, or it was undone).
     - "Restart" = hold the volume knob for about 10 seconds.
 
-  The buttons in the green menu are in Polish. Translations:
-    Sprawdz = Check                 Instaluj obraz = Install picture
-    Zmien wariant = Change variant  Status instalacji = Installation status
-    Wlacz = Enable                  Wylacz = Disable
-    Potwierdz = Confirm             Ponow probny start = Repeat trial boot
-    Przywroc pliki fabryczne = Restore factory files
-    Diagnostyka = Diagnostics       (tylko odczyt) = (read-only, changes nothing)
-    WYNIK=OK = result OK            RATUNEK = rescue
-
   PHASE 1 - map picture on the dashboard
 
   Step 1. Test the rescue card (CARD 2) once, while everything works.
-    a) Insert CARD 2 and wait up to 60 seconds. The unit goes into update mode by itself
-       and may restart a few times. If it asks a question, choose Continue.
-    b) When the normal screen is back, remove the card.
-    c) On your computer, open PMCP_RATUNEK_LOG.txt on the card. Near the end it must say
-       WYNIK=OK, and the last line must be  === PMCP RATUNEK koniec ===
-       Anything else: STOP here and ask for help.
-    d) On the card, rename  _Swdlautorun.txt  to  Swdlautorun.txt  (remove the "_").
-       This re-arms the card. Put it away somewhere safe.
+    Insert CARD 2 and wait up to 60 seconds. The unit goes into update mode by itself and
+    may restart a few times. If it asks a question, choose Continue. When the normal screen
+    is back, remove the card. (Its result is checked on the computer in step 4.)
 
   Step 2. Check (changes nothing)
     Insert CARD 1. Hold the MENU button about 10 seconds -> green menu opens.
     Go to  =>M.I.B.<=  ->  pmcp_CarPlay_AID.
     The top line must show:  @@VERSION@@
-    Press  "1. Sprawdz karte i radio (tylko odczyt)".
+    Press  "1. Check card and unit (read-only)".
     Expected:  PMCP_VERIFY_OK state=STOCK
     Anything else: STOP, take a photo, ask for help. Nothing was changed.
 
   Step 3. Install the map picture
-    Press  "2. Instaluj obraz CarPlay na AID: map-square (etap A)".
+    Press  "2. Install the CarPlay map on the AID".
     Expected:  PMCP_INSTALL_OK ...    Then restart (volume knob 10 s).
     Connect the iPhone, start navigation in Apple Maps or Google Maps, and switch the
     dashboard to the navigation/map view (buttons on the right side of the steering wheel).
     No picture on the dashboard? On the iPhone: Settings -> General -> CarPlay -> your car ->
     "Forget This Car", then connect again.
-    Other map layouts: submenu pmcp_zmien_wariant -> "Zmien wariant na: ..." -> restart.
 
   PHASE 2 - arrows, arrival time, song title, zoom (only if phase 1 went well)
 
-  Step 4. Unlock phase 2: on your computer, create an EMPTY file named  ODBLOKUJ_ETAP_B
-    inside the  pmcp  folder of CARD 1 (no extension!).
-       Windows: in the pmcp folder, right-click -> New -> Text Document, name it
-                ODBLOKUJ_ETAP_B (turn on View -> "File name extensions" so it is not
-                saved as ODBLOKUJ_ETAP_B.txt)
-       Mac:     in Terminal type   touch /Volumes/<card name>/pmcp/ODBLOKUJ_ETAP_B
+  Step 4. On your computer: start the copy helper again and choose 3. It shows the result of
+    the rescue card test (it must say WYNIK=OK, "result OK"), re-arms the rescue card, and
+    then unlocks the features on CARD 1. If the test did not pass, it stops: do not continue.
 
-  Step 5. Enable the features ONE AT A TIME, in submenu  pmcp_etap_B_java :
-       1. "Wlacz: NavActiveIgnore ..."      (map stays on while the iPhone navigates)
-       2. "Wlacz: Tytul i wykonawca ..."    (song title)
-       3. "System RG: wlacz ..."  -> restart -> check that CarPlay still connects
-          (if it does not: "System RG: wylacz", restart, and skip 4)
-       4. "Wlacz: Prowadzenie ..."          (arrows, distance, arrival time)
-       5. "Wlacz: Zoom ..."                 (zoom with the steering-wheel arrows)
-       6. "Wlacz: Dzien/noc ..."            (day/night map colours)
-    For each "Wlacz" (enable):
-       - restart (volume knob 10 s). This first start is a TRIAL.
-       - if everything works: open the green menu again and press
-         "Potwierdz ..." (Confirm) - IN THE SAME START, without switching the car off.
-       - if anything is wrong or the screen stays black: just restart again. Without
-         "Potwierdz" the next start is the original factory one. Nothing to fix.
+  Step 5. In the car, with CARD 1: press  "3. Install all features: arrows, ETA, zoom, song title".
+    Expected:  PMCP_ALL_ON_OK
+    Restart (volume knob 10 s). This first start is a TRIAL.
+    Check: CarPlay connects, the map is on the dashboard, and during navigation the VW
+    turn arrow, distance and arrival time appear (the arrow shows once the car moves).
+      - Everything works: open the green menu again and press
+        "4. Confirm: everything works" - IN THE SAME START, without switching the car off.
+        Done: from now on it loads at every start.
+      - Something is wrong, or the screen stays black: just restart again (volume knob 10 s).
+        Without Confirm the next start is the original factory one. Nothing to fix.
+        To try once more: "5. Try again", then restart.
 
-  To remove everything: "Przywroc pliki fabryczne" (restore factory files), then restart.
+  To remove everything: "Remove everything (back to factory files)", then restart.
+  "Status (read-only)" shows what is installed.
 
   EMERGENCY (black screen that does not come back after several restarts):
     insert CARD 2 (rescue) and wait. It removes the phase 2 changes by itself.
-    Then in the green menu: "Przywroc pliki fabryczne".
+    Then in the green menu: "Remove everything (back to factory files)".
 
-  Full guide with photos: docs/in-car-guide.md
+  Single features and other map layouts are in the submenu  pmcp_advanced  (Polish labels,
+  explained in docs/in-car-guide.md).

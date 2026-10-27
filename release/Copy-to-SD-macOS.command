@@ -25,17 +25,74 @@ ask()   { printf '  ?  %s ' "$1"; tty_read; echo "     (answer: $REPLY)" >> "$LO
 field() { diskutil info "$1" 2>/dev/null | sed -n "s/^ *$2: *//p" | head -1; }
 SYSTEM='-name .fseventsd -o -name .Spotlight-V100 -o -name .Trashes -o -name .TemporaryItems -o -name System?Volume?Information'
 
+# mounted FAT32 cards that hold FILE (cards are recognised by their content, not by name)
+cards_with() {
+    for v in /Volumes/*; do
+        [ -e "$v/$1" ] || continue
+        case "$(field "$v" 'File System Personality')" in *FAT32*) echo "$v" ;; esac
+    done
+}
+
+wait_card() {   # wait_card FILE WHAT -> VOL
+    while :; do
+        ask "Insert $2 and wait until it shows in Finder, then press Enter."
+        VOL=$(cards_with "$1" | head -1)
+        [ -n "$VOL" ] && return
+        say "    $2 was not found. Make sure it is inserted (and not another card)."
+    done
+}
+
+unlock_flow() {
+    say ""
+    say "  Step 1 of 2: the rescue card test result"
+    wait_card PMCP_RESCUE_MANIFEST.txt "CARD 2 (RESCUE), after the test in the car,"
+    say "    card: $(basename "$VOL")"
+    RLOG="$VOL/PMCP_RATUNEK_LOG.txt"
+    [ -f "$RLOG" ] || fail "There is no test result on the rescue card yet." "Do step 1 of PART 2 in the car first (insert card 2, wait, Continue)."
+    say "    last lines of the rescue log:"
+    tail -n 4 "$RLOG" | tr -d '\r' | sed 's/^/      | /'
+    if ! grep -q 'WYNIK=OK' "$RLOG" || ! tr -d '\r' < "$RLOG" | sed '/^$/d' | tail -n 1 | grep -q '=== PMCP RATUNEK koniec ==='; then
+        fail "The rescue card test did NOT pass (no WYNIK=OK at the end of the log)." \
+            "Do not unlock the features. Keep the log file PMCP_RATUNEK_LOG.txt and ask for help."
+    fi
+    ok "rescue test passed (WYNIK=OK)"
+    if [ -f "$VOL/_Swdlautorun.txt" ] && [ ! -e "$VOL/Swdlautorun.txt" ]; then
+        mv "$VOL/_Swdlautorun.txt" "$VOL/Swdlautorun.txt" || fail "Could not re-arm the rescue card." "Rename _Swdlautorun.txt to Swdlautorun.txt on the card yourself."
+    fi
+    [ -f "$VOL/Swdlautorun.txt" ] || fail "The rescue card has no autostart file." "Make CARD 2 again with option 2."
+    sync
+    ok "rescue card re-armed (it will start by itself again when inserted)"
+    diskutil eject "$VOL" > /dev/null 2>&1 && ok "rescue card ejected. Keep it OUT of the car, label: RESCUE - DO NOT INSERT"
+    say ""
+    say "  Step 2 of 2: unlock the features on CARD 1"
+    wait_card PMCP_CARD_MANIFEST.txt "CARD 1 (INSTALL)"
+    say "    card: $(basename "$VOL")"
+    [ -d "$VOL/pmcp" ] || fail "This card has no pmcp folder." "Make CARD 1 again with option 1."
+    : > "$VOL/pmcp/ODBLOKUJ_ETAP_B" && [ -f "$VOL/pmcp/ODBLOKUJ_ETAP_B" ] || fail "Could not write to CARD 1." "Is the card locked (small switch on its side)?"
+    rm -f "$VOL/pmcp/._ODBLOKUJ_ETAP_B"
+    sync
+    ok "features unlocked on CARD 1 (file pmcp/ODBLOKUJ_ETAP_B)"
+    diskutil eject "$VOL" > /dev/null 2>&1 && ok "card ejected, you can remove it"
+    say ""
+    line
+    say "  DONE. Next in the car: green menu -> pmcp_CarPlay_AID -> 3. Install all features."
+    line
+    done_ 0
+}
+
 say ""
 say "  CarPlay map on the AID - SD card copy helper"
 line
-say "  Which card do you want to make?"
-say "    2 = CARD 2, RESCUE  (make this one first; only for emergencies, it starts by itself)"
-say "    1 = CARD 1, INSTALL (used from the green menu in the car)"
-ask "Type 1 or 2 and press Enter:"
+say "  What do you want to do?"
+say "    2 = make CARD 2, RESCUE  (make this one first; only for emergencies, it starts by itself)"
+say "    1 = make CARD 1, INSTALL (used from the green menu in the car)"
+say "    3 = after the rescue card test in the car: check its result, re-arm it, unlock features on CARD 1"
+ask "Type 1, 2 or 3 and press Enter:"
+[ "$REPLY" = 3 ] && unlock_flow
 case "$REPLY" in
     1) SRC="$HERE/card1-install"; MAN=PMCP_CARD_MANIFEST.txt; NAME="CARD 1 (INSTALL)"; LABEL="INSTALL" ;;
     2) SRC="$HERE/card2-rescue";  MAN=PMCP_RESCUE_MANIFEST.txt; NAME="CARD 2 (RESCUE)"; LABEL="RESCUE - DO NOT INSERT" ;;
-    *) fail "Please type 1 or 2." "Start the helper again." ;;
+    *) fail "Please type 1, 2 or 3." "Start the helper again." ;;
 esac
 [ -f "$SRC/$MAN" ] || fail "The folder $(basename "$SRC") is missing next to this helper." "Unpack the whole zip first, then start the helper from the unpacked folder."
 

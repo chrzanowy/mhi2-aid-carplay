@@ -19,17 +19,17 @@ manifest and the `pmcp.sh` template). The install card is assembled by `installe
 | F Steering-wheel zoom | JAR `pmcp-zoom.jar` (hook in `DSIKeyPanelDispatcher`, short press only) | works ([`hmiextras/`](../../hmiextras/)) |
 | G Day/night for the AID map | JAR `pmcp-dn.jar` (hooks in `ASLHandler`) | works ([`hmiextras/`](../../hmiextras/)) |
 
-**Stage A does not touch the HMI** (Java): the worst outcome is no CarPlay/AA, while GEM and "Przywroc" (restore) still work.
+**Stage A does not touch the HMI** (Java): the worst outcome is no CarPlay/AA, while GEM and "Remove everything" still work.
 
 **Everything Java goes through one block in `lsd.sh`** (before J9 starts, nothing after it), with a trial boot:
 - the block reads a single file: `/mnt/app/carplaymaps/HMI_BOOT` = `SET_ID JAR JAR …` (id = `name-8 chars of sha` joined with `+`).
   `pmcp.sh` replaces it with a single `mv`, so after a power loss the boot sees either the old or the new set, never a mix;
 - a new set loads **once** as a trial (`/mnt/persist/pmcp/trial.<ID>`);
-- it becomes permanent **only when "Potwierdz" (confirm) is pressed in GEM during that trial boot**. On every boot `lsd.sh` first
+- it becomes permanent **only when "4. Confirm" (confirm) is pressed in GEM during that trial boot**. On every boot `lsd.sh` first
   deletes and then writes `/mnt/persist/pmcp/last-boot` (`set=<ID> use=trial|yes|no`); `java-confirm` requires `use=trial` for the
   current id, no `ok.<ID>` and no `DISABLED`. A stock boot after a failed trial therefore cannot confirm a broken set;
 - **there is no automatic confirmation**. A running J9 process does not prove a working HMI;
-- without confirmation **every following boot (e.g. a reset with the knob) is stock**; to try again: "Ponow probny start" (repeat
+- without confirmation **every following boot (e.g. a reset with the knob) is stock**; to try again: "5. Try again" (repeat
   trial boot);
 - **in update mode (`RUN_MODE=swdl`) the block does nothing** (the stock `lsd.sh` starts the HMI in that mode too, with a copy of
   `jars/` in `/ramdisk`). The rescue card therefore always meets a stock HMI;
@@ -57,7 +57,7 @@ The current `core.so` and JAR hashes are in the manifest that `installer/build_s
 Left out on purpose: mathsls's `libcardshim.so` (`zoomFactor` 1.5, display `properties`/`uid`). The `map-square` variant therefore
 takes only mathsls's safe-area layout, not their whole configuration.
 
-`core.so` variants (`switch` changes only this file, then restart, no "Potwierdz"), all built by `build_core.py`, all 240×144 mm.
+`core.so` variants (`switch` changes only this file, then restart, no "4. Confirm"), all built by `build_core.py`, all 240×144 mm.
 Safe area = x / y / width / height on the 800×480 stream:
 
 | Variant | URL | Safe area | Description |
@@ -126,14 +126,15 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
 2. In the car: GEM → `=>M.I.B.<=` → **`pmcp_CarPlay_AID`**:
    - "0. Diagnostyka (tylko odczyt, zrob zdjecia ekranu)" (diagnostics, read-only, take photos of the screen): read-only
      diagnostics that work even when `pmcp.sh` stops at its self test;
-   - "1. Sprawdz karte i radio (tylko odczyt)" (check card and unit, read-only) → `verify`;
-   - "Status instalacji (tylko odczyt)" (installation status, read-only);
-   - "2. Instaluj obraz CarPlay na AID: map-square (etap A)" (install CarPlay video on the AID, stage A);
-   - "Przywroc pliki fabryczne" (restore factory files);
-   - submenus `pmcp_inne_warianty` (install with another variant) and `pmcp_zmien_wariant` (`switch`, e.g.
+   - "1. Check card and unit (read-only)" → `verify`;
+   - "Status (read-only)";
+   - "2. Install the CarPlay map on the AID" (stage A, variant map-square);
+   - "Remove everything (back to factory files)";
+   - main screen "3. Install all features": runs System RG on and every Java package on in one go (one set, one trial
+     boot, then "4. Confirm"); stops at the first failure, "already on" counts as done;
+   - submenu `pmcp_advanced` with "0. Diagnostyka" and the submenus `pmcp_inne_warianty` (install with another variant) and `pmcp_zmien_wariant` (`switch`, e.g.
      "Zmien wariant na: map-clean" (change variant to));
-   - submenu `pmcp_etap_B_java`: System RG wlacz/wylacz (on/off), Wlacz/Wylacz (enable/disable) a package, Potwierdz, Ponow probny
-     start. The actions refuse until the card holds the file `pmcp/ODBLOKUJ_ETAP_B` (after the rescue card test).
+   - submenu `pmcp_advanced` → `pmcp_etap_B_java`: System RG wlacz/wylacz (on/off), Wlacz/Wylacz (enable/disable) a package (Confirm and Try again are on the main screen). The actions refuse until the card holds the file `pmcp/ODBLOKUJ_ETAP_B` (after the rescue card test).
 3. The result is on the GEM screen. The SD card is read-only in GEM (even `mount -uw` fails), so the log cannot be written to the
    card: the installer prints `PMCP_WARN=SD_LOG_NOT_WRITABLE` and carries on. **Photograph the screen.** If the card is writable,
    the log goes to `/pmcp/log/pmcp-<action>-<pid>.log`.
@@ -147,9 +148,9 @@ First-time order:
    CarPlay → the car → "Forget This Car", and reconnect (the iPhone remembers the car's old displays).
    For another map layout: "Zmien wariant na: …".
 4. Stage B: empty file `pmcp/ODBLOKUJ_ETAP_B` on the card → one package at a time: "Wlacz: …" → restart (trial boot) →
-   check the HMI and the feature → **in the same boot** "Potwierdz". Without confirmation the next boot is stock.
+   check the HMI and the feature → **in the same boot** "4. Confirm". Without confirmation the next boot is stock.
    For package E, first "System RG: wlacz", restart, check that CarPlay connects, and only then "Wlacz: Prowadzenie" (guidance).
-5. Rollback: "Przywroc pliki fabryczne" and restart.
+5. Rollback: "Remove everything (back to factory files)" and restart.
 
 Step-by-step guide for the car: [09-in-car-guide.md](09-in-car-guide.md).
 
@@ -162,7 +163,7 @@ QNX) and `ksh` (ksh93). The exit status is the number of failed checks. They cov
 - `verify` writes nothing; a wrong variant, a corrupted payload byte (also with an unwritable log directory), a corrupted self test,
   a wrong `lsd.jxe` size, a modified `lsd.sh` and a foreign mod are refused with no change to the tree;
 - the full chain install → Java packages (1, 2 and 5 at once) → System RG → switch → restore gives a tree **byte-identical** to stock;
-- **trial boot on the real `lsd.sh` block** combined with `pmcp.sh`: trial → unconfirmed boot is stock → "Potwierdz" refused →
+- **trial boot on the real `lsd.sh` block** combined with `pmcp.sh`: trial → unconfirmed boot is stock → "4. Confirm" refused →
   retry → a boot in `swdl` mode loads nothing and deletes `last-boot` → confirmation only during the trial boot → a confirmed set
   always loads → `DISABLED` disables and blocks confirmation;
 - the patched `lsd.sh` = stock + one block (checked with `diff`);
@@ -189,7 +190,7 @@ the unit enters update mode by itself (`RUN_MODE=swdl`; our block loads nothing 
 - `/mnt/persist/pmcp/DISABLED`, `last-boot` removed;
 - System RG: stock iAP2 driver and `iap2.cfg` from the backup copies (selected by size), `SYSTEM_ON` removed.
 
-The video (stage A) stays; "Przywroc" in GEM cleans up the rest afterwards. On a healthy unit without pmcp the script changes
+The video (stage A) stays; "Remove everything" in GEM cleans up the rest afterwards. On a healthy unit without pmcp the script changes
 nothing and only writes the log `PMCP_RATUNEK_LOG.txt`. The M.I.B. autorun in P4512 update mode works without any HMI interaction
 (checked in the car, `WYNIK=OK`).
 
@@ -201,4 +202,4 @@ nothing and only writes the log `PMCP_RATUNEK_LOG.txt`. The M.I.B. autorun in P4
 Classes are version 46, references are checked against the unit's `java/*` classes (RefCheck), and every call from stock code is
 guarded (tools in [`buildtools/`](../../buildtools/)). The scripts use the ksh constructs of the mathsls installer (backticks,
 `while read`, heredoc, `case`, `read` with redirection). Fallback if something goes wrong: the trial boot with manual confirmation,
-then the rescue card. Black screen during a trial boot (before "Potwierdz"): hold the volume knob for 10 s; the next boot runs without our JARs.
+then the rescue card. Black screen during a trial boot (before "4. Confirm"): hold the volume knob for 10 s; the next boot runs without our JARs.

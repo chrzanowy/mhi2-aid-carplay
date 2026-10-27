@@ -70,6 +70,8 @@ All variants declare a physical size of 240×144 mm. Switching a variant swaps o
    **empty** FAT32 SD card, checks every file and ejects the card. It never formats a card or deletes anything.
    Make card 2 (rescue) first, then card 1 (install).
 3. In the car: follow part 2 of `README-FIRST.txt` (full guide with details: [in-car guide](docs/en/09-in-car-guide.md)).
+   The green menu's main screen has the simple path: check, install the map, install all features (one trial start),
+   confirm. After the rescue card test, the copy helper's option 3 checks its result and unlocks the features.
 
 Before you start you need [M.I.B. installed on the unit and a backup](docs/en/01-mib-install-backup.md). The installer
 on the card checks every file of your head unit first. On any other firmware it stops and changes nothing.

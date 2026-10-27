@@ -271,6 +271,12 @@ for SH in "$@"; do
             grep -q '^/bin/ksh /net/mmx/fs/sda0/pmcp/bin/diag.sh$' "$m" && ! grep -q 'pmcp.sh' "$m" && ok "diag button runs bin/diag.sh only" || bad "diag button"
             continue
         fi
+        if [ "$(basename "$m")" = all-on.sh ]; then
+            acts=$(sed -n 's/^for A in \(.*\); do$/\1/p' "$m")
+            [ "$acts" = "rg-system-on_ java-on_nai java-on_np java-on_rg java-on_zoom java-on_dn" ] && grep -q '^PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh$' "$m" \
+                && ok "all-on button: RG system, then nai np rg zoom dn" || bad "all-on actions: $acts"
+            continue
+        fi
         args=$(sed -n 's#^/bin/ksh /net/mmx/fs/sda0/pmcp/pmcp.sh ##p' "$m")
         case "$args" in
             verify|status|restore|java-retry|java-confirm|rg-system-on|rg-system-off|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
@@ -285,8 +291,11 @@ for SH in "$@"; do
     nmenu=$(ls "$SDB"/pmcp/menu/*.sh | wc -l | tr -d ' ')
     nref=$(grep -c '/net/mmx/fs/sda0/pmcp/menu/' "$SDB/esd/Launcher-sda0.esd")
     [ "$nmenu" -gt 20 ] && [ "$nmenu" = "$nref" ] && ok "menu scripts: $nmenu, menu entries: $nref" || bad "menu scripts $nmenu vs entries $nref"
-    grep -q "install map-square" "$SDB/pmcp/menu/install-map-square.sh" && grep -q '"2. Instaluj obraz CarPlay na AID: map-square (etap A)' "$SDB/esd/Launcher-sda0.esd" \
+    grep -q "install map-square" "$SDB/pmcp/menu/install-map-square.sh" && grep -q '"2. Install the CarPlay map on the AID"' "$SDB/esd/Launcher-sda0.esd" \
         && ok "main install button is map-square" || bad "main install button"
+    main=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_CarPlay_AID/,/^screen pmcp_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+    [ "$main" = "menu/verify.sh menu/install-map-square.sh menu/all-on.sh menu/java-confirm.sh menu/java-retry.sh menu/status.sh menu/restore.sh " ] \
+        && ok "main screen: check, map, all features, confirm, retry, status, restore" || bad "main screen: $main"
     ORIG="$REPO/archives/mib-3.6.0/Launcher-sda0.esd"
     head -c "$(stat -f %z "$ORIG")" "$SDB/esd/Launcher-sda0.esd" | cmp -s - "$ORIG" && ok "M.I.B. menu content unchanged (only appended)" || bad "M.I.B. menu prefix changed"
     for ref in $(grep -o '/net/mmx/fs/sda0/pmcp/menu/[a-z0-9-]*\.sh' "$SDB/esd/Launcher-sda0.esd"); do
@@ -390,6 +399,27 @@ for SH in "$@"; do
     rm "$U/eso/hmi/lsd/lsd.sh"; rm "$U/carplaymaps/rollback/lsd.sh"
     rescue
     grep -q "WYNIK=NIEPEWNY" "$W/med/PMCP_RATUNEK_LOG.txt" && ok "lsd.sh missing: WYNIK=NIEPEWNY, not OK" || bad "missing lsd.sh reported OK"
+
+    echo "[17] main screen button 3: install all features (the real menu script, one set, one trial)"
+    allon() {
+        sed -e "s#/bin/ksh \$PMCP#$SH $W/sd/pmcp.sh#" "$W/sd/menu/all-on.sh" > "$W/all-on.sh"
+        PMCP_TEST_ROOT="$W/unit" $SH "$W/all-on.sh" > "$W/out" 2>&1; echo $? > "$W/rc"
+    }
+    fresh_unit; factory=$(snapshot "$W/unit")
+    allon; rc_is 0; expect_out "PMCP_FAIL=ALL_ON_STOPPED_AT_rg-system-on_" "locked: stops at the first step"
+    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "locked: unit unchanged" || bad "locked all-on changed the unit"
+    unlock; allon; expect_out "PMCP_FAIL=ALL_ON_STOPPED_AT_rg-system-on_" "without the map (stage A): stops at the first step"
+    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "without the map: unit unchanged" || bad "all-on without stage A changed the unit"
+    run install map-square; rc_is 0
+    allon; rc_is 0; expect_out "PMCP_ALL_ON_OK" "all features on"; expect_out "PMCP_RG_SYSTEM_ON_OK" "RG system on"
+    ALL="nai-$(jsha nai | cut -c1-8)+np-$(jsha np | cut -c1-8)+rg-$(jsha rg | cut -c1-8)+zoom-$(jsha zoom | cut -c1-8)+dn-$(jsha dn | cut -c1-8)"
+    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "one set with all five packages" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
+    [ -e "$U/carplaymaps/rg/SYSTEM_ON" ] && ok "RG system marker" || bad "no SYSTEM_ON"
+    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-dn.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
+    run java-confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$ALL" "one confirm for everything"
+    allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
+    run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "remove everything: factory state"
+    [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37 ] && ok "factory iap2.cfg back" || bad "cfg after restore"
 done
 
 rm -rf "$W"
