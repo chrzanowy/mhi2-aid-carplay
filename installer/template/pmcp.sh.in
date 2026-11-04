@@ -16,8 +16,16 @@
 #                               ones; the factory copies are checked, kept and stay the way back (rg-system-off)
 #   pmcp.sh java-update         Java set with packages of an earlier card (JAVA_OLD): one new set with this card's
 #                               packages (rglu and the experimental rg variants become rg), one trial boot
-#   pmcp.sh aa-remove           Android Auto of an experimental card off: factory gal back (only from a copy with the
-#                               factory hash), its files and markers removed; works in any state (also UNKNOWN due to AA)
+#   pmcp.sh aa-remove           Android Auto off: factory gal back (only from a copy with the factory hash), its files and
+#                               markers removed
+# Experimental branch (Android Auto on the AID, aa/README.md):
+#   pmcp.sh aa-on               Android Auto: Google Maps picture on the AID + VW arrows (gal wrapper + hook + feeder);
+#                               also brings an earlier card's AA set up to date
+#   pmcp.sh aa-confirm          during the AA trial start only: keep this AA set
+#   pmcp.sh aa-retry            the next AA connection is a new trial
+#   pmcp.sh aa-status           read-only: AA state, the last session's stream analysis, the manoeuvres for rg
+#   pmcp.sh aa-log-save         copy this start's AA log from /ramdisk to carplaymaps/logs (for the log card)
+#   pmcp.sh aa-log-clear        delete the saved AA logs
 #   pmcp.sh speedlimit-mode MODE  optional native VW limit (package sl): off (default); turnto = before the street that rg
 #                               writes to TurnToInfo (needs rg); street = trial, in CurrentPositionInfo only
 #   pmcp.sh speedlimit-status   read-only saved mode and native-limit reader snapshot
@@ -63,6 +71,10 @@ RG_KNOWN='
 JAVA_OLD='
 @@JAVA_OLD@@
 '
+# AA sets of earlier cards ("mode hook-sha size feeder-sha size hookconf-sha size feederconf-sha size" per line, aa_state)
+AA_OLD='
+@@AA_OLD@@
+'
 GAWK_SIZE=487088
 
 ACTION="$1"
@@ -105,6 +117,8 @@ DRV="$APP/armle/lib/dll/ipod-drvr-iap2.so"
 CFG="$MMX/mnt/system/etc/mm/iap2.cfg"
 RGDIR="$ROOT/rg"
 GAL="$APP/eso/bin/apps/gal"
+AADIR="$ROOT/aa"
+RAMDISK="$MMX/ramdisk"
 GAWK="$APP/armle/usr/bin/gawk"
 if [ -z "$MMX" ]; then SHA1=/net/rcc/usr/bin/sha1sum; else SHA1=/usr/bin/sha1sum; fi
 
@@ -219,6 +233,11 @@ java_old() {
     echo "$JAVA_OLD" | while read _o_n _o_h _o_s _o_f _o_t; do
         [ "$_o_n" = "$1" ] && [ "`first8 $_o_h`" = "$2" ] && echo "$_o_h $_o_s $_o_f $_o_t"
     done
+}
+
+# java_alternative NAME -> the package that replaces the same classes (never in one set with NAME), or nothing
+java_alternative() {
+    case "$1" in rg) echo rg-aa ;; rg-aa) echo rg ;; esac
 }
 
 java_jarfile() {
@@ -367,7 +386,7 @@ java_set_consistent() {
 # state -> STOCK | VIDEO | JAVA | PARTIAL | UNKNOWN (reason in STATE_WHY)
 #   VIDEO: stage A (wrapper active, factory lsd.sh, no JAR of ours)   JAVA: stage A + lsd.sh block + a consistent JAR set
 detect_state() {
-    STATE=UNKNOWN; STATE_WHY=""; RGSYS=unknown; JAVA_OLD_SET=""; JAVA_STRAY=""
+    STATE=UNKNOWN; STATE_WHY=""; RGSYS=unknown; JAVA_OLD_SET=""; JAVA_STRAY=""; AASYS=unknown; AAMODE=""
     set -- `manifest_get WRAPPER`; W_SHA=$1; W_SIZE=$2
     set -- `manifest_get LSD_JAVA`; LJ_SHA=$1; LJ_SIZE=$2
     present=`our_jars_present`
@@ -375,15 +394,9 @@ detect_state() {
         if matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" && matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" \
             && matches "$DRV" "$STOCK_DRV_SHA" "$STOCK_DRV_SIZE" && matches "$CFG" "$STOCK_CFG_SHA" "$STOCK_CFG_SIZE" \
             && matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE"; then
-            STATE=STOCK; RGSYS=off; return
+            STATE=STOCK; RGSYS=off; AASYS=off; return
         fi
         STATE_WHY="no carplaymaps, but lsd.sh, dio_manager, gal, the iAP2 driver or iap2.cfg is not the factory file"
-        return
-    fi
-    # Android Auto of an experimental card (gal wrapper, carplaymaps/aa): no other action of this card runs with it;
-    # aa-remove (also the first step of button 3 and of restore) puts the factory gal back from its verified copy.
-    if aa_exp_present; then
-        STATE_WHY="Android Auto of an experimental card is installed: Remove experimental Android Auto (or button 3, or Remove everything) takes it off first"
         return
     fi
     if [ -e "$JARS/CarPlayNavigationPatch.jar" ] \
@@ -395,7 +408,8 @@ detect_state() {
     fi
     # RGSYS old (RG on with an earlier card's driver/reader) works as it is; rg-update brings this card's files
     rg_state
-    if [ "$RGSYS" != unknown ] && matches "$DIO" "$W_SHA" "$W_SIZE"; then
+    aa_state
+    if [ "$RGSYS" != unknown ] && [ "$AASYS" != unknown ] && matches "$DIO" "$W_SHA" "$W_SIZE"; then
         if [ -z "$present" ] && matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"; then
             STATE=VIDEO; return
         fi
@@ -454,6 +468,297 @@ do_aa_remove() {
     detect_state
     say "PMCP_AA_REMOVE_OK (factory gal verified; unit state now: $STATE)"
     say "Restart the unit before connecting an Android phone again."
+}
+
+
+# ---- Android Auto (experimental branch) -------------------------------------------------------------------------------
+# One mode, gamma: the gamma hook (Google Maps manoeuvres -> rg mailbox /ramdisk/pmcp-aa-rg), the feeder with start sync
+# and pacing, protocol 1.7. AA set id = mode and the first 8 hex of hook, feeder and hook settings (the same formula as on
+# the earlier cards, so their confirm markers keep their meaning).
+aa_set_id() {
+    _i_id="$1"
+    for _i_k in AA_HOOK AA_FEEDER AA_HOOK_CONF; do
+        set -- `manifest_get $_i_k`
+        _i_id="$_i_id-`first8 $1`"
+    done
+    echo "$_i_id"
+}
+
+# AASYS -> off (factory gal, no aa/, no leftovers) | on (wrapper active, factory gal copy, hook, feeder, settings and
+# AA_BOOT of this card; AAMODE = gamma) | old (the same, but the whole set of one AA_OLD line with its own AA_BOOT: an
+# earlier card's set, also of its other modes; aa-on replaces it) | unknown
+aa_state() {
+    AASYS=unknown; AAMODE=""
+    if [ ! -e "$AADIR" ] && [ ! -e "$ROOT/.aa-new" ] && [ ! -e "$GAL.pmcp-new" ] && [ ! -e "$GAL.pmcp-restore" ] \
+        && matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE"; then
+        AASYS=off; return 0
+    fi
+    set -- `manifest_get AA_WRAPPER`
+    matches "$GAL" "$1" "$2" || return 0
+    matches "$AADIR/gal.real" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE" || return 0
+    set -- `manifest_get AA_DMDT_FLUSH`
+    matches "$AADIR/libdmdt_flush.so" "$1" "$2" || return 0
+    _a_boot=`cat "$AADIR/AA_BOOT" 2>/dev/null`
+    _a_ok=yes
+    for _a_k in AA_HOOK:libgal_hook.so AA_FEEDER:aa-most-feeder AA_HOOK_CONF:gal-hook.conf AA_MODE:feeder.conf; do
+        set -- `manifest_get ${_a_k%%:*}`
+        matches "$AADIR/${_a_k#*:}" "$1" "$2" || _a_ok=no
+    done
+    if [ $_a_ok = yes ]; then
+        [ "$_a_boot" = "`aa_set_id gamma`" ] || return 0
+        AASYS=on; AAMODE=gamma
+        return 0
+    fi
+    # an earlier card's set, whole (never a mix of files from different sets), with that set's own AA_BOOT
+    while read _o_m _o_hs _o_hz _o_fs _o_fz _o_cs _o_cz _o_ms _o_mz; do
+        [ -n "$_o_mz" ] || continue
+        [ "$_a_boot" = "$_o_m-`first8 $_o_hs`-`first8 $_o_fs`-`first8 $_o_cs`" ] || continue
+        matches "$AADIR/libgal_hook.so" "$_o_hs" "$_o_hz" || continue
+        matches "$AADIR/aa-most-feeder" "$_o_fs" "$_o_fz" || continue
+        matches "$AADIR/gal-hook.conf" "$_o_cs" "$_o_cz" || continue
+        matches "$AADIR/feeder.conf" "$_o_ms" "$_o_mz" || continue
+        AASYS=old; AAMODE=$_o_m
+        break
+    done <<EOF
+$AA_OLD
+EOF
+    return 0
+}
+
+aa_check_payload() {
+    for _p_k in AA_WRAPPER AA_HOOK AA_DMDT_FLUSH AA_FEEDER AA_HOOK_CONF AA_MODE; do
+        set -- `manifest_get $_p_k`
+        check "$PAYLOAD/$3" "$1" "$2" "$_p_k"
+    done
+}
+
+do_aa_on() {
+    case "${ARG:-gamma}" in gamma) ARG=gamma ;; *) fail "AA_MODE_UNKNOWN_$ARG" ;; esac
+    selftest
+    firmware_identity
+    detect_state
+    case "$STATE" in VIDEO|JAVA) ;; *) fail "AA_NEEDS_STAGE_A_STATE_$STATE" ;; esac
+    [ "$AASYS" = on ] && fail "AA_ALREADY_ON"
+    aa_check_payload
+    set -- `manifest_get AA_MODE`; M_SHA=$1; M_SIZE=$2; M_PATH=$3
+    set -- `manifest_get AA_FEEDER`; F_SHA=$1; F_SIZE=$2; F_PATH=$3
+    set -- `manifest_get AA_HOOK_CONF`; C_SHA=$1; C_SIZE=$2; C_PATH=$3
+    set -- `manifest_get AA_HOOK`; K_SHA=$1; K_SIZE=$2; K_PATH=$3
+    SET=`aa_set_id gamma`
+    remount_rw
+    if [ "$AASYS" = old ]; then
+        # an earlier card's set brought up to date: the four files staged and verified, then the new set id (a new id
+        # always means a trial start), then the files
+        A="${AADIR:?}"
+        rm -f "$A/feeder.conf.pmcp-new" "$A/aa-most-feeder.pmcp-new" "$A/gal-hook.conf.pmcp-new" \
+            "$A/libgal_hook.so.pmcp-new" "$A/AA_BOOT.pmcp-new" 2>/dev/null
+        cp "$PAYLOAD/$M_PATH" "$A/feeder.conf.pmcp-new" && chmod 644 "$A/feeder.conf.pmcp-new" || fail "AA_MODE_STAGE_FAILED"
+        cp "$PAYLOAD/$F_PATH" "$A/aa-most-feeder.pmcp-new" && chmod 755 "$A/aa-most-feeder.pmcp-new" || fail "AA_FEEDER_STAGE_FAILED"
+        cp "$PAYLOAD/$C_PATH" "$A/gal-hook.conf.pmcp-new" && chmod 644 "$A/gal-hook.conf.pmcp-new" || fail "AA_HOOK_CONF_STAGE_FAILED"
+        cp "$PAYLOAD/$K_PATH" "$A/libgal_hook.so.pmcp-new" && chmod 644 "$A/libgal_hook.so.pmcp-new" || fail "AA_HOOK_STAGE_FAILED"
+        check "$A/libgal_hook.so.pmcp-new" "$K_SHA" "$K_SIZE" STAGED_AA_HOOK
+        check "$A/feeder.conf.pmcp-new" "$M_SHA" "$M_SIZE" STAGED_AA_MODE
+        check "$A/aa-most-feeder.pmcp-new" "$F_SHA" "$F_SIZE" STAGED_AA_FEEDER
+        check "$A/gal-hook.conf.pmcp-new" "$C_SHA" "$C_SIZE" STAGED_AA_HOOK_CONF
+        echo "$SET" > "$A/AA_BOOT.pmcp-new" || fail "AA_SET_STAGE_FAILED"
+        [ "`cat "$A/AA_BOOT.pmcp-new" 2>/dev/null`" = "$SET" ] || fail "AA_SET_STAGE_READBACK_FAILED"
+        mv "$A/AA_BOOT.pmcp-new" "$A/AA_BOOT" || fail "AA_SET_ACTIVATION_FAILED_RUN_AA_REMOVE"
+        mv "$A/libgal_hook.so.pmcp-new" "$A/libgal_hook.so" || fail "AA_HOOK_ACTIVATION_FAILED_RUN_AA_REMOVE"
+        mv "$A/aa-most-feeder.pmcp-new" "$A/aa-most-feeder" || fail "AA_FEEDER_ACTIVATION_FAILED_RUN_AA_REMOVE"
+        mv "$A/gal-hook.conf.pmcp-new" "$A/gal-hook.conf" || fail "AA_HOOK_CONF_ACTIVATION_FAILED_RUN_AA_REMOVE"
+        mv "$A/feeder.conf.pmcp-new" "$A/feeder.conf" || fail "AA_MODE_ACTIVATION_FAILED_RUN_AA_REMOVE"
+    else
+        # off: (an unknown AA state never gets here: the unit state is PARTIAL then)
+        NEWA="${ROOT:?}/.aa-new"
+        rm -rf "$NEWA" 2>/dev/null
+        rm -f "$GAL.pmcp-new" "$GAL.pmcp-restore" 2>/dev/null
+        mkdir "$NEWA" || fail "AA_STAGE_CREATE_FAILED"
+        say "Staging"
+        cp "$GAL" "$NEWA/gal.real" || fail "AA_FACTORY_GAL_COPY_FAILED"
+        set -- `manifest_get AA_DMDT_FLUSH`; D_SHA=$1; D_SIZE=$2; D_PATH=$3
+        cp "$PAYLOAD/$D_PATH" "$NEWA/libdmdt_flush.so" || fail "COPY_AA_DMDT_FLUSH"
+        cp "$PAYLOAD/$K_PATH" "$NEWA/libgal_hook.so" || fail "COPY_AA_HOOK"
+        cp "$PAYLOAD/$F_PATH" "$NEWA/aa-most-feeder" || fail "COPY_AA_FEEDER"
+        cp "$PAYLOAD/$C_PATH" "$NEWA/gal-hook.conf" || fail "COPY_AA_HOOK_CONF"
+        cp "$PAYLOAD/$M_PATH" "$NEWA/feeder.conf" || fail "AA_MODE_COPY_FAILED"
+        echo "$SET" > "$NEWA/AA_BOOT" || fail "AA_SET_STAGE_FAILED"
+        chmod 755 "$NEWA/gal.real" "$NEWA/aa-most-feeder" || fail "CHMOD_FAILED"
+        chmod 644 "$NEWA/libgal_hook.so" "$NEWA/libdmdt_flush.so" "$NEWA/gal-hook.conf" "$NEWA/feeder.conf" || fail "CHMOD_FAILED"
+        set -- `manifest_get AA_WRAPPER`; AW_SHA=$1; AW_SIZE=$2; AW_PATH=$3
+        cp "$PAYLOAD/$AW_PATH" "$GAL.pmcp-new" && chmod 755 "$GAL.pmcp-new" || fail "AA_WRAPPER_STAGE_FAILED"
+        say "Verifying every staged copy"
+        check "$NEWA/gal.real" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE" STAGED_FACTORY_GAL
+        check "$NEWA/libdmdt_flush.so" "$D_SHA" "$D_SIZE" STAGED_AA_DMDT_FLUSH
+        check "$NEWA/libgal_hook.so" "$K_SHA" "$K_SIZE" STAGED_AA_HOOK
+        check "$NEWA/aa-most-feeder" "$F_SHA" "$F_SIZE" STAGED_AA_FEEDER
+        check "$NEWA/gal-hook.conf" "$C_SHA" "$C_SIZE" STAGED_AA_HOOK_CONF
+        check "$NEWA/feeder.conf" "$M_SHA" "$M_SIZE" STAGED_AA_MODE
+        [ "`cat "$NEWA/AA_BOOT" 2>/dev/null`" = "$SET" ] || fail "AA_SET_STAGE_READBACK_FAILED"
+        check "$GAL.pmcp-new" "$AW_SHA" "$AW_SIZE" STAGED_AA_WRAPPER
+        [ -x "$GAL.pmcp-new" ] || fail "STAGED_AA_WRAPPER_NOT_EXECUTABLE"
+        matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE" || fail "GAL_CHANGED_DURING_AA_ON"
+        say "Activating"
+        # the files first, the wrapper last: until gal is replaced nothing of this is used
+        mv "$NEWA" "$AADIR" || fail "AA_DIR_ACTIVATION_FAILED"
+        mv "$GAL.pmcp-new" "$GAL" || { aa_exp_off; fail "AA_WRAPPER_ACTIVATION_FAILED"; }
+    fi
+    # a set confirmed before stays confirmed; any other set gets a new trial start
+    if [ -e "$PERSIST/aa-ok.$SET" ]; then _o_kept=yes
+    else _o_kept=no; rm -f "$PERSIST/aa-trial.$SET" 2>/dev/null; fi
+    rm -f "$PERSIST/aa-capture" 2>/dev/null
+    detect_state
+    if [ "$AASYS" != on ]; then
+        aa_exp_off
+        fail "POST_AA_ON_STATE_${AASYS}_ROLLED_BACK"
+    fi
+    flush
+    say "PMCP_AA_ON_OK mode=gamma set=$SET"
+    if [ $_o_kept = yes ]; then
+        say "This set was confirmed before: it starts with every AA connection, no trial needed."
+    else
+        say "Connect the Android phone (cable). That first Android Auto session in this start is a TRIAL."
+        say "If AA works: open this menu again and press AA Confirm, in that same start. Otherwise restart: factory AA."
+    fi
+    if [ "$STATE" = JAVA ]; then
+        case " `current_set` " in *" rg-aa "*) ;; *) say "VW arrows from Google Maps need the route guidance package rg-aa (Packages)." ;; esac
+    else
+        say "VW arrows from Google Maps need the route guidance package rg-aa (Packages)."
+    fi
+    return 0
+}
+
+do_aa_confirm() {
+    selftest
+    firmware_identity
+    detect_state
+    [ "$AASYS" = on ] || fail "AA_CONFIRM_NEEDS_AA_ON_$AASYS"
+    SET=`aa_set_id $AAMODE`
+    [ ! -e "$PERSIST/DISABLED" ] || fail "AA_DISABLED_BY_RESCUE_CARD"
+    [ -e "$PERSIST/aa-ok.$SET" ] && fail "AA_ALREADY_CONFIRMED_$SET"
+    [ -e "$PERSIST/aa-trial.$SET" ] || fail "AA_NO_TRIAL_YET_CONNECT_THE_PHONE_FIRST"
+    [ -e "$RAMDISK/pmcp-aa-trial.$SET" ] || fail "AA_NOT_IN_THE_TRIAL_START_USE_aa-retry_AND_RESTART"
+    rm -f "$PERSIST"/aa-ok.* 2>/dev/null
+    touch "$PERSIST/aa-ok.$SET" || fail "AA_CONFIRM_MARKER_FAILED"
+    [ -e "$PERSIST/aa-ok.$SET" ] || fail "AA_CONFIRM_MARKER_FAILED"
+    flush
+    say "PMCP_AA_CONFIRM_OK set=$SET (Android Auto now starts with this set every time)"
+}
+
+do_aa_retry() {
+    selftest
+    firmware_identity
+    detect_state
+    [ "$AASYS" = on ] || fail "AA_RETRY_NEEDS_AA_ON_$AASYS"
+    SET=`aa_set_id $AAMODE`
+    rm -f "$PERSIST/aa-trial.$SET" || fail "AA_RETRY_MARKER_REMOVE_FAILED"
+    flush
+    say "PMCP_AA_RETRY_OK set=$SET (restart the unit; the next AA connection is a new trial)"
+}
+
+# AA log: the hook log and feeder summary live in /ramdisk and are gone at the next start; in GEM the SD card is
+# read-only, so they go to carplaymaps/logs, and the log card (update mode) copies them to its SD card.
+AA_LOG_MAX=5
+do_aa_log_save() {
+    selftest
+    firmware_identity
+    detect_state
+    case "$STATE" in VIDEO|JAVA|PARTIAL) ;; *) fail "AA_LOG_NEEDS_PMCP_STATE_$STATE" ;; esac
+    [ -s "$RAMDISK/pmcp-gal-hook.log" ] || fail "AA_LOG_EMPTY_CONNECT_THE_PHONE_FIRST"
+    _l_n=1
+    while [ -e "$ROOT/logs/aa-log-$_l_n.txt" ]; do
+        _l_n=$((_l_n + 1))
+        [ $_l_n -le $AA_LOG_MAX ] || fail "AA_LOGS_FULL_${AA_LOG_MAX}_USE_THE_LOG_CARD_THEN_AA_DELETE_LOGS"
+    done
+    remount_rw
+    mkdir -p "$ROOT/logs" || fail "AA_LOG_DIR_FAILED"
+    _l_f="$ROOT/logs/aa-log-$_l_n.txt"
+    rm -f "$_l_f.pmcp-new" 2>/dev/null
+    if ! { echo "pmcp $PMCP_VERSION aa-log-save `date 2>/dev/null`"
+           echo "--- pmcp-aa-last"; cat "$RAMDISK/pmcp-aa-last" 2>/dev/null
+           echo "--- pmcp-aa-feeder.txt"; cat "$RAMDISK/pmcp-aa-feeder.txt" 2>/dev/null
+           echo "--- pmcp-gal-hook.log"; cat "$RAMDISK/pmcp-gal-hook.log"
+           echo "--- end"; } > "$_l_f.pmcp-new" 2>/dev/null; then
+        rm -f "$_l_f.pmcp-new" 2>/dev/null
+        fail "AA_LOG_WRITE_FAILED"
+    fi
+    _l_have=`size_of "$_l_f.pmcp-new"`; _l_src=`size_of "$RAMDISK/pmcp-gal-hook.log"`
+    [ -n "$_l_have" ] && [ -n "$_l_src" ] && [ "$_l_have" -gt "$_l_src" ] || { rm -f "$_l_f.pmcp-new"; fail "AA_LOG_COPY_SHORT"; }
+    mv "$_l_f.pmcp-new" "$_l_f" || fail "AA_LOG_RENAME_FAILED"
+    flush
+    aa_nav_counts
+    say "PMCP_AA_LOG_SAVED file=logs/aa-log-$_l_n.txt bytes=$_l_have nav_0x8006=$_c_6 nav_0x8007=$_c_7"
+    say "To the computer: log card (card 3) in update mode. Up to $AA_LOG_MAX logs are kept; AA delete logs empties them."
+}
+
+do_aa_log_clear() {
+    selftest
+    firmware_identity
+    detect_state
+    [ -d "$ROOT/logs" ] || fail "AA_NO_SAVED_LOGS"
+    remount_rw
+    rm -f "$ROOT"/logs/aa-log-*.txt "$ROOT"/logs/*.pmcp-new 2>/dev/null
+    rmdir "$ROOT/logs" 2>/dev/null
+    [ ! -e "$ROOT/logs" ] || fail "AA_LOG_CLEAR_FAILED"
+    flush
+    say "PMCP_AA_LOG_CLEAR_OK"
+}
+
+# navigation messages the hook logged in this start (event=aap.nav_msg)
+aa_nav_counts() {
+    _c_6=0; _c_7=0
+    [ -s "$RAMDISK/pmcp-gal-hook.log" ] || return 0
+    while read l; do
+        case "$l" in
+            *event=aap.nav_msg*msg_id=0x8006*) _c_6=$((_c_6 + 1)) ;;
+            *event=aap.nav_msg*msg_id=0x8007*) _c_7=$((_c_7 + 1)) ;;
+        esac
+    done < "$RAMDISK/pmcp-gal-hook.log"
+}
+
+do_aa_status() {
+    firmware_identity
+    detect_state
+    say "Unit state: $STATE"
+    say "Android Auto (experimental): $AASYS${AAMODE:+ mode=$AAMODE}"
+    [ "$AASYS" = old ] && say "  AA files from an earlier card (mode $AAMODE): Android Auto on brings them up to date (no AA remove needed)"
+    if [ "$AASYS" = on ]; then
+        SET=`aa_set_id $AAMODE`
+        if [ -e "$PERSIST/aa-ok.$SET" ]; then say "  set $SET: confirmed"
+        elif [ -e "$RAMDISK/pmcp-aa-trial.$SET" ]; then say "  set $SET: TRIAL in this start (Confirm AA if it works)"
+        elif [ -e "$PERSIST/aa-trial.$SET" ]; then say "  set $SET: trial used, not confirmed (factory AA now; Try again)"
+        else say "  set $SET: waiting for the first AA connection (trial)"; fi
+    fi
+    [ -s "$RAMDISK/pmcp-aa-last" ] && say "Last gal start: `cat "$RAMDISK/pmcp-aa-last"`"
+    aa_nav_counts
+    say "Navigation messages logged in this start: 0x8006=$_c_6 0x8007=$_c_7"
+    # gamma: the hook's manoeuvre feed for rg (counts, recognised / unknown types, the last manoeuvres)
+    if [ -s "$RAMDISK/pmcp-aa-rg.txt" ]; then
+        say "Manoeuvres for rg (gamma, /ramdisk/pmcp-aa-rg):"
+        while read l; do say "  $l"; done < "$RAMDISK/pmcp-aa-rg.txt"
+    fi
+    if [ -d "$ROOT/logs" ]; then
+        say "Saved AA logs (for the log card): `ls "$ROOT/logs" 2>/dev/null`"
+    fi
+    # /ramdisk is 20 MB with the 16 MB video ring on it: show how much is left (the hook log stays under 128 KB)
+    if [ -z "${PMCP_TEST_ROOT:-}" ] && type df >/dev/null 2>&1; then
+        df -k "$RAMDISK" 2>/dev/null | while read l; do say "  ramdisk: $l"; done
+    fi
+    if [ -s "$RAMDISK/pmcp-aa-feeder.txt" ]; then
+        say "Stream analysis (last AA session):"
+        while read l; do say "  $l"; done < "$RAMDISK/pmcp-aa-feeder.txt"
+    else
+        say "No stream analysis yet (connect the phone and start a route in Google Maps)."
+    fi
+    if [ -s "$RAMDISK/pmcp-gal-hook.log" ]; then
+        _t_n=0
+        while read l; do
+            case "$l" in
+                *firmware.verify*|*firmware.trial*|*result=failed*|*player.spawn*)
+                    _t_n=$((_t_n + 1)); [ $_t_n -le 12 ] && say "  hook: $l" ;;
+            esac
+        done < "$RAMDISK/pmcp-gal-hook.log"
+    fi
+    say "PMCP_AA_STATUS_OK"
 }
 
 # RGSYS -> off (factory driver + cfg, no SYSTEM_ON) | on (our driver, cfg, reader, SYSTEM_ON, factory copies kept)
@@ -720,10 +1025,20 @@ do_java_on() {
     [ "$STATE" = VIDEO ] && cur=""
     [ -z "$JAVA_OLD_SET" ] || fail "JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST"
     case " $cur " in *" $ARG "*) fail "JAVA_PACKAGE_ALREADY_ON_$ARG" ;; esac
-    case "$ARG" in rg) [ "$RGSYS" = on ] || fail "JAVA_RG_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
+    case "$ARG" in rg|rg-aa) [ "$RGSYS" = on ] || fail "JAVA_RG_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
+    # button 3 asks for rg: rg-aa (rg + Android Auto arrows) stays, counted as done
+    if [ "${PMCP_ALL_ON:-}" = 1 ] && [ "$ARG" = rg ]; then
+        case " $cur " in *" rg-aa "*) fail "JAVA_PACKAGE_ALREADY_ON_rg_AS_rg-aa" ;; esac
+    fi
+    # the alternative package (same classes) leaves the set; its JAR is removed after the new set is active
+    ALT=""; ALTFILE=""
+    for _a in `java_alternative "$ARG"`; do
+        case " $cur " in *" $_a "*) ALT=$_a; ALTFILE=`java_jarfile "$_a"` ;; esac
+    done
     # new set in catalog order, so the same packages always give the same set id
     new=""
     for n in `java_catalog | while read a b; do echo $a; done`; do
+        [ -n "$ALT" ] && [ "$n" = "$ALT" ] && continue
         case " $cur $ARG " in *" $n "*) new="$new${new:+ }$n" ;; esac
     done
     set -- `manifest_get "JAR_$ARG"`; J_SHA=$1; J_SIZE=$2; J_PATH=$3
@@ -749,6 +1064,10 @@ do_java_on() {
     commit_set_files || fail "SET_ACTIVATION_FAILED_RUN_RESTORE"
     if [ "$STATE" = VIDEO ]; then
         mv "$LSD.pmcp-new" "$LSD" || fail "LSD_ACTIVATION_FAILED_RUN_RESTORE"
+    fi
+    if [ -n "$ALTFILE" ]; then
+        rm -f "$JARS/$ALTFILE" || fail "ALTERNATIVE_JAR_REMOVE_FAILED_RUN_RESTORE"
+        say "  $ALT replaced by $ARG"
     fi
     rm -f "$PERSIST/DISABLED" 2>/dev/null
     detect_state
@@ -776,7 +1095,7 @@ do_java_off() {
     [ "$ARG" != sl ] || clear_speedlimit_mode
     # turnto shows only through rg's TurnToInfo text: without rg it would be a saved mode that shows nothing and comes
     # back silently with a later java-on rg
-    if [ "$ARG" = rg ] && [ "`cat "$SL_MODE" 2>/dev/null`" = turnto ]; then clear_speedlimit_mode; fi
+    case "$ARG" in rg|rg-aa) [ "`cat "$SL_MODE" 2>/dev/null`" = turnto ] && clear_speedlimit_mode ;; esac   # rg-aa: rg + AA (experimental)
     if [ -z "$new" ]; then
         # last package: factory lsd.sh first (switch off), then remove the JAR and set files
         cp "$ROOT/rollback/lsd.sh" "$LSD.pmcp-rb" || fail "LSD_RESTORE_STAGE_FAILED"
@@ -863,7 +1182,7 @@ do_java_update() {
         [ "$_u_part" = "$_u_x" ] && break
         _u_x=${_u_x#*+}
     done
-    case " $want " in *" rg "*) [ "$RGSYS" = on ] || fail "JAVA_UPDATE_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
+    case " $want " in *" rg "*|*" rg-aa "*) [ "$RGSYS" = on ] || fail "JAVA_UPDATE_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
     new=""
     for n in `java_catalog | while read a b; do echo $a; done`; do
         case " $want " in *" $n "*) new="$new${new:+ }$n" ;; esac
@@ -910,7 +1229,7 @@ do_speedlimit_mode() {
         case " `current_set` " in *" sl "*) ;; *) fail "SPEEDLIMIT_PACKAGE_NOT_INSTALLED" ;; esac
         # since v1.4 rg owns TurnToInfo and adds the prefix (rg/lanes/SpeedLimitText.java): without rg nothing shows it
         if [ "$ARG" = turnto ]; then
-            case " `current_set` " in *" rg "*) ;; *) fail "SPEEDLIMIT_TURNTO_NEEDS_RG_PACKAGE" ;; esac
+            case " `current_set` " in *" rg "*|*" rg-aa "*) ;; *) fail "SPEEDLIMIT_TURNTO_NEEDS_RG_PACKAGE" ;; esac
         fi
         set_id=`boot_set_id`
         [ ! -e "$PERSIST/DISABLED" ] || fail "JAVA_DISABLED_BY_RESCUE_CARD"
@@ -1131,6 +1450,7 @@ do_status() {
     [ -n "$JAVA_STRAY" ] && say "  unused JAR files (not loaded): $JAVA_STRAY (button 3 or Java update removes them)"
     say "Route guidance system: $RGSYS"
     [ "$RGSYS" = old ] && say "  driver or reader of an earlier card (button 3 or Route guidance update replaces them)"
+    say "Android Auto (experimental): $AASYS${AAMODE:+ mode=$AAMODE}"
     if [ -d "$PERSIST" ]; then
         say "Trial markers: `ls "$PERSIST" 2>/dev/null`"
         [ -s "$PERSIST/last-boot" ] && say "This boot: `cat "$PERSIST/last-boot"`"
@@ -1160,6 +1480,12 @@ case "$ACTION" in
     rg-update)     do_rg_update ;;
     java-update)   do_java_update ;;
     aa-remove)     do_aa_remove ;;
+    aa-on)         do_aa_on ;;
+    aa-confirm)    do_aa_confirm ;;
+    aa-retry)      do_aa_retry ;;
+    aa-status)     do_aa_status ;;
+    aa-log-save)   do_aa_log_save ;;
+    aa-log-clear)  do_aa_log_clear ;;
     speedlimit-mode) do_speedlimit_mode ;;
     speedlimit-status) do_speedlimit_status ;;
     restore)    do_restore ;;

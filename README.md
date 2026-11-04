@@ -7,6 +7,10 @@ with a **Discover Pro MHI2** head unit: **MU1161**, train `MHI2_ER_VWG13_P4512`,
 
 ![CarPlay map with native VW guidance on the AID](docs/img/aid-carplay-2026-10/IMG_1127.jpg)
 
+> **Branch `experimental`:** this is the v1.4.1 release plus Android Auto on the AID (one mode, "gamma": Google Maps
+> picture + VW arrows, package `rg-aa`). Not a release. Android Auto: [aa/README.md](aa/README.md), in the car:
+> [docs/en/13-experimental-guide.md](docs/en/13-experimental-guide.md). Everything else below is the release's text.
+
 This repository holds only what is specific to this head unit. It builds on the work of the projects listed under
 [Credits](#credits). The general MHI2 CarPlay-on-cluster work lives there.
 

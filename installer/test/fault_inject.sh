@@ -51,6 +51,10 @@ run() { case "$1" in v13:*) _a=${1#v13:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$
 runfi() { rm -f "$W/cnt"; PMCP_KILL_AT=$1 PMCP_FI_CNT=$W/cnt PMCP_FI_LOG=$W/filog PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp-fi.sh" "${@:2}" > "$W/outfi" 2>&1; }
 # the user confirmed the set during its trial boot
 confirm_set() {
+    if [ -s "$U/carplaymaps/aa/AA_BOOT" ]; then   # likewise for the AA set (experimental branch)
+        mkdir -p "$W/unit/mnt/persist/pmcp"; read s < "$U/carplaymaps/aa/AA_BOOT"
+        touch "$W/unit/mnt/persist/pmcp/aa-trial.$s" "$W/unit/mnt/persist/pmcp/aa-ok.$s"
+    fi
     [ -s "$U/carplaymaps/HMI_BOOT" ] || return 0
     mkdir -p "$W/unit/mnt/persist/pmcp"; read s rest < "$U/carplaymaps/HMI_BOOT"
     touch "$W/unit/mnt/persist/pmcp/trial.$s" "$W/unit/mnt/persist/pmcp/ok.$s"
@@ -68,13 +72,25 @@ bootsim() {
       echo 'echo "boot=$PMCP_USE"'; } > "$W/bs.sh"
     $SH "$W/bs.sh" 2>&1 | tail -1
 }
+# one AA connection on a fresh unit start: "use=yes|trial|no" from the gal wrapper (factory gal: gal=factory)
+galsim() {
+    G="$W/bs/mnt/app/eso/bin/apps/gal"
+    head -1 "$G" 2>/dev/null | grep -q '^#!/bin/sh' || { echo "gal=factory"; return; }
+    rm -rf "$W/bs/ramdisk"; mkdir -p "$W/bs/ramdisk"
+    sed -e "s#/mnt/app/carplaymaps#$W/bs/mnt/app/carplaymaps#g" -e "s#/mnt/persist/pmcp#$W/bs/mnt/persist/pmcp#g" \
+        -e "s#/ramdisk/#$W/bs/ramdisk/#g" -e 's#^exec "$REAL" "$@"#:#' "$G" > "$W/gs.sh"
+    $SH "$W/gs.sh" >/dev/null 2>&1
+    echo "gal=`sed -e 's/^set=[^ ]* //' -e 's/ capture=.*//' "$W/bs/ramdisk/pmcp-aa-last" 2>/dev/null`"
+}
 state() { run status; sed -n 's/^Unit state: //p' "$W/out"; }
 
 CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on rglu" "rg-update" "java-update" "java-on np" \
        "switch map-clean-l40" "java-off np" "java-off rg" "rg-system-off" "java-off nai" "restore" \
        "install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" \
        "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-on zoom" "restore" \
-       "exp:install map-clean" "exp:aa-on gamma" "aa-remove" "exp:aa-on most" "restore")
+       "exp:install map-clean" "exp:aa-on gamma" "aa-remove" "exp:aa-on most" "restore" \
+       "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on rg-aa" "java-on rg" "aa-remove" "aa-on" "restore" \
+       "exp:install map-clean" "exp:aa-on gamma" "aa-on" "restore")
 if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
     # turnto needs rg in the set (rg writes TurnToInfo since v1.4); street (CurrentPositionInfo trial) does not
     CHAIN=("install map-clean" "rg-system-on" "java-on rg" "java-on sl" "speedlimit-mode turnto" "speedlimit-mode street" \
@@ -93,6 +109,7 @@ for ((t=0; t<${#CHAIN[@]}; t++)); do
     done
     rm -rf "$W/tpl"; cp -Rp "$W/unit" "$W/tpl"
     before_boot=$(cat "$W/tpl/mnt/app/carplaymaps/HMI_BOOT" 2>/dev/null)
+    before_aa=$(cat "$W/tpl/mnt/app/carplaymaps/aa/AA_BOOT" 2>/dev/null)
     before_mode=$(mode_digest)
     case "$target" in
         "speedlimit-mode "*) after_mode=$(printf '%s\n' "${target#speedlimit-mode }" | shasum -a 256 | cut -d' ' -f1) ;;
@@ -122,6 +139,13 @@ for ((t=0; t<${#CHAIN[@]}; t++)); do
         if [ "$bs" = "boot=yes" ] && [ "$now_boot" != "$before_boot" ] && [ ! -e "$W/tpl/mnt/persist/pmcp/ok.$now_id" ]; then
             bad "[$target] kill@$n ($killed): untested set loads without a trial: '$now_boot' (was '$before_boot')"
         fi
+        # the gal wrapper may run the hook without a trial only for a set confirmed before the action
+        gs=$(galsim)
+        now_aa=$(cat "$U/carplaymaps/aa/AA_BOOT" 2>/dev/null)
+        if [ "$gs" = "gal=use=yes" ] && [ "$now_aa" != "$before_aa" ] && [ ! -e "$W/tpl/mnt/persist/pmcp/aa-ok.$now_aa" ]; then
+            bad "[$target] kill@$n ($killed): untested AA set runs the hook without a trial: '$now_aa' (was '$before_aa')"
+        fi
+        case "$gs" in "gal=pmcp-aa: "*) bad "[$target] kill@$n ($killed): gal wrapper without the factory gal copy (AA dead)" ;; esac
         if [ "$target" = rg-update ]; then
             # an interrupted update is finished by running it again
             run rg-update; grep -q "PMCP_RG_UPDATE_OK\|RG_UPDATE_ALREADY_CURRENT" "$W/out" && run status && grep -q "Route guidance system: on" "$W/out" \
@@ -139,8 +163,8 @@ for ((t=0; t<${#CHAIN[@]}; t++)); do
             && [ "$(shasum -a 256 < "$U/carplaymaps/aa/gal.real" 2>/dev/null | cut -d' ' -f1)" != 3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9 ]; then
             bad "[$target] kill@$n ($killed): gal is not factory and no verified factory copy (Android Auto dead)"
         fi
-        # experimental AA left over (killed aa-remove, or restore before its AA step finished): aa-remove finishes it
-        if run status && grep -q "Android Auto of an experimental card is installed" "$W/out"; then
+        # AA left half done (killed aa-on / aa-remove, or restore before its AA step finished): aa-remove finishes it
+        if run status && grep -q "Android Auto (experimental): unknown" "$W/out"; then
             run aa-remove; grep -q PMCP_AA_REMOVE_OK "$W/out" || bad "[$target] kill@$n ($killed): aa-remove again did not finish: $(grep PMCP_FAIL "$W/out")"
         fi
         st=$(state)
@@ -155,7 +179,7 @@ for ((t=0; t<${#CHAIN[@]}; t++)); do
                 [ "$(snapshot)" = "$FACTORY" ] && res="STOCK (install+restore ok)" || bad "[$target] kill@$n ($killed): STOCK, tree differs after install+restore" ;;
             *) bad "[$target] kill@$n ($killed): state '$st' (tool locked out)"; res="" ;;
         esac
-        echo "[$target] kill@$n ($killed) [$bs] state=$st ${res:-}"
+        echo "[$target] kill@$n ($killed) [$bs $gs] state=$st ${res:-}"
         res=""
         n=$((n+1))
         [ $n -gt 80 ] && { bad "[$target] more than 80 mutating commands"; break; }

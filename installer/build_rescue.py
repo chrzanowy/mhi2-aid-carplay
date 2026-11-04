@@ -69,8 +69,9 @@ def sha(b, algo="sha256"):
     return hashlib.new(algo, b).hexdigest()
 
 
-def main():
-    out = pathlib.Path(sys.argv[1])
+def mib_card(out, head, tail):
+    """The pinned M.I.B. 3.6.0 tree in OUT, armed, with HEAD/TAIL added around M.I.B.'s own stuff.sh lines
+    (also used by build_logcard.py on the experimental branch)."""
     if out.exists():
         sys.exit("output exists: %s" % out)
     data = ZIP.read_bytes()
@@ -96,26 +97,34 @@ def main():
     text = stuff.decode("ascii")
     first, rest = text.split("\n", 1)
     assert first == "#!/bin/ksh"
-    (out / "Launcher/stuff.sh").write_bytes((first + "\n" + STUFF_HEAD + rest + STUFF_TAIL).encode("ascii"))
+    (out / "Launcher/stuff.sh").write_bytes((first + "\n" + head + rest + tail).encode("ascii"))
     arm = out / "_Swdlautorun.txt"
     if not arm.exists() or (out / "Swdlautorun.txt").exists():
         sys.exit("unexpected autorun files in the zip")
     arm.rename(out / "Swdlautorun.txt")
+
+
+def write_manifest(out, name, keys):
+    lines = []
+    for p in sorted(out.rglob("*")):
+        if p.is_file():
+            lines.append("%s  %8d  %s" % (sha(p.read_bytes()), p.stat().st_size, p.relative_to(out)))
+    (out / name).write_text("\n".join(lines) + "\n")
+    print("files:", len(lines))
+    for l in lines:
+        if any(k in l for k in keys):
+            print(l)
+
+
+def main():
+    out = pathlib.Path(sys.argv[1])
+    mib_card(out, STUFF_HEAD, STUFF_TAIL)
     (out / "pmcp-rescue").mkdir()
     (out / "pmcp-rescue/pmcp-rescue.sh").write_bytes((HERE / "rescue/pmcp-rescue.sh").read_bytes())
     (out / "PMCP_RESCUE_README.txt").write_text(README)
     if (out / "pmcp").exists():
         sys.exit("rescue card must not contain the pmcp installer")
-    lines = []
-    for p in sorted(out.rglob("*")):
-        if p.is_file():
-            lines.append("%s  %8d  %s" % (sha(p.read_bytes()), p.stat().st_size, p.relative_to(out)))
-    (out / "PMCP_RESCUE_MANIFEST.txt").write_text("\n".join(lines) + "\n")
-    print("files:", len(lines))
-    for l in lines:
-        if any(k in l for k in ("stuff.sh", "pmcp-rescue", "Swdlautorun", "metainfo2", "finalScript")):
-            print(l)
-
+    write_manifest(out, "PMCP_RESCUE_MANIFEST.txt", ("stuff.sh", "pmcp-rescue", "Swdlautorun", "metainfo2", "finalScript"))
 
 if __name__ == "__main__":
     main()
