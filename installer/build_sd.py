@@ -18,7 +18,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
-PMCP_BASE_VERSION = "pmcp-0.4.3-mu1161-791"   # release v1.4.3 (v1.4.2 + rg quiet-route hold for Apple Maps)
+PMCP_BASE_VERSION = "pmcp-0.4.3-exp-mu1161-791"   # branch experimental on release v1.4.3: + Android Auto (aa/)
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)
@@ -33,6 +33,7 @@ MIB_ESD = (REPO / "archives/mib-3.6.0/Launcher-sda0.esd",
 JAVA_PACKAGES = [("nai", "nai: AID map stays while the iPhone navigates (NavActiveIgnore)"),
                  ("np", "np: CarPlay song title and artist on the AID"),
                  ("rg", "rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)"),
+                 ("rg-aa", "rg-aa: rg + VW arrows from Android Auto (Google Maps); replaces rg (experimental)"),
                  ("zoom", "zoom: CarPlay map zoom with the steering wheel arrows"),
                  ("dn", "dn: CarPlay map day/night on the AID (sent again after start)"),
                  # optional (not in button 3), output off until enabled with speedlimit-mode
@@ -43,8 +44,10 @@ JAVA_PACKAGES = [("nai", "nai: AID map stays while the iPhone navigates (NavActi
 # replaced by java-update (JAVA_OLD below).
 # Tried and not shipped (docs/en/14-fast-start-audit.md, branch experimental): day/night v2 and the cluster day/night
 # module (no effect on Google Maps), AID fast start kf..kf4, Android Auto.
-# No two packages replace the same class (checked in main).
-JAVA_ALTERNATIVES = set()
+# Branch experimental: rg-aa = rg + rg/lanes/aa.py (rg/build.sh lanes-uturn-asf-m-aa; v1.4.1's rg with the sl hook): Android Auto (connection 3) reads the gamma hook's mailbox /ramdisk/pmcp-aa-rg. rg and rg-aa
+# replace the same classes, so they are alternatives (java-on of one takes the other out of the set). Otherwise no two
+# packages replace the same class (checked in main).
+JAVA_ALTERNATIVES = {("JAR_rg", "JAR_rg-aa")}
 # In-car set (chosen in the car, 2026-10-24): 1 clean map (default), 2 clean card, 3 map with showSpeedLimit (the variant the
 # unit has had since 2026-10-23, name kept), 4 clean map 40 columns left. All with url-map-hybrid's area.
 VARIANTS = ["map-clean", "card-clean", "url-map-hybrid", "map-clean-l40", "map-square", "map-square-fps40"]
@@ -83,6 +86,8 @@ PAYLOAD = {
     # rg/build.sh <lsd> <dir> lanes-uturn-asf-m; a file name no earlier card used (java-update keeps the old set intact)
     "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m/pmcp-rg.jar",
                "7b1874847c5cf9714ed3b7e24c948b425aafc367c03a884d6309c8fda93c8661", 52951, "jars/pmcp-guidance3.jar"),
+    "JAR_rg-aa": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-143/pmcp-rg.jar",
+                  "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", 53309, "jars/pmcp-guidance-aa2.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
                  "046f48210dbee3177fbaa2a25f69154b56055f59b074fced1a0202700dd78d7b", 4740, "jars/pmcp-zoom.jar"),
     "JAR_dn": (PROJ / "build/extras-mu1161-v2/pmcp-dn.jar",
@@ -102,6 +107,116 @@ PAYLOAD = {
     "RG_READER": (PROJ / "rg/reader/prebuilt/rgi-observer",
                   "3166df9b91119475f93043ac8c150e2641732e602161839a137a1907d4ef11df", 13552, "rg/rgi-observer"),
 }
+# Experimental Android Auto (aa/README.md), one mode "gamma": MacsInSpace's gal hook (pinned commit, no SD card paths,
+# aa/hook/build.sh gamma: Google Maps manoeuvres -> rg mailbox), our feeder (aa/feeder, v9: start sync + pacing) and the
+# gal wrapper. Built into build/ by those scripts (docker, QNX 6.5 toolchain).
+AA_GAMMA = PROJ / "build/aa-g2"    # hook g2 (A-AA24): liveness / unknown-type fixes
+AA_KF5 = PROJ / "build/aa-kf5"     # libdmdt_flush.so (unchanged since AA 1)
+AA_FEED = PROJ / "build/aa-v9"     # feeder v9 (A-AA30)
+PAYLOAD.update({
+    "AA_WRAPPER": (PROJ / "aa/unit/gal.wrapper.sh", "57b63037a7d82d45f47773ec76e99ad659490f6d29d540f20de90930f0d65137", 3259, "aa/gal.wrapper.sh"),
+    "AA_HOOK": (AA_GAMMA / "hook/libgal_hook.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823, "aa/libgal_hook.so"),
+    "AA_DMDT_FLUSH": (AA_KF5 / "hook/libdmdt_flush.so", "4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f", 5328, "aa/libdmdt_flush.so"),
+    "AA_FEEDER": (AA_FEED / "feeder/aa-most-feeder", "5d2a0a026321196c1a2745dcb8e32f896e7fb3cace7a036bb910357f54afc630", 33464, "aa/aa-most-feeder"),
+    "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
+    "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "eaae73415ec6a2a3f4351764dcfdb96cd87d90aa3034cadd03bec52a09aad97a", 857, "aa/feeder.conf"),
+})
+# AA sets of earlier experimental cards (whole tuples: hook, feeder, hook settings, feeder settings, each from the card it was
+# on; pmcp.sh aa_state reports them as "old" with that card's AA_BOOT, aa-on brings them up to date). All modes of those
+# cards count: this branch has only gamma, aa-on replaces any of them.
+AA_OLD = [
+    # AA 3 (1.5) feeder v6 (card 892eed6f)
+    ("sync15", [(PROJ / "build/sd-892eed6f/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/aa-most-feeder-v6", "a71e02fc8a20e3d0080d0a04cf301e85a3c06fb32dc0b95b71e0c7244cae9f7c", 28744),
+              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
+              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/feeder-sync15.conf", "50f6b4e78e589c75841afe36640dbd655a027bdf1edef7d8fb1884a446f2237c", 358)]),
+    # AA 3 (1.7) feeder v6 (card 892eed6f)
+    ("sync17", [(PROJ / "build/sd-892eed6f/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/aa-most-feeder-v6", "a71e02fc8a20e3d0080d0a04cf301e85a3c06fb32dc0b95b71e0c7244cae9f7c", 28744),
+              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
+              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/feeder-sync17.conf", "28d3de87de2621c118d441f044d49960817d1d7669ceb2e6ff4c7891e4d073e4", 282)]),
+    # AA 3 (1.5) v7 with probe C (card 9766265d)
+    ("sync15", [(PROJ / "build/sd-9766265d/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-9766265d/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
+              (PROJ / "build/sd-9766265d/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
+              (PROJ / "build/sd-9766265d/pmcp/payload/aa/feeder-sync15.conf", "9dc1cda65298c89f05d14c62ef72c22902602e8dbff5556ef2598cf2b1403f7a", 708)]),
+    # AA 3 (1.7) v7 with probe C (card 9766265d)
+    ("sync17", [(PROJ / "build/sd-9766265d/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-9766265d/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
+              (PROJ / "build/sd-9766265d/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
+              (PROJ / "build/sd-9766265d/pmcp/payload/aa/feeder-sync17.conf", "08b43660b37df4837436d197968b96e8f216bc483ad1b945bcfb5164d9b72c3c", 802)]),
+    # gamma hook g1, probe C (card 662eb7a8)
+    ("gamma", [(PROJ / "build/sd-662eb7a8/pmcp/payload/aa/libgal_hook-gamma.so", "aa0b97fc61ec554c0ca81340fe04d53214afe0c3b7c0ac2b891b15d9e7014ddc", 131136),
+              (PROJ / "build/sd-662eb7a8/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
+              (PROJ / "build/sd-662eb7a8/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
+              (PROJ / "build/sd-662eb7a8/pmcp/payload/aa/feeder-gamma.conf", "e09c810b52e35ee24484b57494752ee0a8aa5f805a301834f553cb66944842ad", 825)]),
+    # gamma hook g2, probe C (card 9766265d)
+    ("gamma", [(PROJ / "build/sd-9766265d/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
+              (PROJ / "build/sd-9766265d/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
+              (PROJ / "build/sd-9766265d/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
+              (PROJ / "build/sd-9766265d/pmcp/payload/aa/feeder-gamma.conf", "e09c810b52e35ee24484b57494752ee0a8aa5f805a301834f553cb66944842ad", 825)]),
+    # AA 3 (1.5) v7 without probe C (card a32f55db)
+    ("sync15", [(PROJ / "build/sd-a32f55db/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
+              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
+              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/feeder-sync15.conf", "c29014492e545971404c6d46775bc82d36666bd8d3aedd5c0548e8aee37f5a51", 686)]),
+    # AA 3 (1.7) v7 without probe C (card a32f55db)
+    ("sync17", [(PROJ / "build/sd-a32f55db/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
+              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
+              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/feeder-sync17.conf", "3588fc0dac530d9b2cd6caaaafbd532aa7990af04baa8ec3b980c4271036b21a", 780)]),
+    # gamma hook g2, v7 without probe C (card a32f55db)
+    ("gamma", [(PROJ / "build/sd-a32f55db/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
+              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
+              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
+              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/feeder-gamma.conf", "1f14e9d60c5cc939d53f195f8805738f1758a6e819b1aec3bdc8538fd26ffff5", 803)]),
+    # AA 3 (1.5) feeder v8, 5 s (card fc01e707)
+    ("sync15", [(PROJ / "build/sd-fc01e707/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
+              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
+              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/feeder-sync15.conf", "c29014492e545971404c6d46775bc82d36666bd8d3aedd5c0548e8aee37f5a51", 686)]),
+    # AA 3 (1.7) feeder v8, 5 s (card fc01e707)
+    ("sync17", [(PROJ / "build/sd-fc01e707/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
+              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
+              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/feeder-sync17.conf", "3588fc0dac530d9b2cd6caaaafbd532aa7990af04baa8ec3b980c4271036b21a", 780)]),
+    # gamma g2, feeder v8, 5 s (card fc01e707)
+    ("gamma", [(PROJ / "build/sd-fc01e707/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
+              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
+              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
+              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/feeder-gamma.conf", "1f14e9d60c5cc939d53f195f8805738f1758a6e819b1aec3bdc8538fd26ffff5", 803)]),
+    # AA 3 (1.5) feeder v8, 10 s (card 2d4483e5)
+    ("sync15", [(PROJ / "build/sd-2d4483e5/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
+              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
+              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/feeder-sync15.conf", "83ce7aecd794219bda21103b425d720bee100135bab904fca3b5b0d234237013", 755)]),
+    # AA 3 (1.7) feeder v8, 10 s (card 2d4483e5)
+    ("sync17", [(PROJ / "build/sd-2d4483e5/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
+              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
+              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/feeder-sync17.conf", "ae2771afc6ef1344ded3d1054afa1b28b1c892010eecaf4d46e2e680f5cc5953", 849)]),
+    # gamma g2, feeder v8, 10 s (card 2d4483e5)
+    ("gamma", [(PROJ / "build/sd-2d4483e5/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
+              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
+              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
+              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/feeder-gamma.conf", "c8d19ef4c522726366b44c402fbec0f47b45387f228b87d26fbf39ecfd58ca09", 872)]),
+    # AA 3 (1.5) feeder v8, 5 s + start sync 3 s (card ab9fb348)
+    ("sync15", [(PROJ / "build/sd-ab9fb348/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
+              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
+              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/feeder-sync15.conf", "325f2a753f243b71b52422715e885937e5d2134ea74170965ec4b1316dbdd721", 958)]),
+    # AA 3 (1.7) feeder v8, 5 s + start sync 3 s (card ab9fb348)
+    ("sync17", [(PROJ / "build/sd-ab9fb348/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
+              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
+              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
+              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/feeder-sync17.conf", "374c0f580779febd49e4ba2d0ad065c8174ebce3b0840ff9cf2bab68497af490", 1052)]),
+    # gamma g2, feeder v8, 5 s + start sync 3 s (card ab9fb348)
+    ("gamma", [(PROJ / "build/sd-ab9fb348/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
+              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
+              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
+              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/feeder-gamma.conf", "65452c93449c1afc44fef6e70d00bd228ffd5d8580f9256b02876ae9c25bad9e", 1075)]),
+]
+
 # Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): the v1.0-v1.3 driver and
 # Tomasz's reader. (kind, sha256, sha1, size): only their hashes go to the card, so no earlier build is needed here.
 RG_KNOWN = [
@@ -114,19 +229,18 @@ RG_KNOWN = [
 JAVA_OLD = [
     ("rg", "717fb53c667c612e6f3b483ea93620559eaa23404a2e237d255f5af40798a754", "f748313879a40e3c8d69304dcfbfbbf003a412c6", 34082, "pmcp-rg.jar", "rg"),
     ("rglu", "72ab72214ee91a0d95ba0ec4d57a65cbee95d8ee82cb23af82fcb6b082591a33", "29b4bbcacc1c4251b7a47efd3c11445ba33e41f8", 38529, "pmcp-rglu.jar", "rg"),
-    ("rglua", "a9a25b1eb9aeed1347bb9c6c38aef3549dc2416d844c10b203fd175319f62161", "809f18a0deb12667fe651c5309a6be5c63a3849a", 38832, "pmcp-rglua.jar", "rg"),
+    ("rglua", "a9a25b1eb9aeed1347bb9c6c38aef3549dc2416d844c10b203fd175319f62161", "809f18a0deb12667fe651c5309a6be5c63a3849a", 38832, "pmcp-rglua.jar", "rg-aa"),
     ("rgluasf", "a092ef2a617cd63cde454d2bb18e8ea249f374770474ac030e5aea53edc373ed", "4fa0c5b25cbddc70b7c672ce58043fbd8eb3f68d", 47187, "pmcp-rgluasf.jar", "rg"),
-    ("rgluasfa", "b3a35c9b40ae4bb5360189178b18218005a194f4585ee491a916bfce539c034d", "385c81be0210bdbd9f599a7739124d528f3d8770", 47510, "pmcp-rgluasfa.jar", "rg"),
+    ("rgluasfa", "b3a35c9b40ae4bb5360189178b18218005a194f4585ee491a916bfce539c034d", "385c81be0210bdbd9f599a7739124d528f3d8770", 47510, "pmcp-rgluasfa.jar", "rg-aa"),
     ("rgluasfm", "13ca11c4e2a5fbe155165071f69fbee0e2b5b318e87fbfc079a9f76fefb62770", "517763a46b37afac546ec45e24b72cf15307ad9a", 47817, "pmcp-rgluasfm.jar", "rg"),
-    ("rgluasfma", "de39c893d8ea86abe4f57bc350fd7bd2d9b4a79f9023fc28a430cc2a20957ace", "ca03f2696567e24866b30e370159835a2cfae3db", 48161, "pmcp-rgluasfma.jar", "rg"),
+    ("rgluasfma", "de39c893d8ea86abe4f57bc350fd7bd2d9b4a79f9023fc28a430cc2a20957ace", "ca03f2696567e24866b30e370159835a2cfae3db", 48161, "pmcp-rgluasfma.jar", "rg-aa"),
     # v1.4.0 rg (the same bytes as rgluasfm, under the v1.4.0 file name); v1.4.1 adds the speed-limit prefix hook
     ("rg", "13ca11c4e2a5fbe155165071f69fbee0e2b5b318e87fbfc079a9f76fefb62770", "517763a46b37afac546ec45e24b72cf15307ad9a", 47817, "pmcp-guidance.jar", "rg"),
     # v1.4.1/v1.4.2 rg (speed-limit prefix hook); v1.4.3 adds the quiet-route hold for Apple Maps (rg/lanes/hold.py)
     ("rg", "8e25ae00d155c1cf47cb7661b376c93464ea505141bf83d915b1867047f437cb", "e7222ae3bf7a796ba7a87b09774bf073d9d74689", 49045, "pmcp-guidance2.jar", "rg"),
-    # experimental card f2a7ceb5 (v1.4.1 + Android Auto): rg-aa = rg with the AA guidance reader; button 3 takes AA off first
-    ("rg-aa", "4f9215bfacb61e12cf2f1444a8b9297d2fa925d48bacd6ca6b778140088e9dc9", "c7125f3321201df065594a0ee84daecbcb3bcd67", 49388, "pmcp-guidance-aa.jar", "rg"),
-    # experimental cards on v1.4.3 (experimental-143, e.g. 84472aa9): rg-aa rebuilt on the v1.4.3 rg (quiet-route hold)
-    ("rg-aa", "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", "9af25147b2bad492cde17451966f689a37cd077f", 53309, "pmcp-guidance-aa2.jar", "rg"),
+    # experimental cards f2a7ceb5 / 030b7df2 (v1.4.1/v1.4.2 + Android Auto): rg-aa = rg with the AA guidance reader; on this
+    # branch it stays rg-aa (the new one with the quiet-route hold), AA stays on
+    ("rg-aa", "4f9215bfacb61e12cf2f1444a8b9297d2fa925d48bacd6ca6b778140088e9dc9", "c7125f3321201df065594a0ee84daecbcb3bcd67", 49388, "pmcp-guidance-aa.jar", "rg-aa"),
 ]
 for name in VARIANTS:
     PAYLOAD["CORE_" + name] = (TUNING / name / "core.so", None, 75099, "core/%s/core.so" % name)
@@ -302,6 +416,7 @@ trap '' 2
 echo "pmcp: %(label)s"
 echo "Do not press Back and do not remove the SD card until PMCP_ALL_ON_OK or PMCP_FAIL is shown."
 PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh
+export PMCP_ALL_ON=1   # java-on rg: a set with rg-aa (rg + Android Auto) counts as done
 NEW=0
 for A in %(actions)s; do
     echo "- ${A%%%%_*} ${A#*_}"
@@ -343,7 +458,6 @@ def menu_entries():
            ("timeline", TIMELINE, "Start timeline: seconds from unit start to CarPlay, MOST, navigation (read-only)"),
            ("rglast", RGLAST, "RG last maneuver: what the iPhone sent and which VW arrow it gives (read-only)"),
            ("navdiag", NAVDIAG, "Navigation diagnostics: why the VW navigation does not start (read-only)"),
-           ("aa-remove", "aa-remove", "Remove experimental Android Auto (factory gal back; button 3 does it too)"),
            # package sl (On sl, then 4. Confirm), then one of these; the mode is kept across starts
            ("speedlimit-on", "speedlimit-mode turnto", "Speed limit: in front of the street name (top bar and dial; needs sl and rg)"),
            ("speedlimit-cpi", "speedlimit-mode street", "Speed limit TRIAL: in CurrentPositionInfo only (photograph where it shows)"),
@@ -357,15 +471,25 @@ def menu_entries():
           ("java-update", "java-update", "Java update: packages of an earlier card -> this card's (rglu -> rg)")]
     java = rg + [("java-on-" + n, "java-on " + n, "On " + label) for n, label in JAVA_PACKAGES] + \
            [("java-off-" + n, "java-off " + n, "Off " + label) for n, label in JAVA_PACKAGES]
-    return top, adv, inst, sw, java
+    return top, adv, inst, sw, java, AA_MENU
 
 
-# actions of "Install all features or update", in order: an experimental card's Android Auto off (aa-remove), an earlier
+# Experimental: Android Auto (aa/), its own screen pmcp_android_auto under pmcp_advanced
+AA_MENU = [("aa-on", "aa-on", "AA 1. Android Auto on: Google Maps on the AID + VW arrows (also updates an earlier card's AA)"),
+           ("aa-confirm", "aa-confirm", "AA 2. Confirm: AA works (only in the start of the AA trial)"),
+           ("aa-retry", "aa-retry", "AA 3. Try again: the next AA connection is a new trial"),
+           ("aa-status", "aa-status", "AA status and stream analysis (read-only)"),
+           ("aa-log-save", "aa-log-save", "AA save log: copy this start's AA log to the unit (for the log card)"),
+           ("aa-log-clear", "aa-log-clear", "AA delete saved logs (after the log card copied them)"),
+           ("aa-remove", "aa-remove", "AA remove (factory Android Auto back)")]
+
+
+# actions of "Install all features or update", in order (on this branch Android Auto stays as it is): an earlier
 # card's RG driver/reader and Java packages replaced by
 # this card's (rg-update, java-update), the main map (an older install gets START_VARIANT, already there: skipped), the
 # route guidance system (rg needs it), then every package except the optional sl. Steps already done answer *_ALREADY_* and are skipped, so
 # the same button brings any earlier pmcp install to this card's set.
-ALL_ON = ["aa-remove", "rg-update", "java-update", "switch_" + START_VARIANT, "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
+ALL_ON = ["rg-update", "java-update", "switch_" + START_VARIANT, "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n not in ("sl", "rg-aa")]
 
 
 def menu_script(args, label):
@@ -382,7 +506,7 @@ def menu_script(args, label):
     return MENU_SCRIPT % dict(label=label, args=args)
 
 
-def esd_block(version, top, adv, inst, sw, java):
+def esd_block(version, top, adv, inst, sw, java, aa):
     def kv(text):
         return ['keyValue', '    value   String sys 0x00000000 0', '    label   "%s"' % text, '    poll    0', '']
     def sc(name, label):
@@ -408,6 +532,11 @@ def esd_block(version, top, adv, inst, sw, java):
     out += kv("Without Confirm the next start is the factory one (then: 5. Try again).")
     out += kv("Black screen: hold the volume knob ~10 s, the next start loads none of our JARs.")
     for n, _, l in java:
+        out += sc(n, l)
+    out += ['screen pmcp_android_auto pmcp_advanced', '']
+    out += kv("Experimental: Android Auto map on the AID. AA 1, connect the phone, then AA 2 in that start.")
+    out += kv("VW arrows from Google Maps: package rg-aa (Packages). Lost picture: AA status, then AA save log.")
+    for n, _, l in aa:
         out += sc(n, l)
     return "\r\n".join(out) + "\r\n"
 
@@ -484,6 +613,16 @@ def main():
     for name, h, h1, size, jar, succ in JAVA_OLD:
         pairs[h] = h1
         old.append("%s %s %d %s %s" % (name, h, size, jar, succ))
+    aa_old = []
+    cur_aa = [PAYLOAD[k][1:3] for k in ("AA_HOOK", "AA_FEEDER", "AA_HOOK_CONF", "AA_MODE")]
+    for mode, files in AA_OLD:
+        hs = []
+        for src, h, size in files:
+            data = read_pinned(src, h, size, "AA_OLD_" + mode)
+            pairs[h] = hashlib.sha1(data).hexdigest()
+            hs.append("%s %d" % (h, size))
+        assert [f[1:3] for f in files] != cur_aa, "AA_OLD tuple equals this card's AA set"
+        aa_old.append(mode + " " + " ".join(hs))
     for key, h, size, rel in rows:
         data = (pm / "payload" / rel).read_bytes()
         assert sha(data) == h and len(data) == size, key
@@ -494,12 +633,13 @@ def main():
     menu_text = esd_block("@@VERSION@@", *menus) + "".join(n + "\n" + menu_script(a, l) for scr in menus for n, a, l in scr)
     global PMCP_VERSION
     PMCP_VERSION = PMCP_BASE_VERSION + "-" + sha((manifest + "\n" + "\n".join(known) + "\n" + "\n".join(old) + "\n"
+                                                   + "\n".join(aa_old) + "\n"
                                                    + (HERE / "template/pmcp.sh.in").read_text() + menu_text).encode())[:8]
     tpl = (HERE / "template/pmcp.sh.in").read_text()
     for k, v in {
         "@@PMCP_VERSION@@": PMCP_VERSION, "@@MANIFEST@@": manifest,
         "@@SELFTEST_SHA@@": sha(selftest), "@@SELFTEST_SIZE@@": str(len(selftest)),
-        "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_OLD@@": "\n".join(old),
+        "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_OLD@@": "\n".join(old), "@@AA_OLD@@": "\n".join(aa_old),
         "@@STOCK_GAL_SHA@@": STOCK["GAL"][1], "@@STOCK_GAL_SIZE@@": str(STOCK["GAL"][2]),
         "@@STOCK_LSD_SHA@@": STOCK["LSD"][1], "@@STOCK_LSD_SIZE@@": str(STOCK["LSD"][2]),
         "@@STOCK_DIO_SHA@@": STOCK["DIO"][1], "@@STOCK_DIO_SIZE@@": str(STOCK["DIO"][2]),

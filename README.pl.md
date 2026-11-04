@@ -7,6 +7,10 @@ Mapa CarPlay i natywne prowadzenie na wirtualnym kokpicie (AID) **VW Passata B8 
 
 ![Mapa CarPlay z natywnym prowadzeniem VW na AID](docs/img/aid-carplay-2026-10/IMG_1127.jpg)
 
+> **Gałąź `experimental`:** to wydanie v1.4.2 plus Android Auto na AID (jeden tryb, „gamma”: obraz Google Maps + strzałki
+> VW, pakiet `rg-aa`). To nie jest wydanie. Android Auto: [aa/README.pl.md](aa/README.pl.md), w aucie:
+> [docs/pl/13-instrukcja-eksperymentalna.md](docs/pl/13-instrukcja-eksperymentalna.md). Reszta poniżej to tekst wydania.
+
 W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy projektów wymienionych w sekcji
 [Podziękowania](#podziękowania). Tam jest ogólne rozwiązanie mapy CarPlay na liczniku MHI2.
 

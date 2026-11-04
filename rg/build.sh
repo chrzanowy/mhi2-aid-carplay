@@ -16,13 +16,15 @@
 # maneuver, current road name in TurnToInfo, FeedRecovery), tested with his TestArrow, TestRoad and TestRecovery.
 # "lanes-uturn-asf-m" (v1.4 package rg, everything): lanes-uturn-asf + rg/lanes/maneuvers.py (arrow fallbacks where the
 # strict mapping shows none: start of route, roundabout turns), tested with TestManeuvers.
+# "lanes-uturn-asf-m-aa" (experimental branch only, package rg-aa): lanes-uturn-asf-m + rg/lanes/aa.py (Android Auto too:
+# connection 3 reads /ramdisk/pmcp-aa-rg written by the AA gamma hook; CarPlay unchanged), tested also with TestAa.
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # do not write __pycache__ into upstream/tomasz (review 2)
 
 STOCK_JAR=${1:?converted lsd jar}; W=${2:?work dir}; MODE=${3:-base}
-case "$MODE" in base|lanes|lanes-uturn|lanes-uturn-asf|lanes-uturn-asf-m) ;; *) echo "FAIL: third argument must be lanes, lanes-uturn, lanes-uturn-asf, lanes-uturn-asf-m or nothing" >&2; exit 1 ;; esac
-ASF=no; case "$MODE" in *-asf|*-asf-m) ASF=yes ;; esac
-MAN=no; case "$MODE" in *-asf-m) MAN=yes ;; esac
+case "$MODE" in base|lanes|lanes-uturn|lanes-uturn-asf|lanes-uturn-asf-m|lanes-uturn-asf-m-aa) ;; *) echo "FAIL: third argument must be lanes, lanes-uturn, lanes-uturn-asf, lanes-uturn-asf-m, lanes-uturn-asf-m-aa or nothing" >&2; exit 1 ;; esac
+ASF=no; case "$MODE" in *-asf|*-asf-m|*-asf-m-aa) ASF=yes ;; esac
+MAN=no; case "$MODE" in *-asf-m|*-asf-m-aa) MAN=yes ;; esac
 H=$(cd "$(dirname "$0")" && pwd)
 BT="$H/../buildtools"     # Guard (try/catch around every hook call), RefCheck (J9 API check)
 REPO=$(cd "$H/../.." && pwd)
@@ -99,6 +101,10 @@ if [ "$MODE" != base ]; then
         python3 -I "$H/lanes/maneuvers.py" "$LB" "$H/lanes" || fail "maneuvers.py"
         ID=pmcp-mu1161-rg-lanes-asfm-2; WHAT="$WHAT + harman-f maneuver fallbacks"
     fi
+    if [ "$MODE" = lanes-uturn-asf-m-aa ]; then
+        python3 -I "$H/lanes/aa.py" "$LB" || fail "aa.py"
+        ID=pmcp-mu1161-rg-lanes-asfm-aa-1; WHAT="$WHAT + Android Auto (pmcp gamma)"
+    fi
 fi
 
 # ---- HMI JAR -------------------------------------------------------------------------------------------
@@ -112,7 +118,7 @@ javac --release 8 -nowarn -cp "$STOCK_JAR" -d "$W/helpers" \
 javac -nowarn -cp "$CP" -d "$W/patcher" "$LB/PatchLive.java" "$H/patcher/GuardLive.java" "$BT/Guard.java" "$BT/RefCheck.java" \
     "$H/../hmiextras/patcher/Verify.java"
 java -cp "$W/patcher:$CP" PatchLive "$W/stock" "$W/helpers" "$W/patched"
-G="${MODE%-uturn}"; [ $ASF = no ] || G=lanes-asf   # lanes-uturn: same classes as lanes
+G="${MODE%-uturn}"; [ $ASF = no ] || G=lanes-asf   # lanes-uturn: same classes as lanes; -asf-m(-aa): as lanes-asf
 java -cp "$W/patcher:$CP" GuardLive "$W/stock" "$W/patched" "$G"
 java -cp "$W/patcher:$CP" Verify "$W/patched" "$STOCK_JAR" $(find "$W/patched" -name '*.class' | sort)
 for f in $(find "$W/patched" -name '*.class'); do [ "$(xxd -s 6 -l 2 -p "$f")" = 002e ] || fail "class version not 46: $f"; done
@@ -130,7 +136,7 @@ with zipfile.ZipFile(dst, 'w') as z:
 EOF
 java -cp "$W/patcher:$CP" RefCheck "$STOCK_JAR" "$W/pmcp-rg.jar"
 javac -nowarn -cp "$W/patched:$STOCK_JAR" -d "$W/tests" "$LB/TestLive.java" ${EXTRA:+"$TL"} \
-    $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
+    $(case "$MODE" in (*-aa) echo "$LB/TestAa.java" ;; esac) $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
     $([ $MAN = yes ] && echo "$LB/TestManeuvers.java")
 java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestLive > "$W/tests/result.json" || { cat "$W/tests/result.json"; fail "TestLive"; }
 cat "$W/tests/result.json"; echo
@@ -162,6 +168,10 @@ if [ $MAN = yes ]; then
     java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestManeuvers > "$W/tests/maneuvers.txt" || { cat "$W/tests/maneuvers.txt"; fail "TestManeuvers"; }
     grep -q '^MANEUVERS_PASS ' "$W/tests/maneuvers.txt" || fail "TestManeuvers: no MANEUVERS_PASS"; cat "$W/tests/maneuvers.txt"
 fi
+case "$MODE" in *-aa)
+    java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestAa > "$W/tests/aa.json" || { cat "$W/tests/aa.json"; fail "TestAa"; }
+    cat "$W/tests/aa.json"; echo ;;
+esac
 for c in $CLASSES; do
     norm() { sed -E "s/#[0-9]+(, *[0-9]+)?//; s#$NAV/$c\\.##g; s/^ *[0-9]+: //; s/[[:space:]]+/ /g"; }
     javap -p -c -constants -cp "$W/stock" "${NAV//\//.}.$c" | norm > "$W/report/$c.stock.txt"
