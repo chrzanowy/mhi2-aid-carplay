@@ -39,7 +39,7 @@ def patch(name, pairs):
     p.write_text(s)
 
 
-for name in ("GuidanceEvidence", "TestQuietHold"):
+for name in ("GuidanceEvidence", "TestQuietHold", "TestHoldPmcp"):
     shutil.copy2(src / (name + ".java"), lane_dir / (name + ".java"))
 
 H = "LiveModel.HOLD_MS"

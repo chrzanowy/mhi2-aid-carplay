@@ -18,7 +18,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
-PMCP_BASE_VERSION = "pmcp-0.4.2-mu1161-791"   # release v1.4.2 (v1.4.1 + speed-limit mode fix without printf)
+PMCP_BASE_VERSION = "pmcp-0.4.3-mu1161-791"   # release v1.4.3 (v1.4.2 + rg quiet-route hold for Apple Maps)
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)
@@ -82,7 +82,7 @@ PAYLOAD = {
                "6b638868e65a6e573117cbf249850bb29e7b9aac3cd0502c2830652411f1dc23", 17928, "jars/pmcp-np.jar"),
     # rg/build.sh <lsd> <dir> lanes-uturn-asf-m; a file name no earlier card used (java-update keeps the old set intact)
     "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m/pmcp-rg.jar",
-               "8e25ae00d155c1cf47cb7661b376c93464ea505141bf83d915b1867047f437cb", 49045, "jars/pmcp-guidance2.jar"),
+               "7b1874847c5cf9714ed3b7e24c948b425aafc367c03a884d6309c8fda93c8661", 52951, "jars/pmcp-guidance3.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
                  "046f48210dbee3177fbaa2a25f69154b56055f59b074fced1a0202700dd78d7b", 4740, "jars/pmcp-zoom.jar"),
     "JAR_dn": (PROJ / "build/extras-mu1161-v2/pmcp-dn.jar",
@@ -121,6 +121,10 @@ JAVA_OLD = [
     ("rgluasfma", "de39c893d8ea86abe4f57bc350fd7bd2d9b4a79f9023fc28a430cc2a20957ace", "ca03f2696567e24866b30e370159835a2cfae3db", 48161, "pmcp-rgluasfma.jar", "rg"),
     # v1.4.0 rg (the same bytes as rgluasfm, under the v1.4.0 file name); v1.4.1 adds the speed-limit prefix hook
     ("rg", "13ca11c4e2a5fbe155165071f69fbee0e2b5b318e87fbfc079a9f76fefb62770", "517763a46b37afac546ec45e24b72cf15307ad9a", 47817, "pmcp-guidance.jar", "rg"),
+    # v1.4.1/v1.4.2 rg (speed-limit prefix hook); v1.4.3 adds the quiet-route hold for Apple Maps (rg/lanes/hold.py)
+    ("rg", "8e25ae00d155c1cf47cb7661b376c93464ea505141bf83d915b1867047f437cb", "e7222ae3bf7a796ba7a87b09774bf073d9d74689", 49045, "pmcp-guidance2.jar", "rg"),
+    # experimental card f2a7ceb5 (v1.4.1 + Android Auto): rg-aa = rg with the AA guidance reader; button 3 takes AA off first
+    ("rg-aa", "4f9215bfacb61e12cf2f1444a8b9297d2fa925d48bacd6ca6b778140088e9dc9", "c7125f3321201df065594a0ee84daecbcb3bcd67", 49388, "pmcp-guidance-aa.jar", "rg"),
 ]
 for name in VARIANTS:
     PAYLOAD["CORE_" + name] = (TUNING / name / "core.so", None, 75099, "core/%s/core.so" % name)

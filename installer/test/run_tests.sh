@@ -62,8 +62,14 @@ V13="$V13D/pmcp.sh"
 EXP="${PMCP_EXP_SD:-$SDB/../sd-ab9fb348}/pmcp/pmcp.sh"
 # the v1.4.0 release card (rg in pmcp-guidance.jar, no speed limit)
 V140="${PMCP_V140_SD:-$SDB/../release-v1.4.0/sd}/pmcp/pmcp.sh"
-[ -f "$V13" ] && [ -f "$EXP" ] && [ -f "$V140" ] || { echo "earlier cards missing: $V13 $EXP $V140"; exit 99; }
+# the v1.4.2 release card (rg in pmcp-guidance2.jar with the speed-limit hook, sl, no quiet-route hold)
+V142="${PMCP_V142_SD:-$SDB/../release-v1.4.2-5a55ffff/sd}/pmcp/pmcp.sh"
+[ -f "$V13" ] && [ -f "$EXP" ] && [ -f "$V140" ] && [ -f "$V142" ] || { echo "earlier cards missing: $V13 $EXP $V140 $V142"; exit 99; }
 run140() { PMCP_TEST_ROOT="$W/unit" $SH "$V140" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
+run142() { PMCP_TEST_ROOT="$W/unit" $SH "$V142" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
+# the experimental card f2a7ceb5 (v1.4.1 + Android Auto, rg-aa in pmcp-guidance-aa.jar); optional (only [25] needs it)
+EXP141="${PMCP_EXP141_SD:-$SDB/../sd-f2a7ceb5}/pmcp/pmcp.sh"
+runexp141() { PMCP_TEST_ROOT="$W/unit" $SH "$EXP141" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 run13() { PMCP_TEST_ROOT="$W/unit" $SH "$V13" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 runexp() { PMCP_TEST_ROOT="$W/unit" $SH "$EXP" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 confirm_now() { mkdir -p "$W/unit/mnt/persist/pmcp"; read s rest < "$U/carplaymaps/HMI_BOOT"; touch "$W/unit/mnt/persist/pmcp/ok.$s"; }
@@ -169,7 +175,7 @@ for SH in "$@"; do
     echo "[3f] packages F (zoom) and G (day/night)"
     run java-on zoom; rc_is 0
     run java-on dn; rc_is 0; expect_out "set=$NAI+$NP+$RG+$ZOOM+$DN" "all five packages in catalog order"
-    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI+$NP+$RG+$ZOOM+$DN NavActiveIgnore.jar pmcp-np.jar pmcp-guidance2.jar pmcp-zoom.jar pmcp-dn.jar" ] && ok "HMI_BOOT with five JARs" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
+    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI+$NP+$RG+$ZOOM+$DN NavActiveIgnore.jar pmcp-np.jar pmcp-guidance3.jar pmcp-zoom.jar pmcp-dn.jar" ] && ok "HMI_BOOT with five JARs" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
     run status; expect_out "Unit state: JAVA" "JAVA with five packages (set names parsed from HMI_BOOT)"
     run java-off zoom; rc_is 0; [ ! -e "$U/eso/hmi/lsd/jars/pmcp-zoom.jar" ] && ok "zoom off" || bad "zoom jar left"
     run java-on zoom; rc_is 0
@@ -332,7 +338,7 @@ for SH in "$@"; do
         [ -f "$SDB/pmcp/menu/${ref##*/}" ] || bad "menu points to missing ${ref##*/}"
     done
     v=$(sed -n 's/^PMCP_VERSION="\(.*\)"$/\1/p' "$SDB/pmcp/pmcp.sh")
-    case "$v" in pmcp-0.4.2-mu1161-791-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;; *) bad "version $v" ;; esac
+    case "$v" in pmcp-0.4.3-mu1161-791-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;; *) bad "version $v" ;; esac
     grep -q "$v" "$SDB/esd/Launcher-sda0.esd" && [ "$(head -1 "$SDB/BUILD-MANIFEST.txt")" = "$v" ] && ok "same id in GEM and BUILD-MANIFEST" || bad "version id mismatch"
 
     echo "[15] lsd.sh trial boot block, executed over simulated boots"
@@ -445,7 +451,7 @@ for SH in "$@"; do
     ALL="$NAI+$NP+$RG+$ZOOM+$DN"
     [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "one set with all five packages" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ -e "$U/carplaymaps/rg/SYSTEM_ON" ] && ok "RG system marker" || bad "no SYSTEM_ON"
-    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance2.jar*pmcp-dn.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
+    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance3.jar*pmcp-dn.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$ALL" "one confirm for everything"
     allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "remove everything: factory state"
@@ -508,7 +514,7 @@ PEOF
     expect_out "no start time with seconds; raw lines" "no seconds: raw lines instead of wrong numbers"
 
     echo "[21] RG last maneuver button (synthetic mailbox: route, U-turn without junction, right turn, U-turn by angle, lanes)"
-    mkdir -p "$W/rgm"
+    mkdir -p "$W/rgm"; rm -f "$W/rgm/adapter-status.txt" "$W/rgm/guidance-evidence.txt"   # left by the previous shell's pass
     echo "52474d31010000005f0100000900000001000000000000000000000000000000524749310100000040810000000000000700000005000000050000000000000000000000000000000000000000000000000000000000000000000000000000000100000001521300070000000000000000060000000100050001010008000d000300040200000002522300070000000000000000060000000100060001000300050003040005000800000d000447c582c3b3776e6100030000000252210007000000000000000006000000010006000100040005000302000500080000050009000006000b005a0400000002521c000700000000000000000600000001000600010005000500030400050009000006000bff560500000004523c000700000000000000000600000001000600010005001500020006000000000005000100000600020000001b0002000600000001000500010200060002ff4c00060003ff4c" | xxd -r -p > "$W/rgm/latest.bin"
     echo "RG status=live polls=1" > "$W/rgm/status.txt"
     sed -e "s#^AWK=.*#AWK=$PMCP_TEST_GAWK#" "$SDB/pmcp/bin/rglast.sh" > "$W/rgm/t.sh"
@@ -519,6 +525,18 @@ PEOF
     expect_out "idx=4 type=2 side=0 junction=0 angle=90 -> arrow 13 turn" "right turn: arrow"
     expect_out "idx=5 type=4 side=- junction=0 angle=-170 -> arrow 25 64" "U-turn by signed angle"
     expect_out "lanes idx=5 \[pos=0 st=0 a=0/0|0\] \[pos=1 st=2 a=-180/128|114 hl=-180/128|114\]" "lanes: positions, status, angle -> direction byte"
+    expect_out "no $W/rgm/guidance-evidence.txt" "no evidence file: says so"
+    # rg's own files (v1.4.3): output state and the quiet-route evidence are shown as they are
+    echo "RG build=pmcp-mu1161-rg-lanes-asfm-2 mode=2" > "$W/rgm/adapter-status.txt"
+    printf 'format=1 hold_ms=180000 route=3 quiet=12\nsources=Maps:3 current=Maps changes=0\n' > "$W/rgm/guidance-evidence.txt"
+    PMCP_RG_MAILBOX="$W/rgm" $SH "$W/rgm/t.sh" > "$W/out" 2>&1
+    expect_out "^--- adapter-status.txt" "adapter status shown"; expect_out "asfm-2 mode=2" "adapter status content"
+    expect_out "^--- guidance-evidence.txt" "evidence shown"; expect_out "current=Maps changes=0" "evidence content"
+    # a 32-byte STALE record (no snapshot) while rg holds the route
+    echo "52474d3101000000200000000a00000003000000881300000100000000000000" | xxd -r -p > "$W/rgm/latest.bin"
+    PMCP_RG_MAILBOX="$W/rgm" $SH "$W/rgm/t.sh" > "$W/out" 2>&1
+    expect_out "mailbox: record 10 kind 3 (stale: no new phone message for 5 s; rg holds the route up to 180 s), no snapshot" "STALE record explained, not unknown format"
+    expect_out "PMCP_RGLAST_DONE" "rglast runs to the end on a STALE record"
     PMCP_RG_MAILBOX="$W/none" $SH "$W/rgm/t.sh" > "$W/out" 2>&1
     expect_out "no $W/none/latest.bin" "no mailbox: says so"
 
@@ -527,7 +545,7 @@ PEOF
     run13 install map-square-fps40; rc_is 0; run13 rg-system-on; rc_is 0; run13 java-on nai; rc_is 0; run13 java-on rg; rc_is 0
     confirm_now
     # interrupted before the HMI_BOOT switch (new JAR already in place): the old confirmed set loads, java-update finishes
-    run rg-update; rc_is 0; cp "$W/sd/payload/jars/pmcp-guidance2.jar" "$U/eso/hmi/lsd/jars/pmcp-guidance2.jar"
+    run rg-update; rc_is 0; cp "$W/sd/payload/jars/pmcp-guidance3.jar" "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar"
     run status; expect_out "Unit state: JAVA" "new JAR before the switch: JAVA"; expect_out "packages of an earlier card: rg" "old rg still reported"
     o=$(unit_boot); case "$o" in "boot=yes set=$NAI+rg-717fb53c jars="*pmcp-rg.jar) ok "old confirmed set still loads, new JAR not" ;; *) bad "boot: $o" ;; esac
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "java-update finishes from there"
@@ -538,8 +556,8 @@ PEOF
     run rg-update; rc_is 0; expect_out "driver: replaced, reader: replaced" "rg-update replaces both"
     run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "second rg-update: already current"
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "v1.3.0 rg -> rg"
-    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rg.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance2.jar")" = "$(jsha rg)" ] && ok "old pmcp-rg.jar gone, pmcp-guidance2.jar in place" || bad "JARs after java-update"
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance2.jar" ] && ok "java-update: trial boot" || bad "boot: $o"
+    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rg.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar")" = "$(jsha rg)" ] && ok "old pmcp-rg.jar gone, pmcp-guidance3.jar in place" || bad "JARs after java-update"
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance3.jar" ] && ok "java-update: trial boot" || bad "boot: $o"
     run java-update; rc_is 1; expect_out "JAVA_UPDATE_ALREADY_CURRENT" "second java-update: already current"
     # interrupted after the HMI_BOOT switch (old JAR still there): JAVA, trial confirmable, java-update removes the JAR
     cp "$V13D/payload/jars/pmcp-rg.jar" "$U/eso/hmi/lsd/jars/pmcp-rg.jar"
@@ -679,7 +697,7 @@ PEOF
     run speedlimit-mode off; rc_is 0
     run java-on sl; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run speedlimit-mode turnto; rc_is 0
-    o=$(unit_boot); case "$o" in "boot=yes "*pmcp-guidance2.jar*pmcp-sl2.jar) ok "rg and sl load together" ;; *) bad "boot: $o" ;; esac
+    o=$(unit_boot); case "$o" in "boot=yes "*pmcp-guidance3.jar*pmcp-sl2.jar) ok "rg and sl load together" ;; *) bad "boot: $o" ;; esac
     # without rg nothing writes TurnToInfo text: turnto is refused, the CurrentPositionInfo trial (street) is not
     run java-off rg; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     [ ! -e "$SLM" ] && ok "removing rg resets turnto to off" || bad "turnto kept without rg"
@@ -701,15 +719,47 @@ PEOF
     confirm_now
     run status; expect_out "packages of an earlier card: rg" "v1.4.0 rg reported as an earlier card's package"
     run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "v1.4.0 driver and reader are this card's"
-    run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "v1.4.0 rg -> v1.4.1 rg"
-    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance2.jar")" = "$(jsha rg)" ] \
-        && ok "pmcp-guidance.jar gone, pmcp-guidance2.jar in place" || bad "JARs after java-update from v1.4.0"
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance2.jar" ] && ok "one trial start" || bad "boot: $o"
+    run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "v1.4.0 rg -> this card's rg"
+    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar")" = "$(jsha rg)" ] \
+        && ok "pmcp-guidance.jar gone, pmcp-guidance3.jar in place" || bad "JARs after java-update from v1.4.0"
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance3.jar" ] && ok "one trial start" || bad "boot: $o"
     run java-confirm; rc_is 0
     run java-on sl; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run speedlimit-mode turnto; rc_is 0
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: exact factory tree" || bad "restore after v1.4.0 -> v1.4.1 left changes"
+
+    echo "[24] v1.4.2 card -> this card: java-update replaces rg (pmcp-guidance2.jar -> pmcp-guidance3.jar), sl and its mode stay"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run142 install map-square-fps40; rc_is 0; run142 rg-system-on; rc_is 0; run142 java-on nai; rc_is 0; run142 java-on rg; rc_is 0
+    run142 java-on sl; rc_is 0; unit_boot > /dev/null; run142 java-confirm; rc_is 0
+    run142 speedlimit-mode turnto; rc_is 0; expect_out "PMCP_SPEEDLIMIT_MODE_OK mode=turnto" "v1.4.2 card saves turnto"
+    run status; expect_out "packages of an earlier card: rg" "v1.4.2 rg reported as an earlier card's package"
+    run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "v1.4.2 driver and reader are this card's"
+    run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "v1.4.2 rg -> this card's rg"
+    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance2.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar")" = "$(jsha rg)" ] \
+        && ok "pmcp-guidance2.jar gone, pmcp-guidance3.jar in place" || bad "JARs after java-update from v1.4.2"
+    o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance3.jar*pmcp-sl2.jar) ok "one trial start with the new rg and sl" ;; *) bad "boot: $o" ;; esac
+    run java-confirm; rc_is 0
+    [ "$(cat "$SLM" 2>/dev/null)" = turnto ] && ok "speed-limit mode kept across the rg update" || bad "speed-limit mode lost"
+    run restore; rc_is 0
+    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: exact factory tree" || bad "restore after v1.4.2 -> v1.4.3 left changes"
+
+    echo "[25] experimental card f2a7ceb5 (AA on, rg-aa) -> button 3 of this card: AA off, rg-aa -> rg"
+    if [ -f "$EXP141" ]; then
+        fresh_unit; factory=$(snapshot "$W/unit")
+        runexp141 install map-square-fps40; rc_is 0; runexp141 rg-system-on; rc_is 0; runexp141 java-on nai; rc_is 0
+        runexp141 java-on rg-aa; rc_is 0; confirm_now; runexp141 aa-on; rc_is 0
+        grep -q "pmcp-guidance-aa.jar" "$U/carplaymaps/HMI_BOOT" && ok "f2a7ceb5 unit: rg-aa in the set, AA on" || bad "f2a7ceb5 setup: $(cat "$U/carplaymaps/HMI_BOOT")"
+        allon; rc_is 0; expect_out "PMCP_AA_REMOVE_OK" "button 3: AA off first"; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rg-aa -> rg"
+        expect_out "PMCP_ALL_ON_OK" "button 3 done"
+        [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar")" = "$(jsha rg)" ] \
+            && ok "pmcp-guidance-aa.jar gone, pmcp-guidance3.jar in place" || bad "JARs after button 3 from f2a7ceb5"
+        run restore; rc_is 0
+        [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore after f2a7ceb5 -> this card: exact factory tree" || bad "tree after restore"
+    else
+        bad "experimental card f2a7ceb5 missing: $EXP141 (set PMCP_EXP141_SD)"
+    fi
 
 done
 

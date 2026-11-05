@@ -16,7 +16,7 @@ RGM=${PMCP_RG_MAILBOX:-/ramdisk/carplay-route-guidance}
 
 echo "pmcp route guidance: last messages from the iPhone (read-only)"
 if [ -r "$RGM/status.txt" ]; then cat "$RGM/status.txt"; else echo "no $RGM/status.txt (RG system off or reader not running)"; fi
-# package rg (Java): output state, and since v1.4.3 the quiet-route evidence (counts, gaps, rejected message shapes,
+# package rg (Java): output state, and since pmcp v1.4.3 the quiet-route evidence (counts, gaps, rejected message shapes,
 # the phone app's name; never road text; at most 4 KiB, written by rg every second)
 for f in adapter-status.txt guidance-evidence.txt; do
     if [ -r "$RGM/$f" ]; then echo "--- $f"; cat "$RGM/$f"; else echo "no $RGM/$f"; fi
@@ -94,6 +94,13 @@ LC_ALL=$LOC LANG=$LOC $AWK -v size="$SIZE" '
     { s = $0 RT; m = length(s); for (i = 1; i <= m; i++) B[n++] = ORD[substr(s, i, 1)] }
     END {
         if (bad) exit
+        # a record without a snapshot (32 bytes): STALE = no new phone message for 5 s; package rg keeps showing the route
+        # for up to 180 s of silence (rg/lanes/hold.py), so the cluster may still show an arrow
+        if (n == 32 && txt(0, 4) == "RGM1") {
+            k = u32(16)
+            print "mailbox: record " u32(12) " kind " k (k == 3 ? " (stale: no new phone message for 5 s; rg holds the route up to 180 s)" : k == 2 ? " (invalidated)" : k == 5 ? " (reader ended)" : "") ", no snapshot"
+            exit
+        }
         if (n < 96 || txt(0, 4) != "RGM1" || txt(32, 4) != "RGI1") { print "mailbox: unknown format (read " n " of " size " bytes)"; exit }
         printf "mailbox: %d bytes, record %d kind %d (1=snapshot 2=invalidated 3=stale)\n", n, u32(12), u32(16)
         if (u32(16) != 1) exit

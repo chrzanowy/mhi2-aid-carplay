@@ -3,6 +3,34 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
+## v1.4.3 (2026-11, candidate: not released until tested in the car)
+
+Apple Maps guidance no longer drops out after 5 s without a new message. Port of tomasz-twardzicki's MU1367 v1.4.4.
+
+- **Quiet-route hold (package `rg`, `rg/lanes/hold.py`).** Apple Maps sends only changes and does not resend
+  maneuvers. The reader's 5-second STALE record used to reset the route and every output expired 5 s after the last
+  message. After a quiet stretch the arrow came back as a placeholder and the lanes were missing until the next
+  maneuver. Now an active route, its arrow, distance bar, lanes and street name are held for up to 180 s of phone
+  silence. The route still ends at once on:
+  - route end from the phone;
+  - CarPlay disconnect;
+  - a new reader session;
+  - the reader's "invalid" record;
+  - VW navigation taking over.
+- **One bad message no longer blocks the rest.** A message that fails validation is dropped on its own instead of
+  blocking the whole 16-message window. An unreadable route update clears the route.
+- **Diagnostics.** `guidance-evidence.txt` (Tomasz's `GuidanceEvidence.java`, at most 4 KiB) records message counts,
+  quiet gaps, rejected message shapes (keys and sizes only, never road text) and the phone app's name. "RG last
+  maneuver" shows it together with `adapter-status.txt`, and explains a STALE mailbox instead of "unknown format".
+- **Unchanged:** our reader `pmcp-r1` and the iAP2 driver (same hashes as v1.4.0-v1.4.2). Only the Java side is ported.
+- **Known limit:** if a phone app stops guiding without sending a route end while CarPlay stays connected, the last
+  arrow can stay up to 180 s (as in Tomasz's v1.4.4).
+- **Update:** button 3 replaces `rg` (`pmcp-guidance2.jar` → `pmcp-guidance3.jar`) with one trial start and one
+  Confirm. `sl` and the speed-limit mode stay.
+- **Tests:** Tomasz's v1.4.4 tests on our sources (`TestQuietHold`). New `TestHoldPmcp` checks that disconnect, a new
+  session, an invalid record and a route end still clear a held route, and that a rejected maneuver message keeps it.
+  New: v1.4.2 → v1.4.3 update test; rglast with the evidence file and a STALE mailbox.
+
 ## v1.4.2 (2026-11)
 
 Fix for the speed-limit modes of v1.4.1, from amjad-alarori's PR #5.

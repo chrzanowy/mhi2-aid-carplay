@@ -97,7 +97,7 @@ if [ "$MODE" != base ]; then
     fi
     if [ $MAN = yes ]; then
         python3 -I "$H/lanes/maneuvers.py" "$LB" "$H/lanes" || fail "maneuvers.py"
-        ID=pmcp-mu1161-rg-lanes-asfm-1; WHAT="$WHAT + harman-f maneuver fallbacks"
+        ID=pmcp-mu1161-rg-lanes-asfm-2; WHAT="$WHAT + harman-f maneuver fallbacks"
     fi
 fi
 
@@ -130,7 +130,7 @@ with zipfile.ZipFile(dst, 'w') as z:
 EOF
 java -cp "$W/patcher:$CP" RefCheck "$STOCK_JAR" "$W/pmcp-rg.jar"
 javac -nowarn -cp "$W/patched:$STOCK_JAR" -d "$W/tests" "$LB/TestLive.java" ${EXTRA:+"$TL"} \
-    $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestSpeedLimitText.java") \
+    $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
     $([ $MAN = yes ] && echo "$LB/TestManeuvers.java")
 java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestLive > "$W/tests/result.json" || { cat "$W/tests/result.json"; fail "TestLive"; }
 cat "$W/tests/result.json"; echo
@@ -148,6 +148,8 @@ if [ $ASF = yes ]; then
     grep -q '^RECOVERY_PASS ' "$W/tests/recovery.txt" || fail "TestRecovery: no RECOVERY_PASS"; cat "$W/tests/recovery.txt"
     java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestQuietHold "$W/tests/quiet" > "$W/tests/quiet.txt" || { cat "$W/tests/quiet.txt"; fail "TestQuietHold"; }
     grep -q '^QUIET_HOLD_PASS ' "$W/tests/quiet.txt" || fail "TestQuietHold: no QUIET_HOLD_PASS"; cat "$W/tests/quiet.txt"
+    java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestHoldPmcp "$W/tests/holdpmcp" > "$W/tests/holdpmcp.txt" || { cat "$W/tests/holdpmcp.txt"; fail "TestHoldPmcp"; }
+    grep -q '^HOLD_PMCP_PASS ' "$W/tests/holdpmcp.txt" || fail "TestHoldPmcp: no HOLD_PMCP_PASS"; cat "$W/tests/holdpmcp.txt"
     # SpeedLimitText without sl, then with a stand-in sl helper (never packaged)
     mkdir -p "$W/slfake"; javac --release 8 -nowarn -d "$W/slfake" "$H/lanes/slfake/com/pmcp/sl/NativeSpeedLimit.java"
     for m in absent fake; do
