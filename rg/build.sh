@@ -61,6 +61,9 @@ if [ $ASF = yes ]; then
     pin "$H/lanes/TestArrow.java" 9ed8fdc1c9272c04dde7d55e94d1c395588804a256254e473546754a7c07faf9      # tests/java
     pin "$H/lanes/TestRoad.java" fb9bac915fdf1ec1263ada4c6dd576e73c4e646fc42413175540a32c3e189984       # tests/java
     pin "$H/lanes/TestRecovery.java" ef41df9c6b048cc66730acd8a10fda3e8414f30bb457d0a55723c9afd9e5b703   # tests/java
+    # Tomasz's MU1367 v1.4.4 (tag MU1367-v1.4.4, d20527f) files, copied unchanged into rg/lanes/ (quiet-route hold, hold.py)
+    pin "$H/lanes/GuidanceEvidence.java" 23e5e5e603e3d2c76e53364f21646758217d4eb7d28175ef6a48bc7680096d3d  # src/guidance
+    pin "$H/lanes/TestQuietHold.java" 0d243d38ed774f4cf3f6e8c2b840bdbb28f6df4d9d6ce8099ff6bb149d0bc39d     # tests/java
 fi
 pin "$REL/driver/ipod-drvr-iap2.so" 3760797aed4886a6c4480e3a8de79be427a3d8587450a56c424721306ca15d8b
 pin "$BK/MU1161-appimg/armle/lib/dll/ipod-drvr-iap2.so" 7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c
@@ -87,7 +90,10 @@ if [ "$MODE" != base ]; then
         # optional native speed-limit prefix from package sl (speedlimit/), looked up by name: rg/lanes/slhook.py
         python3 -I "$H/lanes/slhook.py" "$LB" "$H/lanes" || fail "slhook.py"
         EXTRA="$EXTRA $LB/SpeedLimitText.java"
-        ID=pmcp-mu1161-rg-lanes-asf-1; WHAT="$WHAT + MU1367 v1.4.3 bargraph, road name, feed recovery"
+        # quiet-route hold for Apple Maps (Tomasz's MU1367 v1.4.4, Java only): rg/lanes/hold.py
+        python3 -I "$H/lanes/hold.py" "$LB" "$H/lanes" || fail "hold.py"
+        EXTRA="$EXTRA $LB/GuidanceEvidence.java"
+        ID=pmcp-mu1161-rg-lanes-asf-2; WHAT="$WHAT + MU1367 v1.4.3 bargraph, road name, feed recovery + v1.4.4 quiet-route hold"
     fi
     if [ $MAN = yes ]; then
         python3 -I "$H/lanes/maneuvers.py" "$LB" "$H/lanes" || fail "maneuvers.py"
@@ -124,7 +130,7 @@ with zipfile.ZipFile(dst, 'w') as z:
 EOF
 java -cp "$W/patcher:$CP" RefCheck "$STOCK_JAR" "$W/pmcp-rg.jar"
 javac -nowarn -cp "$W/patched:$STOCK_JAR" -d "$W/tests" "$LB/TestLive.java" ${EXTRA:+"$TL"} \
-    $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestSpeedLimitText.java") \
+    $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestSpeedLimitText.java") \
     $([ $MAN = yes ] && echo "$LB/TestManeuvers.java")
 java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestLive > "$W/tests/result.json" || { cat "$W/tests/result.json"; fail "TestLive"; }
 cat "$W/tests/result.json"; echo
@@ -140,6 +146,8 @@ if [ $ASF = yes ]; then
     grep -q '^ROAD_NAME_PASS ' "$W/tests/road.txt" || fail "TestRoad: no ROAD_NAME_PASS"; cat "$W/tests/road.txt"
     java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestRecovery "$W/tests/recovery" > "$W/tests/recovery.txt" || { cat "$W/tests/recovery.txt"; fail "TestRecovery"; }
     grep -q '^RECOVERY_PASS ' "$W/tests/recovery.txt" || fail "TestRecovery: no RECOVERY_PASS"; cat "$W/tests/recovery.txt"
+    java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestQuietHold "$W/tests/quiet" > "$W/tests/quiet.txt" || { cat "$W/tests/quiet.txt"; fail "TestQuietHold"; }
+    grep -q '^QUIET_HOLD_PASS ' "$W/tests/quiet.txt" || fail "TestQuietHold: no QUIET_HOLD_PASS"; cat "$W/tests/quiet.txt"
     # SpeedLimitText without sl, then with a stand-in sl helper (never packaged)
     mkdir -p "$W/slfake"; javac --release 8 -nowarn -d "$W/slfake" "$H/lanes/slfake/com/pmcp/sl/NativeSpeedLimit.java"
     for m in absent fake; do

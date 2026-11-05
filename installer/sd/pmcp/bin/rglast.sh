@@ -16,6 +16,11 @@ RGM=${PMCP_RG_MAILBOX:-/ramdisk/carplay-route-guidance}
 
 echo "pmcp route guidance: last messages from the iPhone (read-only)"
 if [ -r "$RGM/status.txt" ]; then cat "$RGM/status.txt"; else echo "no $RGM/status.txt (RG system off or reader not running)"; fi
+# package rg (Java): output state, and since v1.4.3 the quiet-route evidence (counts, gaps, rejected message shapes,
+# the phone app's name; never road text; at most 4 KiB, written by rg every second)
+for f in adapter-status.txt guidance-evidence.txt; do
+    if [ -r "$RGM/$f" ]; then echo "--- $f"; cat "$RGM/$f"; else echo "no $RGM/$f"; fi
+done
 if [ ! -r "$RGM/latest.bin" ]; then
     echo "no $RGM/latest.bin"
     echo "PMCP_RGLAST_DONE"
