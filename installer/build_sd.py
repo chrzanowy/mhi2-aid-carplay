@@ -18,7 +18,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
-PMCP_BASE_VERSION = "pmcp-0.4.1-mu1161-791"   # release v1.4.1 (rg-main + optional native speed limit)
+PMCP_BASE_VERSION = "pmcp-0.4.2-mu1161-791"   # release v1.4.2 (v1.4.1 + speed-limit mode fix without printf)
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)

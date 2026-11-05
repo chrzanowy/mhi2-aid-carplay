@@ -8,6 +8,7 @@
 set -u
 SDB=$(cd "${1:?sd build dir}" && pwd); shift
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
+T=$(cd "$(dirname "$0")" && pwd)   # installer/test (no_printf.inc)
 BK="${PMCP_BACKUP:-$REPO/backup/MU1161}/advanced/MU1161-appimg"
 export PMCP_TEST_GAWK="${PMCP_TEST_GAWK:-$REPO/upstream/tools/gawk-3.1.5/gawk}"
 FAILS=0
@@ -49,6 +50,9 @@ fresh_unit() {
     cp "$BK/eso/hmi/lsd/jars/"* "$W/unit/mnt/app/eso/hmi/lsd/jars/"
     echo "factory persist content" > "$W/unit/mnt/persist/etc/ffs3.2ver"
     cp -R "$SDB/pmcp" "$W/sd"
+    awk -v inc="$T/no_printf.inc" '{print} /^unset LD_PRELOAD$/ && !done {while ((getline l < inc) > 0) print l; done=1}' \
+        "$W/sd/pmcp.sh" > "$W/sd/pmcp.sh.t" && mv "$W/sd/pmcp.sh.t" "$W/sd/pmcp.sh"
+    grep -q '^printf() {' "$W/sd/pmcp.sh" || { echo "no_printf.inc not applied"; exit 99; }
 }
 
 run() { PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
@@ -328,7 +332,7 @@ for SH in "$@"; do
         [ -f "$SDB/pmcp/menu/${ref##*/}" ] || bad "menu points to missing ${ref##*/}"
     done
     v=$(sed -n 's/^PMCP_VERSION="\(.*\)"$/\1/p' "$SDB/pmcp/pmcp.sh")
-    case "$v" in pmcp-0.4.1-mu1161-791-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;; *) bad "version $v" ;; esac
+    case "$v" in pmcp-0.4.2-mu1161-791-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;; *) bad "version $v" ;; esac
     grep -q "$v" "$SDB/esd/Launcher-sda0.esd" && [ "$(head -1 "$SDB/BUILD-MANIFEST.txt")" = "$v" ] && ok "same id in GEM and BUILD-MANIFEST" || bad "version id mismatch"
 
     echo "[15] lsd.sh trial boot block, executed over simulated boots"

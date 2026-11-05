@@ -3,6 +3,19 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
+## v1.4.2 (2026-11)
+
+Fix for the speed-limit modes of v1.4.1, from amjad-alarori's PR #5.
+
+- **Speed-limit mode works on the unit.** The GEM shell on MU1161 has no `printf`, so in v1.4.1 every "Speed limit: …"
+  mode button stopped with `printf: cannot execute` and `SPEEDLIMIT_MODE_STAGE_FAILED`, and the mode was not saved.
+  The mode file is now written with `echo` (the mode is always `off`, `street` or `turnto`). Found and confirmed in a
+  car by amjad-alarori.
+- **Tests:** every test run of `pmcp.sh` (`run_tests.sh`, `fault_inject.sh`) now has `printf` replaced by a stand-in
+  that fails like the unit (`installer/test/no_printf.inc`). The v1.4.1 card fails 15 checks this way; v1.4.2 passes.
+- **Update from v1.4.1:** nothing to change on the unit. The JARs, the driver, the reader and the rescue card are the
+  same as v1.4.1; use the v1.4.2 card 1 for the speed-limit buttons. From v1.4.0 or earlier: button 3, as before.
+
 ## v1.4.1 (2026-11)
 
 Optional native VW speed limit on the AID, from amjad-alarori's PR #3, adapted to v1.4.

@@ -4,6 +4,9 @@ The optional native speed-limit package `sl` (by amjad-alarori, PR #3) adds text
 street text. The value comes from the built-in VW navigation database through `DSITrafficRegulation`. The CarPlay app
 continues to route while VW route guidance is ended. The iPhone sends no speed limit; this is the car's own map data.
 
+Use the v1.4.2 card or newer for the mode buttons: on v1.4.1 they stop with `printf: cannot execute` and
+`SPEEDLIMIT_MODE_STAGE_FAILED` (the GEM shell has no `printf`; fixed by amjad-alarori, PR #5).
+
 Since v1.4.1 there are two modes:
 
 - **in front of the street name** (`turnto`): the limit goes before the street that `rg` writes to TurnToInfo. On the AID

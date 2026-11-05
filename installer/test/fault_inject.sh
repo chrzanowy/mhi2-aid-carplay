@@ -32,6 +32,9 @@ fresh_unit() {
     cp "$BK/eso/hmi/lsd/jars/"* "$U/eso/hmi/lsd/jars/"
     echo "factory persist content" > "$W/unit/mnt/persist/etc/ffs3.2ver"
     cp -R "$SDB/pmcp" "$W/sd"
+    awk -v inc="$H/no_printf.inc" '{print} /^unset LD_PRELOAD$/ && !done {while ((getline l < inc) > 0) print l; done=1}' \
+        "$W/sd/pmcp.sh" > "$W/sd/pmcp.sh.t" && mv "$W/sd/pmcp.sh.t" "$W/sd/pmcp.sh"
+    grep -q '^printf() {' "$W/sd/pmcp.sh" || { echo "no_printf.inc not applied"; exit 99; }
     awk -v inc="$H/fault_inject.inc" '{print} /^unset LD_PRELOAD$/ && !done {while ((getline l < inc) > 0) print l; done=1}' \
         "$W/sd/pmcp.sh" > "$W/sd/pmcp-fi.sh"
 }
