@@ -12,7 +12,8 @@ Since v1.4 there is **one** route guidance Java package, `rg`. Since v1.5.0 it i
 `rg/build.sh <lsd.jar> <dir> lanes-uturn-asf-m-aa` (v1.4.x: `lanes-uturn-asf-m`).
 It holds everything below: the MU1427 port, his lanes, our U-turn lanes, his distance bar / street name / feed recovery,
 the maneuver fallbacks, the quiet-route hold and (v1.5.0, `rg/lanes/aa.py`) the VW arrows from Android Auto: while an
-Android Auto phone is connected (connection type 3) it reads the AA hook's mailbox `/ramdisk/pmcp-aa-rg`; with CarPlay
+Android Auto phone is connected (connection type 3) it reads the AA hook's mailbox `/ramdisk/pmcp-aa-rg`, and a quiet
+route is held 10 s instead of 180 s (the hook repeats the route every 2.5 s while Google Maps navigates); with CarPlay
 or no phone it behaves exactly like the v1.4.3 `rg` (the same test suites with the same results, plus `TestAa`).
 The v1.3 packages `rg` (no lanes) and `rglu` are gone; `java-update` (button 3) replaces them, v1.4.x's `rg`, the
 experimental cards' `rg-aa` and `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma` by this `rg` (`pmcp-guidance4.jar`).

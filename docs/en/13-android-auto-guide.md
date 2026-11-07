@@ -37,6 +37,14 @@ screen), and is installed separately from CarPlay: "3. Install all features or u
   Plugging the phone in again helps.
 - No VW arrow at the very first step of a route ("depart").
 - Destination distance and arrival time are shown in the Google Maps picture, not on the VW bar.
+- The VW arrow and bar end about 10 s after Google Maps stops sending navigation (for example after Maps closed without
+  ending the route); CarPlay keeps a quiet route for 180 s.
+- Card 2 (rescue) and the Java packages share one switch-off marker (`DISABLED`). "3. Install all features or update"
+  (and any Java on / update) removes it, and with it switches the Android Auto hook the rescue card had switched off
+  back on. To keep Android Auto off after the rescue card: "AA remove (factory Android Auto back)".
+- "AA save log" during an active Android Auto session can answer `AA_LOG_COPY_SHORT` (the log grew while it was
+  copied). Unplug the phone and press it again in the same start.
+- `guidance-evidence.txt` (rg's message counts, next to `adapter-status.txt`) counts Android Auto and CarPlay together.
 
 ## If something goes wrong: what to photograph
 
@@ -46,12 +54,28 @@ screen), and is installed separately from CarPlay: "3. Install all features or u
    `dawkowanie:` (pacing), `przerwy:` (gaps between frames), `klatki co 10s` / `KB co 10s` (frames and KB per 10 s, the
    last 5 minutes), `duze klatki` (large frames), `sync startu:`, `pierwsze IDR`, and the "Manoeuvres for rg" lines.
 2. **"AA save log: copy this start's AA log to the unit (for the log card)"** → `PMCP_AA_LOG_SAVED file=logs/aa-log-N.txt`.
-   Up to 5 logs are kept.
+   Up to 5 logs are kept. If it says `AA_LOG_COPY_SHORT`: unplug the phone and press it again (same start).
 3. **"Status (read-only)"** on the main screen: photograph it too (Java set, route guidance, Android Auto).
 4. Then unplug and plug in the phone.
 
-At home: card 3 (logs, `installer/build_logcard.py`) in update mode copies the logs to `PMCP_LOGS/` on that card (it only
-reads the unit). Afterwards **"AA delete saved logs (after the log card copied them)"**.
+At home: card 3 (logs) in update mode copies the logs to `PMCP_LOGS/` on that card (it only reads the unit). Afterwards
+**"AA delete saved logs (after the log card copied them)"**.
+
+### Card 3 (logs)
+
+`install.sh` does not build it. On the computer, from the repository (needs the same M.I.B. 3.6.0 zip in
+`mib/downloads/` as the rescue card):
+
+```
+python3 -I installer/build_logcard.py build/card3-logs
+```
+
+Copy the contents of `build/card3-logs` to an empty FAT32 card (a separate card, not card 1 or 2). In the car: slot
+SD1, wait up to 60 s, answer Continue if asked, do not pull the card while it updates. To fetch the logs the card runs the
+full M.I.B. 3.6.0 `stuff.sh` in update mode (SWDL), as when M.I.B. was installed: the unit re-installs M.I.B. 3.6.0 on
+the way. At the end `PMCP_LOGS/PMCP_LOGS_RESULT.txt` ends with `RESULT=OK`. M.I.B. disarms the card after each use
+(`Swdlautorun.txt` -> `_Swdlautorun.txt`); rename it back on a computer to use it again. Details:
+`PMCP_LOGS_README.txt` on the card.
 
 ## Android Auto off
 

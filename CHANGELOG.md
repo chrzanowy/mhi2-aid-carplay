@@ -14,26 +14,43 @@ Android Auto on the AID, as a separate feature next to CarPlay. Installer versio
     session).
   - Every new Android Auto set runs once as a trial and stays only after "AA 2. Confirm", like the Java packages. The
     rescue card switches it off too.
-  - Known limits: the stream starts about 5 s after the phone connects; now and then the picture starts dark until the
-    phone's next key frame; no VW arrow at the very first step of a route; destination distance and arrival time stay
-    in the Google Maps picture.
+  - The VW arrow, bar and street name end 10 s after Google Maps goes quiet (Maps closed or crashed without ending the
+    route); before, they stayed up to 60 s. CarPlay keeps its 180 s quiet-route hold.
+  - Known limits of 0.1:
+    - the stream starts about 5 s after the phone connects; now and then the picture starts dark until the phone's
+      next key frame;
+    - no VW arrow at the very first step of a route; destination distance and arrival time stay in the Google Maps
+      picture;
+    - the rescue card's `DISABLED` marker is shared by Android Auto and the Java packages: button 3 (or any Java on /
+      update) removes it and so switches an Android Auto hook the rescue card had switched off back on ("AA remove"
+      keeps it off);
+    - "AA save log" can answer `AA_LOG_COPY_SHORT` during an active Android Auto session: unplug the phone and save
+      again in the same start;
+    - `guidance-evidence.txt` counts Android Auto and CarPlay messages together.
 - **Its own GEM screen.** `pmcp_android_auto` is on the main screen (not under Advanced), with "AA 1. Android Auto on",
   "AA 2. Confirm", "AA 3. Try again", status, log save/clear and "AA remove". Button 3 neither installs nor removes
   Android Auto; "Remove everything" still removes it and puts the factory `gal` back.
 - **One `rg` with the Android Auto arrows.** `rg` (`pmcp-guidance4.jar`) now also reads the Android Auto hook's
   manoeuvres while an Android phone is connected. With CarPlay or no phone it behaves exactly like the v1.4.3 `rg`:
-  every rg test suite gives the same results, and a new check proves it reads nothing of Android Auto then. The
-  separate package `rg-aa` of the experimental cards is gone.
+  every rg test suite gives the same results, and a new check proves it reads nothing of Android Auto then. During a
+  switch between CarPlay and Android Auto nothing of the previous source is shown. The separate package `rg-aa` of the
+  experimental cards is gone.
 - **Upgrade paths (button 3, one trial start, one Confirm).**
   - v1.4.x: `rg` (`pmcp-guidance.jar`, `pmcp-guidance2.jar`, `pmcp-guidance3.jar`) → `pmcp-guidance4.jar`.
   - Experimental cards (`rg-aa` in `pmcp-guidance-aa.jar` or `pmcp-guidance-aa2.jar`) → `rg`; their Android Auto stays
     as it is. "AA 1" then brings an earlier Android Auto set up to date (status "old" → "on"); the set of the
-    experimental card b2bcbbe3 is already this card's.
+    experimental card b2bcbbe3 is already this card's. An earlier set that differs only in its feeder settings (card
+    030b7df2, 2 Mbit/s) has the same set id: "AA 1" drops its confirmation, so the new settings get a trial start.
+  - An Android Auto set this card does not know (status "unknown"): button 3 stops and asks for "AA remove" on the
+    Android Auto screen first; the unit state message says the same instead of "run restore".
 - **Docs.** README: CarPlay and Android Auto on the AID, with an Android Auto section and photo. In-car guide:
   [docs/en/13-android-auto-guide.md](docs/en/13-android-auto-guide.md) /
   [docs/pl/13-instrukcja-android-auto.md](docs/pl/13-instrukcja-android-auto.md).
 - **Tests:** upgrades from v1.4.2, v1.4.3-style units and the experimental cards f2a7ceb5, 84472aa9 and b2bcbbe3; button
-  3 on a unit without Android Auto creates no Android Auto file; power loss during java-update on an Android Auto unit.
+  3 on a unit without Android Auto creates no Android Auto file; power loss during java-update on an Android Auto unit;
+  a confirmed 030b7df2 set gets a trial after "AA 1".
+- **Card 3 (logs)** for Android Auto problem reports: how to build it (`installer/build_logcard.py`) is in the Android
+  Auto guide and README-FIRST; it is not made by `install.sh`.
 
 ### Credits for this release
 

@@ -35,6 +35,14 @@ od CarPlay: „3. Install all features or update” ani go nie instaluje, ani ni
   ponowne podłączenie telefonu.
 - Brak strzałki VW na pierwszym kroku trasy („wyjazd”).
 - Dystans i czas do celu są w obrazie Google Maps, nie na pasku VW.
+- Strzałka i pasek VW gasną około 10 s po tym, jak Google Maps przestaje wysyłać nawigację (np. Maps zamknięte bez
+  zakończenia trasy); CarPlay trzyma cichą trasę 180 s.
+- Karta 2 (ratunkowa) i pakiety Java mają jeden wspólny znacznik wyłączenia (`DISABLED`). „3. Install all features or
+  update” (i każde włączenie / aktualizacja Java) go usuwa, a z nim włącza z powrotem hook Android Auto wyłączony kartą
+  ratunkową. Żeby Android Auto zostało wyłączone po karcie ratunkowej: „AA remove (factory Android Auto back)”.
+- „AA save log” w trakcie aktywnej sesji Android Auto może odpowiedzieć `AA_LOG_COPY_SHORT` (log urósł w czasie
+  kopiowania). Odłącz telefon i naciśnij jeszcze raz w tym samym starcie.
+- `guidance-evidence.txt` (liczniki wiadomości rg, obok `adapter-status.txt`) liczy Android Auto i CarPlay razem.
 
 ## Gdy coś nie działa: co sfotografować
 
@@ -44,12 +52,28 @@ od CarPlay: „3. Install all features or update” ani go nie instaluje, ani ni
    `dawkowanie:`, `przerwy:` (przerwy między klatkami), `klatki co 10s` / `KB co 10s` (ostatnie 5 minut), `duze klatki`,
    `sync startu:`, `pierwsze IDR` i linie „Manoeuvres for rg”.
 2. **„AA save log: copy this start's AA log to the unit (for the log card)”** → `PMCP_AA_LOG_SAVED file=logs/aa-log-N.txt`.
-   Radio trzyma do 5 logów.
+   Radio trzyma do 5 logów. Jeśli pokaże `AA_LOG_COPY_SHORT`: odłącz telefon i naciśnij jeszcze raz (ten sam start).
 3. **„Status (read-only)”** na ekranie głównym: też zdjęcie (zestaw Java, prowadzenie, Android Auto).
 4. Potem odłącz i podłącz telefon.
 
-W domu: karta 3 (logi, `installer/build_logcard.py`) w trybie aktualizacji kopiuje logi do `PMCP_LOGS/` na tej karcie
-(radio tylko czyta). Potem **„AA delete saved logs (after the log card copied them)”**.
+W domu: karta 3 (logi) w trybie aktualizacji kopiuje logi do `PMCP_LOGS/` na tej karcie (radio tylko czyta). Potem
+**„AA delete saved logs (after the log card copied them)”**.
+
+### Karta 3 (logi)
+
+`install.sh` jej nie buduje. Na komputerze, w repozytorium (potrzebny ten sam zip M.I.B. 3.6.0 w `mib/downloads/` co dla
+karty ratunkowej):
+
+```
+python3 -I installer/build_logcard.py build/karta3-logi
+```
+
+Zawartość `build/karta3-logi` skopiuj na pustą kartę FAT32 (osobną, nie kartę 1 ani 2). W aucie: slot SD1, odczekaj do
+60 s, na pytanie odpowiedz Continue, nie wyjmuj karty w trakcie aktualizacji. Żeby pobrać logi, karta uruchamia pełny
+`stuff.sh` M.I.B. 3.6.0 w trybie aktualizacji (SWDL), jak przy instalacji M.I.B.: radio po drodze instaluje ponownie
+M.I.B. 3.6.0. Na końcu `PMCP_LOGS/PMCP_LOGS_RESULT.txt` kończy się `RESULT=OK`. M.I.B. rozbraja kartę po każdym użyciu
+(`Swdlautorun.txt` -> `_Swdlautorun.txt`); żeby użyć jej ponownie, zmień nazwę z powrotem na komputerze. Szczegóły:
+`PMCP_LOGS_README.txt` na karcie.
 
 ## Wyłączenie Android Auto
 
