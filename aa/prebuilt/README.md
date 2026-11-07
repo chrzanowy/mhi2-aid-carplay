@@ -3,6 +3,13 @@
 `installer/build_sd.py` takes these three files only with the SHA-256 below, so `install.sh` needs no QNX toolchain.
 Rebuild them with Docker (image `qnx65-armv7-toolchain:8.5`); two builds must give the same bytes.
 
+Provenance:
+- gal hook and `dmdt_flush` sources: [MacsInSpace/mib-cluster-map](https://github.com/MacsInSpace/mib-cluster-map) commit
+  `07361db860b1d09e3901e9002b4222889a8a8c18` (`COMMIT=` in `aa/hook/build.sh`), plus the pmcp patches in `aa/hook/`;
+- toolchain: Docker image `qnx65-armv7-toolchain:8.5`, image ID
+  `sha256:1d63142818e84ae3d10c0774ac455ee0e527e7b4e600410b58d581536aade028`
+  (`docker image inspect --format '{{.Id}}' qnx65-armv7-toolchain:8.5` on the build machine).
+
 | File | Built by | SHA-256 | Size |
 |---|---|---|---|
 | `libgal_hook.so` | `aa/hook/build.sh <out> gamma` (MacsInSpace mib-cluster-map gal hook at the pinned commit + pmcp patches, GPL-3.0) | `bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05` | 132823 |

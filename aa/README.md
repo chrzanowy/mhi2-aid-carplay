@@ -80,4 +80,12 @@ python3 -I installer/build_logcard.py build/card3-logs   # card 3 (logs), a sepa
 
 `build_sd.py` accepts files only with pinned hashes.
 
+## TODO (hook, `aa/hook/pmcp_rg.c`; not changed in 0.1, the car-tested bytes stay)
+
+- The writer thread holds the mutex during file I/O (mailbox and status writes), so gal's reader thread can wait on a
+  slow `/ramdisk` write in `pmcp_rg_message()`.
+- `pthread_cond_timedwait` uses an absolute `CLOCK_REALTIME` deadline: a step back of the clock (GPS time set) stops the
+  heartbeats until the clock catches up. Use `CLOCK_MONOTONIC` (`pthread_condattr_setclock`) or a relative wait.
+- `write_status()`: when `fclose` fails the status `.tmp` file is not removed (`write_file()` does unlink its `.tmp`).
+
 In-car steps: [docs/en/13-android-auto-guide.md](../docs/en/13-android-auto-guide.md).
