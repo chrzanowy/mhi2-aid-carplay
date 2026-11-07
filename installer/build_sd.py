@@ -433,6 +433,10 @@ for A in %(actions)s; do
     echo "$OUT" | while read L; do case "$L" in PMCP_WARN*) ;; PMCP_*) echo "  $L" ;; esac; done
     case "$OUT" in
         *PMCP_FAIL=*_ALREADY_*) echo "  (already on)" ;;
+        *PMCP_FAIL=*AA_REMOVE_FIRST*) echo "PMCP_FAIL=ALL_ON_STOPPED_AT_$A"
+                     echo "Android Auto files mixed or of an older experimental card: Android Auto screen, AA remove"
+                     echo "(factory Android Auto back), then this button again. CarPlay and the rest stay as they are."
+                     trap 2; exit 0 ;;
         *PMCP_FAIL*) echo "PMCP_FAIL=ALL_ON_STOPPED_AT_$A"
                      echo "The steps before this one were done. Take a photo, then use Status, or Remove everything."
                      trap 2; exit 0 ;;

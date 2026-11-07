@@ -1040,6 +1040,13 @@ PEOF
         new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "next start: trial with the hook" || bad "trial start: $o"
         o=$(gal_start); case "$o" in "use=trial "*) ok "reconnection in the trial start: still the trial" ;; *) bad "reconnect: $o" ;; esac
         new_start; o=$(gal_start); case "$o" in "use=no real=gal.real preload= "*) ok "without AA 2 Confirm: factory gal, no hook" ;; *) bad "start after the trial: $o" ;; esac
+        # an AA set this card does not know (here: feeder.conf changed): AA remove first, not restore
+        echo "#" >> "$U/carplaymaps/aa/feeder.conf"
+        run status; expect_out "Android Auto: unknown" "changed feeder.conf: unknown"
+        expect_out "Android Auto screen, AA remove (factory Android Auto back), then AA 1 again" "PARTIAL reason points at AA remove"
+        allon; expect_out "JAVA_UPDATE_NEEDS_AA_REMOVE_FIRST_ON_THE_ANDROID_AUTO_SCREEN" "button 3 stops at java-update"
+        expect_out "Android Auto screen, AA remove" "button 3 says: AA remove on the Android Auto screen"
+        run aa-remove; rc_is 0; run status; expect_out "Android Auto: off" "after AA remove: off"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
     else
         bad "experimental card 84472aa9 missing: $EXP143 (set PMCP_EXP143_SD)"

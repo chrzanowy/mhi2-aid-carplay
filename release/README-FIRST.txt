@@ -113,6 +113,9 @@ PART 2 - IN THE CAR
     Used an experimental card with Android Auto? Button 3 keeps Android Auto as it is and
     replaces its rg-aa by rg. To bring Android Auto itself up to date: Android Auto screen
     (pmcp_android_auto), "AA 1. Android Auto on: ...". See docs/en/13-android-auto-guide.md.
+    If "Status (read-only)" shows "Android Auto: unknown" (an older experimental AA set this
+    card does not know, or an interrupted AA 1), button 3 stops: first, on the Android Auto
+    screen, "AA remove (factory Android Auto back)", then button 3 again, then "AA 1".
 
 ------------------------------------------------------------------------------------------
 EMERGENCY - CARD 2 (RESCUE)
@@ -133,3 +136,14 @@ EMERGENCY - CARD 2 (RESCUE)
 
   Single features and other map layouts are in the submenu  pmcp_advanced
   (explained in docs/in-car-guide.md).
+
+------------------------------------------------------------------------------------------
+CARD 3 (LOGS) - only for Android Auto problem reports
+------------------------------------------------------------------------------------------
+  Not in this package and not made by install.sh. It copies the Android Auto logs saved with
+  "AA save log" to the card. Build it on a computer from the repository (needs the M.I.B.
+  3.6.0 zip in mib/downloads/, as for the rescue card):
+      python3 -I installer/build_logcard.py build/card3-logs
+  Copy that folder's contents to a separate empty FAT32 card. To fetch the logs it runs the
+  full M.I.B. 3.6.0 stuff.sh in update mode (SWDL), as when M.I.B. was installed. See
+  docs/en/13-android-auto-guide.md.

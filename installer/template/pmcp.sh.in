@@ -413,7 +413,13 @@ detect_state() {
         fi
     fi
     STATE=PARTIAL
-    STATE_WHY="pmcp factory copies are intact, live files are mixed (interrupted action or rescue card): run restore"
+    if [ "$AASYS" = unknown ] && [ "$RGSYS" != unknown ] && matches "$DIO" "$W_SHA" "$W_SIZE"; then
+        # only the Android Auto files are mixed (an interrupted AA 1, or an AA set this card does not know): AA remove
+        # brings factory Android Auto back and keeps everything else; restore would remove everything
+        STATE_WHY="Android Auto files are mixed (interrupted AA 1 or an unknown AA set): Android Auto screen, AA remove (factory Android Auto back), then AA 1 again"
+    else
+        STATE_WHY="pmcp factory copies are intact, live files are mixed (interrupted action or rescue card): run restore"
+    fi
 }
 
 # carplaymaps is our install: version file, verified factory dio_manager and lsd.sh copies, no other navigation mod
@@ -1146,7 +1152,10 @@ do_java_update() {
     firmware_identity
     detect_state
     # "ALREADY" answers let button 3 skip this step on units without a Java set or already current.
-    case "$STATE" in STOCK|VIDEO) fail "JAVA_UPDATE_ALREADY_NO_JAVA_SET" ;; JAVA) ;; *) fail "JAVA_UPDATE_NEEDS_JAVA_STATE_$STATE" ;; esac
+    case "$STATE" in STOCK|VIDEO) fail "JAVA_UPDATE_ALREADY_NO_JAVA_SET" ;; JAVA) ;; *)
+        [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
+        [ "$AASYS" = unknown ] && fail "JAVA_UPDATE_NEEDS_AA_REMOVE_FIRST_ON_THE_ANDROID_AUTO_SCREEN"
+        fail "JAVA_UPDATE_NEEDS_JAVA_STATE_$STATE" ;; esac
     if [ -z "$JAVA_OLD_SET" ]; then
         [ -n "$JAVA_STRAY" ] || fail "JAVA_UPDATE_ALREADY_CURRENT"
         # only unreferenced JARs left (an interrupted update after its HMI_BOOT switch): remove them, the set stays

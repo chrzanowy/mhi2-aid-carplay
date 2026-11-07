@@ -117,6 +117,10 @@ CZĘŚĆ 2 - W AUCIE
     Używałeś karty eksperymentalnej z Android Auto? Przycisk 3 zostawia Android Auto bez zmian
     i zamienia jego rg-aa na rg. Samo Android Auto aktualizuje ekran Android Auto
     (pmcp_android_auto), "AA 1. Android Auto on: ...". Zobacz docs/pl/13-instrukcja-android-auto.md.
+    Jeśli "Status (read-only)" pokazuje "Android Auto: unknown" (starszy eksperymentalny zestaw
+    AA, którego ta karta nie zna, albo przerwane AA 1), przycisk 3 się zatrzyma: najpierw na
+    ekranie Android Auto "AA remove (factory Android Auto back)", potem znowu przycisk 3,
+    potem "AA 1".
 
 ------------------------------------------------------------------------------------------
 AWARIA - KARTA 2 (RATUNKOWA)
@@ -138,3 +142,14 @@ AWARIA - KARTA 2 (RATUNKOWA)
 
   Pojedyncze funkcje i inne układy mapy są w podmenu  pmcp_advanced  (napisy po angielsku,
   opisane w docs/tutorial-w-aucie.pl.md).
+
+------------------------------------------------------------------------------------------
+KARTA 3 (LOGI) - tylko do zgłoszeń problemów z Android Auto
+------------------------------------------------------------------------------------------
+  Nie ma jej w tej paczce i install.sh jej nie robi. Kopiuje na kartę logi Android Auto
+  zapisane przez "AA save log". Zbuduj ją na komputerze z repozytorium (potrzebny zip
+  M.I.B. 3.6.0 w mib/downloads/, jak dla karty ratunkowej):
+      python3 -I installer/build_logcard.py build/karta3-logi
+  Zawartość tego folderu skopiuj na osobną, pustą kartę FAT32. Żeby pobrać logi, uruchamia
+  pełny stuff.sh M.I.B. 3.6.0 w trybie aktualizacji (SWDL), jak przy instalacji M.I.B.
+  Zobacz docs/pl/13-instrukcja-android-auto.md.
