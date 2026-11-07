@@ -49,6 +49,9 @@ Planned rows (later, they need changes in `core.so`): map layout, fps, IDR.
   file-system `sync` after the rename, so a power cut right after a change can bring back the previous mode.
 - If the HMI restarts while a save holds the lock (a very short window), the lock stays in `/ramdisk` until the next
   unit start. Until then, GEM speed-limit and package actions answer `SPEEDLIMIT_LOCK_BUSY`.
+- **Before you go back to a card without `ui`** (any release card): press *Off ui* on the `ui` card first. A card
+  that does not know `ui` sees the Java set as PARTIAL and changes nothing (fail-closed); only *Remove everything*
+  would then help (installer test [26]).
 - To remove the package for good, use GEM *Off ui*. All Java packages also have the usual safety net: the trial boot
   plus *4. Confirm*, and the rescue card.
 
