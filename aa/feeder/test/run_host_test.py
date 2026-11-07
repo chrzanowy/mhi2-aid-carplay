@@ -323,12 +323,12 @@ qm = int(pl[0].split('kolejka max=')[1].split('/')[0]) if pl else 0
 check(pl and 'przepelnienie=0' in pl[0] and 'oproznianie=0 ' not in pl[0] and 190 <= qm <= 194, 'V: drained at 3/4, no overflow %s' % pl)
 
 # V2 (v10): a 100 ms gap cannot keep up with 30 fps: the queue fills (256), only the oldest frames go for room
-d, P, exp, acks, rc = run('V2', 'most', n_frames=420, idr_every=1000,
+d, P, exp, acks, rc = run('V2', 'most', n_frames=520, idr_every=1000,
                           conf='PMCP_AA_MODE=most\nPMCP_AA_PACE_GAP_MS=100\n', ack_idle=3.5)
 st = open(P('status.txt')).read(); pl = [l for l in st.split('\n') if l.startswith('dawkowanie:')]
 ok, nf = frames_ok(bridge_log(P), exp)
-check(ok and nf == 420, 'V2: every frame in order (%d)' % nf)
-check(acks == 420, 'V2: one ACK per frame (%d)' % acks)
+check(ok and nf == 520, 'V2: every frame in order (%d)' % nf)
+check(acks == 520, 'V2: one ACK per frame (%d)' % acks)
 check(pl and 'przepelnienie=0' not in pl[0] and 'kolejka max=256/256' in pl[0] and 'odstep 100ms' in pl[0], 'V2: full queue, room made %s' % pl)
 
 # T (v10): start hold + 25 ms gap: the frames held during the hold go into the ring spaced, not as one burst
