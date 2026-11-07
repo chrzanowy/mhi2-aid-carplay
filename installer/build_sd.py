@@ -119,7 +119,7 @@ PAYLOAD.update({
     "AA_DMDT_FLUSH": (AA_KF5 / "hook/libdmdt_flush.so", "4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f", 5328, "aa/libdmdt_flush.so"),
     "AA_FEEDER": (AA_FEED / "feeder/aa-most-feeder", "c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", 34856, "aa/aa-most-feeder"),
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
-    "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "c26c69a8562f4773edbbbf287ecf20e52d208f27135b944df04c6f8bbf70dccc", 1160, "aa/feeder.conf"),
+    "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", 1219, "aa/feeder.conf"),
 })
 # AA sets of earlier experimental cards (whole tuples: hook, feeder, hook settings, feeder settings, each from the card it was
 # on; pmcp.sh aa_state reports them as "old" with that card's AA_BOOT, aa-on brings them up to date). All modes of those
@@ -220,6 +220,11 @@ AA_OLD = [
               (PROJ / "build/sd-f2a7ceb5/pmcp/payload/aa/aa-most-feeder", "5d2a0a026321196c1a2745dcb8e32f896e7fb3cace7a036bb910357f54afc630", 33464),
               (PROJ / "build/sd-f2a7ceb5/pmcp/payload/aa/gal-hook.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
               (PROJ / "build/sd-f2a7ceb5/pmcp/payload/aa/feeder.conf", "eaae73415ec6a2a3f4351764dcfdb96cd87d90aa3034cadd03bec52a09aad97a", 857)]),
+    # gamma g2, feeder v10 at 2 Mbit/s (card 030b7df2)
+    ("gamma", [(PROJ / "build/sd-030b7df2/pmcp/payload/aa/libgal_hook.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
+              (PROJ / "build/sd-030b7df2/pmcp/payload/aa/aa-most-feeder", "c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", 34856),
+              (PROJ / "build/sd-030b7df2/pmcp/payload/aa/gal-hook.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
+              (PROJ / "build/sd-030b7df2/pmcp/payload/aa/feeder.conf", "c26c69a8562f4773edbbbf287ecf20e52d208f27135b944df04c6f8bbf70dccc", 1160)]),
 ]
 
 # Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): the v1.0-v1.3 driver and

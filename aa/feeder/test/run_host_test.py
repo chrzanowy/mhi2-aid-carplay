@@ -235,7 +235,7 @@ check(acks == 20, 'Q: still ACKs every frame (%d)' % acks)
 # R: AA 3 settings: 5 s before the stream connects, no 'C' probe any more (A-AA26: the phone dropped the connection)
 for cf in ('feeder-gamma.conf',):   # the only AA mode on this branch
     s3 = open(os.path.join(HERE, '..', '..', 'unit', cf)).read()
-    check('PMCP_AA_PACE_KBPS=2000' in s3 and 'PMCP_AA_PACE_BURST_KB=64' in s3 and 'PMCP_AA_SETTLE_MS=5000' in s3 and 'PMCP_AA_SYNC_HOLD_MS=3000' in s3 and 'PMCP_AA_SYNC_REPEAT_MS=500' in s3 and 'KF_METHOD' not in s3.replace("('C')", '') .split('PMCP_AA_MODE')[1] and 'KF_TAKE_MS' not in s3 and 'PMCP_AA_PACE_GAP_MS=25' in s3 and 'PMCP_AA_KF_BRIDGE=0' in s3, 'R: AA 3 settings ' + cf)
+    check('PMCP_AA_PACE_KBPS=6000' in s3 and 'PMCP_AA_PACE_BURST_KB=64' in s3 and 'PMCP_AA_SETTLE_MS=5000' in s3 and 'PMCP_AA_SYNC_HOLD_MS=3000' in s3 and 'PMCP_AA_SYNC_REPEAT_MS=500' in s3 and 'KF_METHOD' not in s3.replace("('C')", '') .split('PMCP_AA_MODE')[1] and 'KF_TAKE_MS' not in s3 and 'PMCP_AA_PACE_GAP_MS=20' in s3 and 'PMCP_AA_KF_BRIDGE=0' in s3, 'R: AA 3 settings ' + cf)
 s3 = open(os.path.join(HERE, '..', '..', 'unit', 'feeder-gamma.conf')).read()
 d, P, exp, acks, rc = run('R', 'most', n_frames=60, conf=s3.replace('=5000', '=2500'))
 check(CS['R'] == 0 and KS['R'] == 0, "R: no probe after the takeover (C=%d K=%d)" % (CS['R'], KS['R']))
@@ -361,7 +361,7 @@ rep = int(sl[0].split('powtorki IDR=')[1].split()[0]) if sl else -1
 ok, nf = frames_ok(bridge_log(P), [exp[0]] * (1 + rep) + exp[1:])
 check(sl and 'zrobiony' in sl[0] and ok and nf == 60 + rep, 'W: sync + pacing, every frame in order (%d, %s)' % (nf, sl))
 check(acks == 60, 'W: one ACK per frame (%d)' % acks)
-check(any(l.startswith('dawkowanie: 2000 kbit/s zapas 64 KB odstep 25ms') for l in st.split('\n')), 'W: pacing + gap on in the gamma settings')
+check(any(l.startswith('dawkowanie: 6000 kbit/s zapas 64 KB odstep 20ms') for l in st.split('\n')), 'W: pacing + gap on in the gamma settings')
 
 # diagnostics (v9) in A: windows, gaps, large frames (two 60 KB IDRs), pacing off
 st = open(P_A('status.txt')).read().split('\n')

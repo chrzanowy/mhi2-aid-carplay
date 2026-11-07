@@ -812,7 +812,7 @@ PEOF
     [ "$(h "$AAD/gal.real")" = $STOCK_GAL ] && ok "factory gal copied" || bad "gal.real"
     [ "$(h "$U/eso/bin/apps/gal")" != $STOCK_GAL ] && head -1 "$U/eso/bin/apps/gal" | grep -q '^#!/bin/sh' && ok "gal is the wrapper" || bad "gal not replaced"
     grep -q '^GAL_PMCP_RG=1$' "$AAD/gal-hook.conf" && grep -q '^GAL_DUALSCREEN_AAP_MINOR=7$' "$AAD/gal-hook.conf" && ok "hook settings: 1.7 + rg feed" || bad "gal-hook.conf"
-    grep -q '^PMCP_AA_MODE=most$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_PACE_KBPS=2000$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_SYNC_HOLD_MS=3000$' "$AAD/feeder.conf" \
+    grep -q '^PMCP_AA_MODE=most$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_PACE_KBPS=6000$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_SYNC_HOLD_MS=3000$' "$AAD/feeder.conf" \
         && ! grep -q 'KF_METHOD\|KF_TAKE' "$AAD/feeder.conf" && ok "feeder settings: MOST, pacing, start sync, no probe" || bad "feeder.conf"
     [ -x "$AAD/aa-most-feeder" ] && [ -x "$AAD/gal.real" ] && [ ! -e "$U/carplaymaps/.aa-new" ] && ok "executables, no staging leftovers" || bad "aa files"
     case "$(cat "$AAD/AA_BOOT")" in gamma-bdd76a85-*-716516eb) ok "set id gamma-hook-feeder-conf" ;; *) bad "AA_BOOT $(cat "$AAD/AA_BOOT")" ;; esac
@@ -872,7 +872,12 @@ PEOF
     cp "$OLD9/aa-most-feeder" "$AAD/aa-most-feeder"; cp "$OLD9/feeder.conf" "$AAD/feeder.conf"; cp "$OLD9/libgal_hook.so" "$AAD/libgal_hook.so"; cp "$OLD9/gal-hook.conf" "$AAD/gal-hook.conf"
     echo "gamma-bdd76a85-5d2a0a02-716516eb" > "$AAD/AA_BOOT"
     run status; expect_out "Android Auto (experimental): old mode=gamma" "card f2a7ceb5's gamma set (feeder v9): old"
-    run aa-on; rc_is 0; [ "$(h "$AAD/aa-most-feeder")" = c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7 ] && grep -q '^PMCP_AA_PACE_GAP_MS=25$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_KF_BRIDGE=0$' "$AAD/feeder.conf" && ok "feeder v9 -> v10, gap + no focus cycle" || bad "v9 not updated"
+    run aa-on; rc_is 0; [ "$(h "$AAD/aa-most-feeder")" = c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7 ] && grep -q '^PMCP_AA_PACE_GAP_MS=20$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_KF_BRIDGE=0$' "$AAD/feeder.conf" && ok "feeder v9 -> v10, gap + no focus cycle" || bad "v9 not updated"
+    # card 030b7df2 (feeder v10, 2 Mbit/s pacing) -> 6 Mbit/s settings (A-AA34): same AA_BOOT, only feeder.conf differs
+    OLD10="${PMCP_AA_OLD10:-$SDB/../sd-030b7df2}/pmcp/payload/aa"
+    cp "$OLD10/feeder.conf" "$AAD/feeder.conf"
+    run status; expect_out "Android Auto (experimental): old mode=gamma" "card 030b7df2's set (2 Mbit/s): old"
+    run aa-on; rc_is 0; grep -q '^PMCP_AA_PACE_KBPS=6000$' "$AAD/feeder.conf" && ok "030b7df2 -> 6 Mbit/s pacing" || bad "030b7df2 settings not updated"
     cp "$OLDG1/libgal_hook-gamma.so" "$AAD/libgal_hook.so"
     run status; expect_out "Unit state: PARTIAL" "a mix (g1 hook in the current set): PARTIAL"
     run aa-on; rc_is 1; expect_out "AA_NEEDS_STAGE_A_STATE_PARTIAL" "mix: aa-on refused"
