@@ -49,7 +49,14 @@ V13="${PMCP_V13_SD:-$SDB/../sd-v1.3.0}/pmcp/pmcp.sh"
 EXP="${PMCP_EXP_SD:-$SDB/../sd-ab9fb348}/pmcp/pmcp.sh"
 # "x143:ACTION": the experimental card 84472aa9 (v1.4.3 + Android Auto, rg-aa in pmcp-guidance-aa2.jar), likewise
 EXP143="${PMCP_EXP143_SD:-$SDB/../sd-84472aa9}/pmcp/pmcp.sh"
-[ -f "$V13" ] && [ -f "$EXP" ] && [ -f "$EXP143" ] || { echo "earlier cards missing: $V13 $EXP $EXP143"; exit 99; }
+# Earlier cards only prepare units for the update chains. Missing (a build from install.sh): those chains are skipped
+# and named; PMCP_REQUIRE_OLD_CARDS=1 (release runs) makes a missing earlier card an error.
+OLDCARDS=yes
+for c in "$V13" "$EXP" "$EXP143"; do
+    [ -f "$c" ] && continue
+    [ "${PMCP_REQUIRE_OLD_CARDS:-0}" = 1 ] && { echo "earlier card missing: $c"; exit 99; }
+    echo "skip: earlier card not present ($c): the update chains with earlier cards are skipped"; OLDCARDS=no
+done
 run() { case "$1" in v13:*) _a=${1#v13:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$V13" $_a "$@" > "$W/out" 2>&1 ;;
                      exp:*) _a=${1#exp:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP" $_a "$@" > "$W/out" 2>&1 ;;
                      x143:*) _a=${1#x143:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP143" $_a "$@" > "$W/out" 2>&1 ;;
@@ -90,6 +97,11 @@ galsim() {
 }
 state() { run status; sed -n 's/^Unit state: //p' "$W/out"; }
 
+# every chain ends with restore (factory again), so a chain can be left out without changing the others
+OWN=("install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" \
+     "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-on zoom" "restore" \
+     "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore")
+if [ "$OLDCARDS" = yes ]; then
 CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on rglu" "rg-update" "java-update" "java-on np" \
        "switch map-clean-l40" "java-off np" "java-off rg" "rg-system-off" "java-off nai" "restore" \
        "install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" \
@@ -98,6 +110,9 @@ CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on
        "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore" \
        "exp:install map-clean" "exp:aa-on gamma" "aa-on" "restore" \
        "x143:install map-square-fps40" "x143:rg-system-on" "x143:java-on nai" "x143:java-on rg-aa" "x143:aa-on" "java-update" "aa-on" "restore")
+else
+CHAIN=("${OWN[@]}")
+fi
 if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
     # turnto needs rg in the set (rg writes TurnToInfo since v1.4); street (CurrentPositionInfo trial) does not
     CHAIN=("install map-clean" "rg-system-on" "java-on rg" "java-on sl" "speedlimit-mode turnto" "speedlimit-mode street" \

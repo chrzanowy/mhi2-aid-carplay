@@ -126,6 +126,8 @@ it checks your computer and your backup (train `MHI2_ER_VWG13_P4512` / MU1161, e
 pinned sources, builds and tests everything (including power loss at every write step), builds the two card folders
 and can write them to SD cards. On any mismatch it stops and says what to do. The full log is in
 `logs/install-<date>.log`. `python3 -I release/make_release.py build dist` then packs the release zip.
+The update tests from earlier releases need those releases' cards, which are not in the repo: without them they are
+skipped and named in the log ("skip earlier card … not present"); every other test runs.
 
 ## Installer
 

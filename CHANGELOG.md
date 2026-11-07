@@ -3,7 +3,7 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
-## v1.5.0 (unreleased)
+## v1.5.0 (2026-11-07)
 
 Android Auto on the AID, as a separate feature next to CarPlay. Installer version `pmcp-0.5.0-mu1161-791-<build id>`.
 
@@ -49,6 +49,11 @@ Android Auto on the AID, as a separate feature next to CarPlay. Installer versio
 - **Tests:** upgrades from v1.4.2, v1.4.3-style units and the experimental cards f2a7ceb5, 84472aa9 and b2bcbbe3; button
   3 on a unit without Android Auto creates no Android Auto file; power loss during java-update on an Android Auto unit;
   a confirmed 030b7df2 set gets a trial after "AA 1".
+- **`install.sh` tests without earlier cards (fix, broken since v1.4.0).** The host tests stopped with "earlier cards
+  missing" (exit 99) unless the cards of earlier releases were on the computer, so step 9 of `install.sh` failed for
+  everyone who did not pass `--skip-host-tests`. The update tests that need an earlier card are now skipped and named
+  ("skip earlier card … not present"); every other test still runs. Release builds are tested with all earlier cards
+  (`PMCP_REQUIRE_OLD_CARDS=1`).
 - **Card 3 (logs)** for Android Auto problem reports: how to build it (`installer/build_logcard.py`) is in the Android
   Auto guide and README-FIRST; it is not made by `install.sh`.
 

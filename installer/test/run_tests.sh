@@ -64,7 +64,15 @@ EXP="${PMCP_EXP_SD:-$SDB/../sd-ab9fb348}/pmcp/pmcp.sh"
 V140="${PMCP_V140_SD:-$SDB/../release-v1.4.0/sd}/pmcp/pmcp.sh"
 # the v1.4.2 release card (rg in pmcp-guidance2.jar with the speed-limit hook, sl, no quiet-route hold)
 V142="${PMCP_V142_SD:-$SDB/../release-v1.4.2-5a55ffff/sd}/pmcp/pmcp.sh"
-[ -f "$V13" ] && [ -f "$EXP" ] && [ -f "$V140" ] && [ -f "$V142" ] || { echo "earlier cards missing: $V13 $EXP $V140 $V142"; exit 99; }
+# Earlier cards are only for the update tests. They are not in the repo: a build from install.sh skips those tests
+# (and says so); release runs set PMCP_REQUIRE_OLD_CARDS=1, which makes a missing earlier card a failure.
+SKIPS=0
+card_ok() {
+    [ -e "$1" ] && return 0
+    if [ "${PMCP_REQUIRE_OLD_CARDS:-0}" = 1 ]; then bad "earlier card $2 missing: $1"
+    else echo "  skip earlier card $2 not present ($1): its update test is skipped"; SKIPS=$((SKIPS+1)); fi
+    return 1
+}
 run140() { PMCP_TEST_ROOT="$W/unit" $SH "$V140" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 run142() { PMCP_TEST_ROOT="$W/unit" $SH "$V142" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 # the experimental card f2a7ceb5 (v1.4.1 + Android Auto, rg-aa in pmcp-guidance-aa.jar); only [25] needs it
@@ -490,6 +498,7 @@ for SH in "$@"; do
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "remove everything: factory state"
     [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37 ] && ok "factory iap2.cfg back" || bad "cfg after restore"
     # update a v1.3.0 install (its button 3: map-square-fps40, RG, nai np zoom dn rglu, confirmed) with the same button
+    if card_ok "$V13" v1.3.0; then
     fresh_unit; factory=$(snapshot "$W/unit")
     run13 install map-square; rc_is 0; run13 rg-system-on; rc_is 0
     for n in nai np zoom dn rglu; do run13 java-on $n; rc_is 0; done
@@ -511,6 +520,7 @@ for SH in "$@"; do
     allon; expect_out "everything was already on, nothing changed" "after the update: nothing to do"
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore after the v1.3.0 update: exact factory tree" || bad "tree after restore"
+    fi
 
     echo "[20] start timeline button (fake pidin/sloginfo; real script, host awk)"
     mkdir -p "$W/tl/bin"
@@ -574,6 +584,7 @@ PEOF
     expect_out "no $W/none/latest.bin" "no mailbox: says so"
 
     echo "[19] earlier cards: v1.3.0 rg, experimental rgluasfm, experimental Android Auto, removed packages"
+    if card_ok "$V13" v1.3.0 && card_ok "$EXP" ab9fb348; then
     fresh_unit; factory=$(snapshot "$W/unit")
     run13 install map-square-fps40; rc_is 0; run13 rg-system-on; rc_is 0; run13 java-on nai; rc_is 0; run13 java-on rg; rc_is 0
     confirm_now
@@ -664,6 +675,7 @@ PEOF
         run install map-clean > /dev/null; run java-on $gone; rc_is 1; expect_out "UNKNOWN_JAVA_PACKAGE_$gone" "$gone is not a package of this card"
         run restore > /dev/null
     done
+    fi
 
     fi
     echo "[22] optional native speed-limit reader: confirmed opt-in, persistent mode, disable and removal"
@@ -756,6 +768,7 @@ PEOF
     rm -rf "$SLL"
 
     echo "[23] v1.4.0 card -> this card: button 3's rg-update and java-update, then sl"
+    if card_ok "$V140" v1.4.0; then
     fresh_unit; factory=$(snapshot "$W/unit")
     run140 install map-square-fps40; rc_is 0; run140 rg-system-on; rc_is 0; run140 java-on nai; rc_is 0; run140 java-on rg; rc_is 0
     confirm_now
@@ -770,8 +783,10 @@ PEOF
     run speedlimit-mode turnto; rc_is 0
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: exact factory tree" || bad "restore after v1.4.0 -> v1.4.1 left changes"
+    fi
 
     echo "[24] v1.4.2 card -> this card: java-update replaces rg (pmcp-guidance2.jar -> pmcp-guidance4.jar), sl and its mode stay"
+    if card_ok "$V142" v1.4.2; then
     fresh_unit; factory=$(snapshot "$W/unit")
     run142 install map-square-fps40; rc_is 0; run142 rg-system-on; rc_is 0; run142 java-on nai; rc_is 0; run142 java-on rg; rc_is 0
     run142 java-on sl; rc_is 0; unit_boot > /dev/null; run142 java-confirm; rc_is 0
@@ -786,11 +801,12 @@ PEOF
     [ "$(cat "$SLM" 2>/dev/null)" = turnto ] && ok "speed-limit mode kept across the rg update" || bad "speed-limit mode lost"
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: exact factory tree" || bad "restore after v1.4.2 -> v1.4.3 left changes"
+    fi
 
     echo "[25] experimental card f2a7ceb5 (AA on, rg-aa) -> button 3 of this card: AA stays, rg-aa -> rg (pmcp-guidance4.jar)"
     ALL="$NAI+$NP+$RG+$ZOOM+$DN"
     no_aa_change() { grep -q "PMCP_AA_\(ON\|REMOVE\)_OK" "$W/out" && bad "$1: button 3 changed Android Auto" || ok "$1: button 3 ran no AA action"; }
-    if [ -f "$EXP141" ]; then
+    if card_ok "$EXP141" f2a7ceb5; then
         fresh_unit; factory=$(snapshot "$W/unit")
         runexp141 install map-square-fps40; rc_is 0; runexp141 rg-system-on; rc_is 0; runexp141 java-on nai; rc_is 0
         runexp141 java-on rg-aa; rc_is 0; confirm_now; runexp141 aa-on; rc_is 0
@@ -816,12 +832,10 @@ PEOF
         run status; expect_out "Android Auto: on mode=gamma" "AA on"
         run restore; rc_is 0
         [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore after f2a7ceb5 -> this card: exact factory tree" || bad "tree after restore"
-    else
-        bad "experimental card f2a7ceb5 missing: $EXP141 (set PMCP_EXP141_SD)"
     fi
 
     echo "[26] experimental card 84472aa9 (v1.4.3 + AA on, rg-aa 01221496 in pmcp-guidance-aa2.jar) -> button 3: AA stays, rg-aa -> rg (pmcp-guidance4.jar)"
-    if [ -f "$EXP143" ]; then
+    if card_ok "$EXP143" 84472aa9; then
         fresh_unit; factory=$(snapshot "$W/unit")
         runexp143 install map-square-fps40; rc_is 0; runexp143 rg-system-on; rc_is 0; runexp143 java-on nai; rc_is 0
         runexp143 java-on rg-aa; rc_is 0; confirm_now; runexp143 aa-on; rc_is 0
@@ -840,8 +854,6 @@ PEOF
         run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "AA 1 updates the 2 Mbit/s set"
         grep -q '^PMCP_AA_PACE_KBPS=6000$' "$U/carplaymaps/aa/feeder.conf" && ok "6 Mbit/s settings" || bad "feeder.conf not updated"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore with AA: exact factory tree" || bad "tree after restore"
-    else
-        bad "experimental card 84472aa9 missing: $EXP143 (set PMCP_EXP143_SD)"
     fi
 
     echo "[27] Android Auto (its own screen, mode gamma): gal wrapper, trial start, confirm, rg arrows, removal"
@@ -904,6 +916,10 @@ PEOF
     run aa-remove; rc_is 0; run status; expect_out "Unit state: JAVA" "aa-remove repairs it"
     # earlier cards' AA sets (AA_OLD): whole tuple + its own AA_BOOT = old; a mix = PARTIAL, never old
     OLDC="${PMCP_EXP_SD:-$SDB/../sd-ab9fb348}/pmcp/payload/aa"; OLDG1="${PMCP_AA_OLDG1:-$SDB/../sd-662eb7a8}/pmcp/payload/aa"
+    OLD9="${PMCP_AA_OLD9:-$SDB/../sd-f2a7ceb5}/pmcp/payload/aa"; OLD10="${PMCP_AA_OLD10:-$SDB/../sd-030b7df2}/pmcp/payload/aa"
+    OLD7="${PMCP_AA_OLD7:-$SDB/../sd-9766265d}/pmcp/payload/aa"
+    if card_ok "$OLDC" ab9fb348 && card_ok "$OLDG1" 662eb7a8 && card_ok "$OLD9" f2a7ceb5 && card_ok "$OLD10" 030b7df2 \
+        && card_ok "$OLD7" 9766265d; then
     run aa-on; rc_is 0
     cp "$OLDC/aa-most-feeder-sync" "$AAD/aa-most-feeder"; cp "$OLDC/feeder-gamma.conf" "$AAD/feeder.conf"
     echo "gamma-bdd76a85-5ec1a191-716516eb" > "$AAD/AA_BOOT"
@@ -911,13 +927,11 @@ PEOF
     run aa-status; expect_out "Android Auto on brings them up to date" "aa-status says what to do"
     run aa-on; rc_is 0; [ "$(h "$AAD/aa-most-feeder")" != "$(h "$OLDC/aa-most-feeder-sync")" ] && grep -q PACE_KBPS "$AAD/feeder.conf" && ok "feeder v8 -> v9, pacing settings" || bad "not updated"
     # card f2a7ceb5 / fd0c7a7c (feeder v9) -> v10 (A-AA33): the set on the unit before the v10 card
-    OLD9="${PMCP_AA_OLD9:-$SDB/../sd-f2a7ceb5}/pmcp/payload/aa"
     cp "$OLD9/aa-most-feeder" "$AAD/aa-most-feeder"; cp "$OLD9/feeder.conf" "$AAD/feeder.conf"; cp "$OLD9/libgal_hook.so" "$AAD/libgal_hook.so"; cp "$OLD9/gal-hook.conf" "$AAD/gal-hook.conf"
     echo "gamma-bdd76a85-5d2a0a02-716516eb" > "$AAD/AA_BOOT"
     run status; expect_out "Android Auto: old mode=gamma" "card f2a7ceb5's gamma set (feeder v9): old"
     run aa-on; rc_is 0; [ "$(h "$AAD/aa-most-feeder")" = c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7 ] && grep -q '^PMCP_AA_PACE_GAP_MS=20$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_KF_BRIDGE=0$' "$AAD/feeder.conf" && ok "feeder v9 -> v10, gap + no focus cycle" || bad "v9 not updated"
     # card 030b7df2 (feeder v10, 2 Mbit/s pacing) -> 6 Mbit/s settings (A-AA34): same AA_BOOT, only feeder.conf differs
-    OLD10="${PMCP_AA_OLD10:-$SDB/../sd-030b7df2}/pmcp/payload/aa"
     cp "$OLD10/feeder.conf" "$AAD/feeder.conf"
     run status; expect_out "Android Auto: old mode=gamma" "card 030b7df2's set (2 Mbit/s): old"
     run aa-on; rc_is 0; grep -q '^PMCP_AA_PACE_KBPS=6000$' "$AAD/feeder.conf" && ok "030b7df2 -> 6 Mbit/s pacing" || bad "030b7df2 settings not updated"
@@ -927,12 +941,12 @@ PEOF
     cp "$OLDG1/aa-most-feeder-sync" "$AAD/aa-most-feeder"; cp "$OLDG1/gal-hook-gamma.conf" "$AAD/gal-hook.conf"; cp "$OLDG1/feeder-gamma.conf" "$AAD/feeder.conf"
     echo "gamma-aa0b97fc-27b32b35-716516eb" > "$AAD/AA_BOOT"
     run status; expect_out "Android Auto: old mode=gamma" "whole gamma g1 set with its AA_BOOT: old"
-    OLD7="${PMCP_AA_OLD7:-$SDB/../sd-9766265d}/pmcp/payload/aa"
     cp "$OLD7/libgal_hook.so" "$AAD/libgal_hook.so"; cp "$OLD7/aa-most-feeder-sync" "$AAD/aa-most-feeder"; cp "$OLD7/gal-hook-17.conf" "$AAD/gal-hook.conf"
     cp "$OLD7/feeder-sync17.conf" "$AAD/feeder.conf"; echo "sync17-dd72104b-27b32b35-99288ee3" > "$AAD/AA_BOOT"
     run status; expect_out "Android Auto: old mode=sync17" "earlier card's AA 3 (1.7): old"
     run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "AA 3 (1.7) -> gamma"
     grep -q '^GAL_PMCP_RG=1$' "$AAD/gal-hook.conf" && [ "$(h "$AAD/libgal_hook.so")" = bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05 ] && ok "gamma hook and settings" || bad "after sync17 -> gamma"
+    fi
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "restore with AA on: factory state"
     [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: every file as at the start" || bad "restore: unit differs from factory"
 
@@ -982,7 +996,7 @@ PEOF
     [ ! -e "$U/carplaymaps" ] && ok "restore removed saved logs with carplaymaps" || bad "carplaymaps left"
 
     echo "[29] v1.4.3-style unit (rg 7b187484 in pmcp-guidance3.jar, no AA) -> button 3: pmcp-guidance4.jar, no AA file"
-    if [ -f "$EXP143" ]; then
+    if card_ok "$EXP143" 84472aa9; then
         fresh_unit; factory=$(snapshot "$W/unit")
         # card 84472aa9's rg is the v1.4.3 release rg (same bytes, same file pmcp-guidance3.jar)
         runexp143 install map-square-fps40; rc_is 0; runexp143 rg-system-on; rc_is 0
@@ -999,12 +1013,10 @@ PEOF
         run status; expect_out "Android Auto: off" "AA still off"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
-    else
-        bad "experimental card 84472aa9 missing: $EXP143 (set PMCP_EXP143_SD)"
     fi
 
     echo "[30] unit with card b2bcbbe3's AA set (feeder c5f8b0ef, feeder.conf ac7157da): this card's own set, nothing to update"
-    if [ -f "$EXPB2" ]; then
+    if card_ok "$EXPB2" b2bcbbe3; then
         fresh_unit; factory=$(snapshot "$W/unit")
         runexpb2 install map-square-fps40; rc_is 0; runexpb2 rg-system-on; rc_is 0; runexpb2 java-on nai; rc_is 0; runexpb2 java-on rg-aa; rc_is 0
         confirm_now; runexpb2 aa-on; rc_is 0
@@ -1017,12 +1029,10 @@ PEOF
         [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-')" ] && ok "AA untouched" || bad "AA changed"
         [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa.jar" ] && ok "pmcp-guidance-aa.jar -> pmcp-guidance4.jar" || bad "JARs after button 3"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
-    else
-        bad "experimental card b2bcbbe3 missing: $EXPB2 (set PMCP_EXPB2_SD)"
     fi
 
     echo "[31] confirmed AA set of card 030b7df2 (same set id, feeder.conf 2 Mbit/s) -> AA 1: new settings get a trial"
-    if [ -f "$EXP143" ]; then
+    if card_ok "$EXP143" 84472aa9; then
         fresh_unit; factory=$(snapshot "$W/unit")
         runexp143 install map-square-fps40; rc_is 0; runexp143 aa-on; rc_is 0
         S=$(cat "$U/carplaymaps/aa/AA_BOOT"); P="$W/unit/mnt/persist/pmcp"; mkdir -p "$P"
@@ -1048,11 +1058,10 @@ PEOF
         expect_out "Android Auto screen, AA remove" "button 3 says: AA remove on the Android Auto screen"
         run aa-remove; rc_is 0; run status; expect_out "Android Auto: off" "after AA remove: off"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
-    else
-        bad "experimental card 84472aa9 missing: $EXP143 (set PMCP_EXP143_SD)"
     fi
 done
 
 rm -rf "$W"
+[ "$SKIPS" = 0 ] || echo "SKIPPED (earlier cards not present, update tests only): $SKIPS"
 echo "FAILED CHECKS: $FAILS"
 exit $FAILS
