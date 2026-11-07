@@ -25,18 +25,20 @@ fi
 README = """CARD 3 - LOGS: copy the saved Android Auto logs to this card (VW MHI2 MU1161, M.I.B. 3.6.0)
 =========================================================================================
 
-Before: in GEM -> pmcp -> advanced -> Android Auto, "AA save log" in the same start as the AA session (the log lives in RAM
-until the next start). The unit keeps up to 5 saved logs in /mnt/app/carplaymaps/logs.
+Before: in GEM -> pmcp_CarPlay_AID -> pmcp_android_auto (the Android Auto screen, on the pmcp main screen), "AA save log:
+copy this start's AA log to the unit (for the log card)" in the same start as the AA session (the log lives in RAM until
+the next start). The unit keeps up to 5 saved logs in /mnt/app/carplaymaps/logs.
 
 What it does: insert it in slot SD1 and wait up to 60 s. The unit enters update mode by itself (answer Continue if
 asked; do NOT pull the card while it updates). At the end it copies to PMCP_LOGS/ on this card:
   - the saved AA logs (aa-log-1.txt ...),
   - pmcp's boot log.
-It changes NOTHING on the unit (it only reads). The unit also re-installs M.I.B. 3.6.0 on the way, as when M.I.B. was
-installed.
+It changes NOTHING on pmcp's files (it only reads them). To get there it runs the full M.I.B. 3.6.0 stuff.sh in update
+mode (SWDL), as when M.I.B. was installed: the unit re-installs M.I.B. 3.6.0 on the way.
 
 When the normal screen is back: remove the card. PMCP_LOGS/PMCP_LOGS_RESULT.txt ends with "RESULT=OK".
-After the copies are checked on a computer: GEM -> "AA delete saved logs".
+After the copies are checked on a computer: GEM -> pmcp_CarPlay_AID -> pmcp_android_auto, "AA delete saved logs (after
+the log card copied them)".
 
 After each use M.I.B. disarms the card (Swdlautorun.txt -> _Swdlautorun.txt). To use it again, rename
 _Swdlautorun.txt back to Swdlautorun.txt on a computer.
