@@ -80,10 +80,10 @@ PAYLOAD = {
             "dbd031ecb28a2ec91c4704e133f4e2126cf1fe11498f673bc2e07fc0b1aaa7ab", 13285, "jars/NavActiveIgnore.jar"),
     "JAR_np": (PROJ / "build/np-mu1161-v2/pmcp-np.jar",
                "6b638868e65a6e573117cbf249850bb29e7b9aac3cd0502c2830652411f1dc23", 17928, "jars/pmcp-np.jar"),
-    # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa (the same bytes as the experimental card 84472aa9's rg-aa); a file name
-    # no earlier card used (java-update keeps the old set intact)
+    # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa (the experimental cards' rg-aa 01221496 plus the 10 s AA quiet-route hold
+    # and the source-switch guard); a file name no earlier card used (java-update keeps the old set intact)
     "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/pmcp-rg.jar",
-               "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", 53309, "jars/pmcp-guidance4.jar"),
+               "4e32e7f7e2af8613b264998911a278b50d4ebf0a4b5d0c6245089e782d6236ee", 53514, "jars/pmcp-guidance4.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
                  "046f48210dbee3177fbaa2a25f69154b56055f59b074fced1a0202700dd78d7b", 4740, "jars/pmcp-zoom.jar"),
     "JAR_dn": (PROJ / "build/extras-mu1161-v2/pmcp-dn.jar",
@@ -247,8 +247,9 @@ JAVA_OLD = [
     ("rg", "7b1874847c5cf9714ed3b7e24c948b425aafc367c03a884d6309c8fda93c8661", "3cdf677c3824956b2da7546e9d69578af51030f6", 52951, "pmcp-guidance3.jar", "rg"),
     # experimental cards f2a7ceb5 / 030b7df2 / b2bcbbe3 (v1.4.1/v1.4.2 + Android Auto): rg-aa = rg with the AA reader
     ("rg-aa", "4f9215bfacb61e12cf2f1444a8b9297d2fa925d48bacd6ca6b778140088e9dc9", "c7125f3321201df065594a0ee84daecbcb3bcd67", 49388, "pmcp-guidance-aa.jar", "rg"),
-    # experimental card 84472aa9 (v1.4.3 + Android Auto): rg-aa with the quiet-route hold, the same bytes as this card's rg
-    # (only the file name and the package name differ, so java-update copies it once more under pmcp-guidance4.jar)
+    # experimental card 84472aa9 (v1.4.3 + Android Auto): rg-aa with the quiet-route hold (this card's rg before the 10 s
+    # AA hold). 01221496 never went to a unit as pmcp-guidance4.jar (the 1.5.0 candidate card 5b099f03 was not written to
+    # an SD card), so no row for that file name is needed.
     ("rg-aa", "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", "9af25147b2bad492cde17451966f689a37cd077f", 53309, "pmcp-guidance-aa2.jar", "rg"),
 ]
 for name in VARIANTS:
