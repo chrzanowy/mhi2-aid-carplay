@@ -3,7 +3,11 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
-## v1.4.3 (2026-11, candidate: not released until tested in the car)
+## v1.4.3 (2026-11-07)
+
+Source release only: no card zip. The v1.4.2 cards stay the download; to use v1.4.3, build it with `install.sh`.
+The quiet-route hold has host tests but has not been tried in a car with AID 791 yet. The next release with cards
+is v1.5.0.
 
 Apple Maps guidance no longer drops out after 5 s without a new message. Port of tomasz-twardzicki's MU1367 v1.4.4.
 
@@ -30,6 +34,8 @@ Apple Maps guidance no longer drops out after 5 s without a new message. Port of
 - **Tests:** Tomasz's v1.4.4 tests on our sources (`TestQuietHold`). New `TestHoldPmcp` checks that disconnect, a new
   session, an invalid record and a route end still clear a held route, and that a rejected maneuver message keeps it.
   New: v1.4.2 → v1.4.3 update test; rglast with the evidence file and a STALE mailbox.
+- **Experimental cards on v1.4.3:** button 3 also replaces the Android Auto guidance package of the experimental
+  v1.4.3 cards (`pmcp-guidance-aa2.jar` → `pmcp-guidance3.jar`), after taking Android Auto off, as before. Test [26].
 
 ## v1.4.2 (2026-11)
 

@@ -69,7 +69,10 @@ run140() { PMCP_TEST_ROOT="$W/unit" $SH "$V140" "$@" > "$W/out" 2>&1; echo $? > 
 run142() { PMCP_TEST_ROOT="$W/unit" $SH "$V142" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 # the experimental card f2a7ceb5 (v1.4.1 + Android Auto, rg-aa in pmcp-guidance-aa.jar); optional (only [25] needs it)
 EXP141="${PMCP_EXP141_SD:-$SDB/../sd-f2a7ceb5}/pmcp/pmcp.sh"
+# an experimental card on v1.4.3 (experimental-143 84472aa9, rg-aa in pmcp-guidance-aa2.jar); only [26] needs it
+EXP143="${PMCP_EXP143_SD:-$SDB/../sd-84472aa9}/pmcp/pmcp.sh"
 runexp141() { PMCP_TEST_ROOT="$W/unit" $SH "$EXP141" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
+runexp143() { PMCP_TEST_ROOT="$W/unit" $SH "$EXP143" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 run13() { PMCP_TEST_ROOT="$W/unit" $SH "$V13" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 runexp() { PMCP_TEST_ROOT="$W/unit" $SH "$EXP" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 confirm_now() { mkdir -p "$W/unit/mnt/persist/pmcp"; read s rest < "$U/carplaymaps/HMI_BOOT"; touch "$W/unit/mnt/persist/pmcp/ok.$s"; }
@@ -759,6 +762,23 @@ PEOF
         [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore after f2a7ceb5 -> this card: exact factory tree" || bad "tree after restore"
     else
         bad "experimental card f2a7ceb5 missing: $EXP141 (set PMCP_EXP141_SD)"
+    fi
+
+
+    echo "[26] experimental card 84472aa9 (v1.4.3 + AA on, rg-aa2) -> button 3 of this card: AA off, rg-aa2 -> rg"
+    if [ -f "$EXP143" ]; then
+        fresh_unit; factory=$(snapshot "$W/unit")
+        runexp143 install map-square-fps40; rc_is 0; runexp143 rg-system-on; rc_is 0; runexp143 java-on nai; rc_is 0
+        runexp143 java-on rg-aa; rc_is 0; confirm_now; runexp143 aa-on; rc_is 0
+        grep -q "pmcp-guidance-aa2.jar" "$U/carplaymaps/HMI_BOOT" && ok "84472aa9 unit: rg-aa2 in the set, AA on" || bad "84472aa9 setup: $(cat "$U/carplaymaps/HMI_BOOT")"
+        allon; rc_is 0; expect_out "PMCP_AA_REMOVE_OK" "button 3: AA off first"; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rg-aa2 -> rg"
+        expect_out "PMCP_ALL_ON_OK" "button 3 done"
+        [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa2.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar")" = "$(jsha rg)" ] \
+            && ok "pmcp-guidance-aa2.jar gone, pmcp-guidance3.jar in place" || bad "JARs after button 3 from 84472aa9"
+        run restore; rc_is 0
+        [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore after 84472aa9 -> this card: exact factory tree" || bad "tree after restore"
+    else
+        bad "experimental card 84472aa9 missing: $EXP143 (set PMCP_EXP143_SD)"
     fi
 
 done

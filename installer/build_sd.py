@@ -125,6 +125,8 @@ JAVA_OLD = [
     ("rg", "8e25ae00d155c1cf47cb7661b376c93464ea505141bf83d915b1867047f437cb", "e7222ae3bf7a796ba7a87b09774bf073d9d74689", 49045, "pmcp-guidance2.jar", "rg"),
     # experimental card f2a7ceb5 (v1.4.1 + Android Auto): rg-aa = rg with the AA guidance reader; button 3 takes AA off first
     ("rg-aa", "4f9215bfacb61e12cf2f1444a8b9297d2fa925d48bacd6ca6b778140088e9dc9", "c7125f3321201df065594a0ee84daecbcb3bcd67", 49388, "pmcp-guidance-aa.jar", "rg"),
+    # experimental cards on v1.4.3 (experimental-143, e.g. 84472aa9): rg-aa rebuilt on the v1.4.3 rg (quiet-route hold)
+    ("rg-aa", "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", "9af25147b2bad492cde17451966f689a37cd077f", 53309, "pmcp-guidance-aa2.jar", "rg"),
 ]
 for name in VARIANTS:
     PAYLOAD["CORE_" + name] = (TUNING / name / "core.so", None, 75099, "core/%s/core.so" % name)

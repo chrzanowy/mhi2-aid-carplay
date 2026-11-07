@@ -222,7 +222,7 @@ Ten projekt nie powstałby bez:
   `core.so` (liczba klatek, klatki kluczowe, URL, safe area), klasy NavActiveIgnore i rozwiązanie natywnego prowadzenia
   (łańcuch łatek sterownika, most HMI, czytnik RGI), które `rg/` przenosi na MU1161: MU1427 v1.2.0 (strzałki, dystans,
   ETA, ścisłe mapowanie manewrów `LiveModel.map`), pasy ruchu z MU1367 v1.4.0 oraz pasek odległości, nazwa ulicy
-  i odzyskiwanie strumienia z MU1367 v1.4.3.
+  i odzyskiwanie strumienia z MU1367 v1.4.3 oraz podtrzymanie trasy Apple Maps z MU1367 v1.4.4 (nasze v1.4.3).
 - **[mathsls/MHI2-Carplay-Maps](https://github.com/mathsls/MHI2-Carplay-Maps)**: pierwszy build dla MU1161 + AID 791.
   Z niego pochodzą miejsca rozmiaru fizycznego i układ wariantu `map-square`.
 - **[ZzYunOvO/MHI2-Carplay-Maps](https://github.com/ZzYunOvO/MHI2-Carplay-Maps)**: zestaw narzędzi, na którym opierają

@@ -243,7 +243,7 @@ This project would not exist without:
   sites (frame rate, key frames, URL, safe area), NavActiveIgnore classes, and the native route guidance solution
   (driver patch chain, HMI bridge, RGI reader) that `rg/` ports to MU1161: MU1427 v1.2.0 (arrows, distance, ETA, the
   strict maneuver mapping `LiveModel.map`), MU1367 v1.4.0 lane guidance, and MU1367 v1.4.3 distance bar, street name and
-  feed recovery.
+  feed recovery, and the MU1367 v1.4.4 quiet-route hold for Apple Maps (v1.4.3).
 - **[mathsls/MHI2-Carplay-Maps](https://github.com/mathsls/MHI2-Carplay-Maps)**: the first MU1161 + AID 791 build. The
   physical-size sites and the layout used by `map-square` come from it.
 - **[ZzYunOvO/MHI2-Carplay-Maps](https://github.com/ZzYunOvO/MHI2-Carplay-Maps)**: the toolbox that the mathsls and
