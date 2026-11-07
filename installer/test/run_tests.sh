@@ -867,6 +867,12 @@ PEOF
     run status; expect_out "Unit state: JAVA" "card ab9fb348's gamma set: not PARTIAL"; expect_out "Android Auto (experimental): old mode=gamma" "status: old gamma"
     run aa-status; expect_out "Android Auto on brings them up to date" "aa-status says what to do"
     run aa-on; rc_is 0; [ "$(h "$AAD/aa-most-feeder")" != "$(h "$OLDC/aa-most-feeder-sync")" ] && grep -q PACE_KBPS "$AAD/feeder.conf" && ok "feeder v8 -> v9, pacing settings" || bad "not updated"
+    # card f2a7ceb5 / fd0c7a7c (feeder v9) -> v10 (A-AA33): the set on the unit before the v10 card
+    OLD9="${PMCP_AA_OLD9:-$SDB/../sd-f2a7ceb5}/pmcp/payload/aa"
+    cp "$OLD9/aa-most-feeder" "$AAD/aa-most-feeder"; cp "$OLD9/feeder.conf" "$AAD/feeder.conf"; cp "$OLD9/libgal_hook.so" "$AAD/libgal_hook.so"; cp "$OLD9/gal-hook.conf" "$AAD/gal-hook.conf"
+    echo "gamma-bdd76a85-5d2a0a02-716516eb" > "$AAD/AA_BOOT"
+    run status; expect_out "Android Auto (experimental): old mode=gamma" "card f2a7ceb5's gamma set (feeder v9): old"
+    run aa-on; rc_is 0; [ "$(h "$AAD/aa-most-feeder")" = c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7 ] && grep -q '^PMCP_AA_PACE_GAP_MS=25$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_KF_BRIDGE=0$' "$AAD/feeder.conf" && ok "feeder v9 -> v10, gap + no focus cycle" || bad "v9 not updated"
     cp "$OLDG1/libgal_hook-gamma.so" "$AAD/libgal_hook.so"
     run status; expect_out "Unit state: PARTIAL" "a mix (g1 hook in the current set): PARTIAL"
     run aa-on; rc_is 1; expect_out "AA_NEEDS_STAGE_A_STATE_PARTIAL" "mix: aa-on refused"

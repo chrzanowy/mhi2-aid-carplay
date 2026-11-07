@@ -144,7 +144,7 @@ check(len([x for x in bridge_log(P) if x.get('type') == 2]) == 20, 'E: 20 frames
 
 # F: fresh IDR requests (v2). 'K' once 300 ms after the takeover, then for each bridge request, at most one per 1000 ms
 d, P, exp, acks, rc = run('F', 'most', n_frames=150, idr_every=50, kf_at=[60, 63, 120],
-                          conf='PMCP_AA_MODE=most\nPMCP_AA_KF_TAKE_MS=300\nPMCP_AA_KF_MIN_MS=1000\n')
+                          conf='PMCP_AA_MODE=most\nPMCP_AA_KF_TAKE_MS=300\nPMCP_AA_KF_MIN_MS=1000\nPMCP_AA_KF_BRIDGE=1\n')
 st = open(P('status.txt')).read(); kl = [l for l in st.split('\n') if l.startswith('IDR prosby')]
 print(kl)
 check(acks == 150, 'F: K bytes are not counted as ACKs, one ACK per frame (%d)' % acks)
@@ -207,7 +207,7 @@ check('bridge: reset_opoznienia=1' in st, 'K: bridge summary in the status')
 
 # M: v5 config method (soft mode): 'C' instead of 'K', once after the takeover and on a bridge request
 d, P, exp, acks, rc = run('M', 'most', n_frames=150, kf_at=[130],
-                          conf='PMCP_AA_MODE=most\nPMCP_AA_KF_METHOD=config\nPMCP_AA_KF_TAKE_MS=300\n')
+                          conf='PMCP_AA_MODE=most\nPMCP_AA_KF_METHOD=config\nPMCP_AA_KF_TAKE_MS=300\nPMCP_AA_KF_BRIDGE=1\n')
 st = open(P('status.txt')).read(); kl = [l for l in st.split('\n') if l.startswith('IDR prosby')]
 check(CS['M'] == 2 and KS['M'] == 0, "M: config method: 2 x 'C', no 'K' (C=%d K=%d)" % (CS['M'], KS['M']))
 check(acks == 150, 'M: C bytes are not ACKs (%d)' % acks)
@@ -235,7 +235,7 @@ check(acks == 20, 'Q: still ACKs every frame (%d)' % acks)
 # R: AA 3 settings: 5 s before the stream connects, no 'C' probe any more (A-AA26: the phone dropped the connection)
 for cf in ('feeder-gamma.conf',):   # the only AA mode on this branch
     s3 = open(os.path.join(HERE, '..', '..', 'unit', cf)).read()
-    check('PMCP_AA_PACE_KBPS=2000' in s3 and 'PMCP_AA_PACE_BURST_KB=64' in s3 and 'PMCP_AA_SETTLE_MS=5000' in s3 and 'PMCP_AA_SYNC_HOLD_MS=3000' in s3 and 'PMCP_AA_SYNC_REPEAT_MS=500' in s3 and 'KF_METHOD' not in s3.replace("('C')", '') .split('PMCP_AA_MODE')[1] and 'KF_TAKE_MS' not in s3, 'R: AA 3 settings ' + cf)
+    check('PMCP_AA_PACE_KBPS=2000' in s3 and 'PMCP_AA_PACE_BURST_KB=64' in s3 and 'PMCP_AA_SETTLE_MS=5000' in s3 and 'PMCP_AA_SYNC_HOLD_MS=3000' in s3 and 'PMCP_AA_SYNC_REPEAT_MS=500' in s3 and 'KF_METHOD' not in s3.replace("('C')", '') .split('PMCP_AA_MODE')[1] and 'KF_TAKE_MS' not in s3 and 'PMCP_AA_PACE_GAP_MS=25' in s3 and 'PMCP_AA_KF_BRIDGE=0' in s3, 'R: AA 3 settings ' + cf)
 s3 = open(os.path.join(HERE, '..', '..', 'unit', 'feeder-gamma.conf')).read()
 d, P, exp, acks, rc = run('R', 'most', n_frames=60, conf=s3.replace('=5000', '=2500'))
 check(CS['R'] == 0 and KS['R'] == 0, "R: no probe after the takeover (C=%d K=%d)" % (CS['R'], KS['R']))
@@ -312,14 +312,45 @@ gap = (fr[1]['ts'] - fr[0]['ts']) / 2.0 ** 32 if len(fr) > 1 else 0
 check(0.6 <= gap < 2.0, 'U: the frame after a 60 KB IDR waits for the budget (%.2f s)' % gap)
 check(wait_for(lambda: len(dmdt_lines(P)) >= 4), 'U: restored')
 
-# V (v9): pacing queue full (PACE_MAX 48 frames) -> everything out at once, counted; nothing lost
-d, P, exp, acks, rc = run('V', 'most', n_frames=90, idr_every=100,
+# V (v10): pacing queue 3/4 full (192 of 256) -> drained over the byte budget, never all at once; nothing lost
+d, P, exp, acks, rc = run('V', 'most', n_frames=260, idr_every=1000,
                           conf='PMCP_AA_MODE=most\nPMCP_AA_PACE_KBPS=100\nPMCP_AA_PACE_BURST_KB=8\n', ack_idle=3.5)
 st = open(P('status.txt')).read(); pl = [l for l in st.split('\n') if l.startswith('dawkowanie:')]
 ok, nf = frames_ok(bridge_log(P), exp)
-check(ok and nf == 90, 'V: every frame in order (%d)' % nf)
-check(acks == 90, 'V: one ACK per frame (%d)' % acks)
-check(pl and 'przepelnienie=0' not in pl[0] and 'kolejka max=48' in pl[0], 'V: full queue flushed %s' % pl)
+check(ok and nf == 260, 'V: every frame in order (%d)' % nf)
+check(acks == 260, 'V: one ACK per frame (%d)' % acks)
+qm = int(pl[0].split('kolejka max=')[1].split('/')[0]) if pl else 0
+check(pl and 'przepelnienie=0' in pl[0] and 'oproznianie=0 ' not in pl[0] and 190 <= qm <= 194, 'V: drained at 3/4, no overflow %s' % pl)
+
+# V2 (v10): a 100 ms gap cannot keep up with 30 fps: the queue fills (256), only the oldest frames go for room
+d, P, exp, acks, rc = run('V2', 'most', n_frames=420, idr_every=1000,
+                          conf='PMCP_AA_MODE=most\nPMCP_AA_PACE_GAP_MS=100\n', ack_idle=3.5)
+st = open(P('status.txt')).read(); pl = [l for l in st.split('\n') if l.startswith('dawkowanie:')]
+ok, nf = frames_ok(bridge_log(P), exp)
+check(ok and nf == 420, 'V2: every frame in order (%d)' % nf)
+check(acks == 420, 'V2: one ACK per frame (%d)' % acks)
+check(pl and 'przepelnienie=0' not in pl[0] and 'kolejka max=256/256' in pl[0] and 'odstep 100ms' in pl[0], 'V2: full queue, room made %s' % pl)
+
+# T (v10): start hold + 25 ms gap: the frames held during the hold go into the ring spaced, not as one burst
+d, P, exp, acks, rc = run('T', 'most', n_frames=60, idr_every=100,
+                          conf='PMCP_AA_MODE=most\nPMCP_AA_SYNC_HOLD_MS=600\nPMCP_AA_SYNC_REPEAT_MS=200\nPMCP_AA_PACE_GAP_MS=25\n')
+st = open(P('status.txt')).read(); sl = [l for l in st.split('\n') if l.startswith('sync startu')]
+rep = int(sl[0].split('powtorki IDR=')[1].split()[0]) if sl else -1
+held = int(sl[0].split('wstrzymane klatki=')[1].split()[0]) if sl else 0
+e = bridge_log(P); ok, nf = frames_ok(e, [exp[0]] * (1 + rep) + exp[1:])
+check(sl and 'zrobiony' in sl[0] and held >= 10 and ok and nf == 60 + rep, 'T: sync, %d held, every frame in order (%d)' % (held, nf))
+fr = [x for x in e if x.get('type') == 2][1 + rep:]
+gaps = [(b['ts'] - a['ts']) / 2.0 ** 32 for a, b in zip(fr, fr[1:])]
+check(gaps and min(gaps) >= 0.022, 'T: frames after the hold at least ~25 ms apart (min %.3f s)' % (min(gaps) if gaps else 0))
+check(acks == 60, 'T: one ACK per frame (%d)' % acks)
+
+# X (v10): default: the bridge's IDR request file is removed and counted, nothing goes to the hook
+d, P, exp, acks, rc = run('X', 'most', n_frames=90, kf_at=[30, 60], conf='PMCP_AA_MODE=most\nPMCP_AA_KF_MIN_MS=1000\n')
+st = open(P('status.txt')).read(); kl = [l for l in st.split('\n') if l.startswith('IDR prosby')]
+check(KS['X'] == 0 and CS['X'] == 0, "X: no 'K'/'C' for bridge requests (K=%d C=%d)" % (KS['X'], CS['X']))
+check(kl and 'bridge=2 ' in kl[0] and 'wyslane=0 ' in kl[0] and 'zignorowane=2 (prosby bridge nie ida do telefonu)' in kl[0], 'X: counted only %s' % kl)
+check(not os.path.exists(P('kf.request')), 'X: request file removed')
+check(acks == 90, 'X: one ACK per frame (%d)' % acks)
 
 # W (v9): the shipped AA 3 / gamma settings (start sync + pacing), shorter: sync then paced frames, nothing lost
 s3 = open(os.path.join(HERE, '..', '..', 'unit', 'feeder-gamma.conf')).read()
@@ -330,7 +361,7 @@ rep = int(sl[0].split('powtorki IDR=')[1].split()[0]) if sl else -1
 ok, nf = frames_ok(bridge_log(P), [exp[0]] * (1 + rep) + exp[1:])
 check(sl and 'zrobiony' in sl[0] and ok and nf == 60 + rep, 'W: sync + pacing, every frame in order (%d, %s)' % (nf, sl))
 check(acks == 60, 'W: one ACK per frame (%d)' % acks)
-check(any(l.startswith('dawkowanie: 2000 kbit/s zapas 64 KB') for l in st.split('\n')), 'W: pacing on in the gamma settings')
+check(any(l.startswith('dawkowanie: 2000 kbit/s zapas 64 KB odstep 25ms') for l in st.split('\n')), 'W: pacing + gap on in the gamma settings')
 
 # diagnostics (v9) in A: windows, gaps, large frames (two 60 KB IDRs), pacing off
 st = open(P_A('status.txt')).read().split('\n')

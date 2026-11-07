@@ -73,6 +73,19 @@
  *   Diagnostics: frames per 10 s for the last 5 min, the longest gap between frames (and when), the last large frames,
  *   and how long ago the last frame came, so the status tells "the phone stopped sending" from "frames still came".
  *
+ * v10 (car, A-AA33): one session of v9 ended like A-AA11. Around 128 s the pacing queue was full (48) and went out at
+ * once; the bridge (omonob source: more than 1024 TS packets = ~188 KB = ~125 ms of MOST queued when a frame comes) did
+ * a latency-reset, lost the frames until an IDR and asked for one; the feeder
+ * turned that into a focus cycle; the phone sent the IDR, dropped to ~3 fps and the connection reset ~130 s later. The
+ * start hold also put its 15 held frames into the ring at once. The rule now: the ring never gets a burst.
+ *   - PMCP_AA_PACE_GAP_MS (default 0 = off): at least this long between two frames into the ring, also for the frames
+ *     after the start hold and the ones queued by the byte budget;
+ *   - the queue is larger (PACE_MAX / PACE_POOL); from 3/4 full it drains on a second byte budget,
+ *     PMCP_AA_PACE_DRAIN_KBPS (default 8000, burst 128 KB: below the bridge's 188 KB and the 12.288 Mbit/s of MOST),
+ *     still with the gap; when it is full only the oldest frames needed for room go out (counted), never the whole queue;
+ *   - PMCP_AA_KF_BRIDGE (default 0): the bridge's IDR request file is removed and counted, but no focus cycle / config
+ *     resend follows unless this is 1 (both break the phone's session, A-AA11/A-AA15).
+ *
  * Modes (PMCP_AA_MODE): "analyze" (default) only reads, ACKs and writes a summary; the cluster keeps
  * the VW map. "most" also takes the MOST channel over. The summary is rewritten once a second to
  * PMCP_AA_STATUS (default /ramdisk/pmcp-aa-feeder.txt); nothing grows without bound.
@@ -103,7 +116,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-#define FEEDER_VERSION "9"
+#define FEEDER_VERSION "10"
 
 #define RING_MAGIC      0x43505247u
 #define RING_VERSION    1u
@@ -122,8 +135,8 @@
 #define SYNC_POOL       (768u * 1024u)    /* frames the phone sent during the start hold (window: 8) */
 #define SYNC_HELD_MAX   32u
 #define IDR_LOG_MAX     6u
-#define PACE_POOL       (1024u * 1024u)   /* frames waiting for the pacing budget (v9) */
-#define PACE_MAX        48u
+#define PACE_POOL       (4096u * 1024u)   /* frames waiting for the pacing budget (v9; v10: 4 MB) */
+#define PACE_MAX        256u              /* v10: ~8 s at 30 fps */
 #define WIN_N           30u               /* 10 s windows kept: 5 min */
 #define WIN_US          10000000u
 #define BIG_LOG_MAX     6u
@@ -135,6 +148,11 @@ static unsigned long g_wait_ms, g_settle_ms, g_cp_wait_ms;
 static const char *g_cp_ready_path;
 static unsigned long g_sync_hold_ms, g_sync_repeat_ms;
 static double g_pace_bps, g_pace_burst;  /* v9 pacing: bytes per second into the ring, 0 = off; burst in bytes */
+static uint64_t g_pace_gap_us;           /* v10: least time between two frames into the ring, 0 = off */
+static double g_drain_bps, g_drain_burst, g_dtok;   /* v10: byte budget for draining a 3/4 full queue */
+static uint64_t g_dtok_t;
+static uint64_t g_pace_last_us;          /* v10: when the last frame went into the ring */
+static int g_kf_bridge_on;               /* v10: 1 = the bridge's IDR request sends K/C to the hook */
 static uint8_t g_kf_byte = 'K';   /* K = focus cycle, C = resend setup response (v5) */
 static unsigned long g_kf_take_ms, g_kf_min_ms;
 static uint64_t g_kf_take_due;   /* one request this long after the takeover; 0 = none pending */
@@ -187,7 +205,8 @@ static const char *const CONF_KEYS[] = { "PMCP_AA_MODE", "PMCP_AA_RATE_KBPS", "P
                                          "PMCP_AA_KF_TAKE_MS", "PMCP_AA_KF_MIN_MS", "PMCP_AA_WAIT_MS",
                                          "PMCP_AA_SETTLE_MS", "PMCP_AA_KF_METHOD", "PMCP_AA_SYNC_HOLD_MS",
                                          "PMCP_AA_SYNC_REPEAT_MS", "PMCP_AA_CP_WAIT_MS", "PMCP_AA_PACE_KBPS",
-                                         "PMCP_AA_PACE_BURST_KB", NULL };
+                                         "PMCP_AA_PACE_BURST_KB", "PMCP_AA_PACE_GAP_MS", "PMCP_AA_KF_BRIDGE",
+                                         "PMCP_AA_PACE_DRAIN_KBPS", NULL };
 
 static void load_conf(const char *path)
 {
@@ -223,6 +242,7 @@ typedef struct {
     int dmdt_release_rc, dmdt_restore_rc;
     long bridge_pid;
     unsigned long kf_bridge, kf_take, kf_sent, kf_skipped, kf_failed, kf_idr_ms_last, kf_idr_ms_max, kf_no_idr;
+    unsigned long kf_ignored;                  /* v10: bridge requests not passed on */
     unsigned long take_wait_ms;
     char take_wait_reason[40];
     char ring_file[48];                        /* v8: what happened to an existing ring file */
@@ -232,6 +252,7 @@ typedef struct {
     unsigned long sync_repeats, sync_held, sync_hold_ms, sync_overflow;
     /* v9 */
     unsigned long pace_delayed, pace_wait_max_ms, pace_q_hi, pace_overflow;
+    unsigned long pace_drain;                 /* v10: frames out over the byte budget to drain the queue */
     uint64_t last_frame_us, gap_max_us, gap_max_at_us;
     unsigned long gaps_1s, gaps_3s;
     unsigned long win[WIN_N], win_kb[WIN_N];  /* frames / KB per 10 s window, circular */
@@ -291,10 +312,11 @@ static unsigned long since_take_s(uint64_t t)
 static void write_status_v9(FILE *f, uint64_t t)
 {
     unsigned long k, first;
-    if (g_pace_bps > 0.0)
-        fprintf(f, "dawkowanie: %.0f kbit/s zapas %.0f KB opoznione=%lu czekanie max=%lums kolejka max=%lu przepelnienie=%lu\n",
-                g_pace_bps * 8.0 / 1000.0, g_pace_burst / 1000.0, S.pace_delayed, S.pace_wait_max_ms, S.pace_q_hi,
-                S.pace_overflow);
+    if (g_pace_bps > 0.0 || g_pace_gap_us != 0u)
+        fprintf(f, "dawkowanie: %.0f kbit/s zapas %.0f KB odstep %lums opoznione=%lu czekanie max=%lums kolejka max=%lu/%u "
+                "oproznianie=%lu przepelnienie=%lu\n",
+                g_pace_bps * 8.0 / 1000.0, g_pace_burst / 1000.0, (unsigned long)(g_pace_gap_us / 1000u), S.pace_delayed,
+                S.pace_wait_max_ms, S.pace_q_hi, PACE_MAX, S.pace_drain, S.pace_overflow);
     else
         fprintf(f, "dawkowanie: wylaczone\n");
     if (S.last_frame_us)
@@ -353,8 +375,10 @@ static void write_status(void)
     fprintf(f, "odrzucone duze=%lu nieparsowalne=%lu\n", S.dropped_big, S.dropped_unparsed);
     fprintf(f, "MOST %s ring=%lu avcC=%lu straznik=%ld dmdt=%d/%d\n", S.most_state[0] ? S.most_state : "-",
             S.ring_writes, S.avcc_writes, S.bridge_pid, S.dmdt_release_rc, S.dmdt_restore_rc);
-    fprintf(f, "IDR prosby (%s): bridge=%lu start=%lu wyslane=%lu pominiete=%lu bledy=%lu IDR po %lums (max %lums) bez IDR=%lu\n",
-            g_kf_byte == 'C' ? "config" : "focus", S.kf_bridge, S.kf_take, S.kf_sent, S.kf_skipped, S.kf_failed, S.kf_idr_ms_last, S.kf_idr_ms_max, S.kf_no_idr);
+    fprintf(f, "IDR prosby (%s): bridge=%lu start=%lu wyslane=%lu pominiete=%lu bledy=%lu IDR po %lums (max %lums) bez IDR=%lu"
+            " zignorowane=%lu%s\n",
+            g_kf_byte == 'C' ? "config" : "focus", S.kf_bridge, S.kf_take, S.kf_sent, S.kf_skipped, S.kf_failed, S.kf_idr_ms_last,
+            S.kf_idr_ms_max, S.kf_no_idr, S.kf_ignored, g_kf_bridge_on ? "" : " (prosby bridge nie ida do telefonu)");
     fprintf(f, "blad: %s\n", S.last_error[0] ? S.last_error : "-");
     if (S.ring_file[0]) fprintf(f, "plik ringu: %s\n", S.ring_file);
     if (S.take_wait_ms) fprintf(f, "czekanie przed przejeciem MOST: %lums (%s)\n", S.take_wait_ms,
@@ -1011,7 +1035,7 @@ static void kf_poll(uint64_t t)
     if (t - last_check >= 100000u && (last_check = t, access(g_kf_req_path, F_OK) == 0)) {
         (void)unlink(g_kf_req_path);
         S.kf_bridge++;
-        kf_send(t);
+        if (g_kf_bridge_on) kf_send(t); else S.kf_ignored++;   /* v10: no focus cycle for the bridge by default */
     }
     if (g_kf_take_due != 0u && t >= g_kf_take_due) {
         g_kf_take_due = 0u;
@@ -1059,6 +1083,16 @@ static unsigned g_pace_n;
 static double g_ptok;                          /* bytes of budget; may go negative after a large frame */
 static uint64_t g_ptok_t;
 
+static void drain_refill(uint64_t t)
+{
+    if (g_dtok_t == 0u) { g_dtok_t = t; g_dtok = g_drain_burst; return; }
+    if (t > g_dtok_t) {
+        g_dtok += (double)(t - g_dtok_t) * g_drain_bps / 1e6;
+        if (g_dtok > g_drain_burst) g_dtok = g_drain_burst;
+        g_dtok_t = t;
+    }
+}
+
 static void pace_refill(uint64_t t)
 {
     if (g_ptok_t == 0u) { g_ptok_t = t; g_ptok = g_pace_burst; return; }
@@ -1072,8 +1106,10 @@ static void pace_refill(uint64_t t)
 /* One frame into the ring now, charged to the budget, then its ACK. */
 static void pace_emit(const uint8_t *au, unsigned len, unsigned ack)
 {
+    g_pace_last_us = now_us();
     if (g_ring != NULL) ring_put(RING_TYPE_FRAME, au, len, (uint32_t)++g_frame_no);
     if (g_pace_bps > 0.0) g_ptok -= (double)len;
+    drain_refill(g_pace_last_us); g_dtok -= (double)len;
     ack_schedule(ack);
 }
 
@@ -1090,7 +1126,7 @@ static void pace_pop(uint64_t t)
     g_pace_n--;
 }
 
-/* Everything queued out at once (stream config change, start sync, full queue, end). The budget then starts from 0, not
+/* Everything queued out at once (stream config change, end; v10: no longer for a full queue or the start hold). The budget then starts from 0, not
  * from the debt of the whole flush, or the frames after it would wait for seconds. */
 static void pace_flush(void)
 {
@@ -1100,36 +1136,76 @@ static void pace_flush(void)
     if (g_ptok < 0.0) g_ptok = 0.0;
 }
 
-/* Main loop: queued frames out while the budget allows. */
+/* v10: the gap since the last frame into the ring has passed. */
+static int pace_gap_ok(uint64_t t)
+{
+    return g_pace_gap_us == 0u || g_pace_last_us == 0u || t >= g_pace_last_us + g_pace_gap_us;
+}
+
+/* v10: the queue is 3/4 full: drain it at the gap rate, whatever the byte budget says. */
+static int pace_draining(void)
+{
+    return g_pace_n * 4u >= PACE_MAX * 3u || g_pace_pool_len * 4u >= PACE_POOL * 3u;
+}
+
+/* One queued frame may go now. */
+static int pace_may_pop(uint64_t t)
+{
+    if (g_pace_n == 0u) return 0;
+    if (!pace_gap_ok(t)) return 0;
+    if (g_pace_bps <= 0.0 || g_ptok >= 0.0) return 1;
+    if (!pace_draining()) return 0;
+    drain_refill(t);
+    return g_dtok >= 0.0;
+}
+
+/* Main loop: queued frames out while the budget and the gap allow (with a gap: one per pass). */
 static void pace_poll(uint64_t t)
 {
     if (g_pace_n == 0u) return;
-    pace_refill(t);
-    while (g_pace_n > 0u && g_ptok >= 0.0) pace_pop(t);
+    if (g_pace_bps > 0.0) pace_refill(t);
+    while (pace_may_pop(t)) {
+        if (g_pace_bps > 0.0 && g_ptok < 0.0) {     /* draining: the debt is capped so the queue does not stall after */
+            S.pace_drain++;
+            if (g_ptok < -g_pace_burst) g_ptok = -g_pace_burst;   /* the drain budget limits these */
+        }
+        pace_pop(t);
+        if (g_pace_gap_us != 0u) break;
+    }
 }
 
 /* Milliseconds until the next queued frame may go, or -1. */
 static int pace_timeout_ms(uint64_t t)
 {
+    int ms = 0;
     if (g_pace_n == 0u) return -1;
-    pace_refill(t);
-    if (g_ptok >= 0.0) return 0;
-    return (int)(-g_ptok * 1000.0 / g_pace_bps) + 1;
+    if (g_pace_bps > 0.0) {
+        pace_refill(t);
+        if (g_ptok < 0.0) {
+            if (!pace_draining()) ms = (int)(-g_ptok * 1000.0 / g_pace_bps) + 1;
+            else { drain_refill(t); if (g_dtok < 0.0) ms = (int)(-g_dtok * 1000.0 / g_drain_bps) + 1; }
+        }
+    }
+    if (!pace_gap_ok(t)) {
+        int g = (int)((g_pace_last_us + g_pace_gap_us - t + 999u) / 1000u);
+        if (g > ms) ms = g;
+    }
+    return ms;
 }
 
 /* A frame (ring data + its input size for the ACK): straight out when nothing waits and the budget allows, else queued. */
 static void pace_out(const uint8_t *au, unsigned len, unsigned ack)
 {
     uint64_t t;
-    if (g_pace_bps <= 0.0) { pace_emit(au, len, ack); return; }
+    if (g_pace_bps <= 0.0 && g_pace_gap_us == 0u) { pace_emit(au, len, ack); return; }
     t = now_us();
-    pace_refill(t);
-    if (g_pace_n == 0u && g_ptok >= 0.0) { pace_emit(au, len, ack); return; }
+    if (g_pace_bps > 0.0) pace_refill(t);
+    if (g_pace_n == 0u && (g_pace_bps <= 0.0 || g_ptok >= 0.0) && pace_gap_ok(t)) { pace_emit(au, len, ack); return; }
     if (g_pace_n == PACE_MAX || g_pace_pool_len + len > PACE_POOL) {
+        /* v10: full: only the oldest frames needed for room go out (the gap is not kept for them), never the whole queue */
         S.pace_overflow++;
-        pace_flush();
-        pace_emit(au, len, ack);
-        return;
+        while (g_pace_n > 0u && (g_pace_n == PACE_MAX || g_pace_pool_len + len > PACE_POOL)) pace_pop(t);
+        if (g_ptok < -g_pace_burst) g_ptok = -g_pace_burst;
     }
     memcpy(g_pace_pool + g_pace_pool_len, au, len);
     g_pace_pool_len += len;
@@ -1419,6 +1495,10 @@ int main(int argc, char **argv)
     g_sync_repeat_ms = env_ul("PMCP_AA_SYNC_REPEAT_MS", 500ul, 100ul, 2000ul);
     g_pace_bps = (double)env_ul("PMCP_AA_PACE_KBPS", 0ul, 0ul, 20000ul) * 1000.0 / 8.0;   /* 0 = no pacing (v9) */
     g_pace_burst = (double)env_ul("PMCP_AA_PACE_BURST_KB", 64ul, 8ul, 256ul) * 1000.0;
+    g_pace_gap_us = (uint64_t)env_ul("PMCP_AA_PACE_GAP_MS", 0ul, 0ul, 200ul) * 1000u;      /* 0 = no gap (v10) */
+    g_drain_bps = (double)env_ul("PMCP_AA_PACE_DRAIN_KBPS", 8000ul, 500ul, 12000ul) * 1000.0 / 8.0;
+    g_drain_burst = 128.0 * 1000.0;
+    g_kf_bridge_on = env_ul("PMCP_AA_KF_BRIDGE", 0ul, 0ul, 1ul) == 1ul;              /* 0 = bridge request only counted */
     if (strcmp(env_or("PMCP_AA_KF_METHOD", "focus"), "config") == 0) g_kf_byte = 'C';
     g_kf_take_ms = env_ul("PMCP_AA_KF_TAKE_MS", 0ul, 0ul, 10000ul);      /* 0 = no request after the takeover */
     g_kf_min_ms = env_ul("PMCP_AA_KF_MIN_MS", 3000ul, 1000ul, 60000ul);
