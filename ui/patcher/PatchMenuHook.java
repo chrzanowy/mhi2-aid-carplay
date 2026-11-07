@@ -26,7 +26,7 @@ import org.objectweb.asm.tree.VarInsnNode;
  * of MU1161 (the same class file as MU1367 K4525, sha256 7afadc2e). The idea and the hook points are omonob's
  * BuildNativeHook (MHI2-Carplay-Maps src/vc-menu, GPL-3.0); here every call is guarded (buildtools/Guard.java).
  *
- *   setup()V       before its one RETURN   MenuHook.attach(this)
+ *   init(Z)V       first                   MenuHook.attach(this)   (before the factory View.init)
  *   activate()V    before its one RETURN   MenuHook.refresh(this)
  *   deinit()V      before its one RETURN   MenuHook.detach(this)
  *   destroy()V     before its one RETURN   MenuHook.detach(this)
@@ -43,7 +43,12 @@ public final class PatchMenuHook {
     static final String TARGET_SHA256 = "7afadc2e226ef2b3444ea0e138e82fda5d839401d58e2beb0bcc00170972ddd6";
     static final int FACTORY_VERSION = 46;
     static final String[][] RETURN_HOOKS = {
-        {"setup", "attach"}, {"activate", "refresh"}, {"deinit", "detach"}, {"destroy", "detach"},
+        {"activate", "refresh"}, {"deinit", "detach"}, {"destroy", "detach"},
+    };
+    // At the start of init(boolean), not the end of setup(): the factory may run deinit -> init without a new setup
+    // (ScreenAreaDude zoom paths), and the page must come back there too. Both are before View.init.
+    static final String[][] START_HOOKS = {
+        {"init", "(Z)V", "attach"},
     };
 
     public static void main(String[] args) throws Exception {
@@ -87,6 +92,16 @@ public final class PatchMenuHook {
                 }
             }
             expect(returns == 1, hook[0] + " RETURN count " + returns);
+        }
+        for (String[] hook : START_HOOKS) {
+            MethodNode method = method(node, hook[0], hook[1]);
+            expect((method.access & Opcodes.ACC_STATIC) == 0, hook[0] + " instance method");
+            InsnList call = new InsnList();
+            call.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            MethodInsnNode invoke = new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, hook[2], desc, false);
+            call.add(invoke);
+            method.instructions.insert(call);
+            Guard.wrapCall(node.name, method, invoke, Guard.popArgsReturnZero(invoke.desc));
         }
         MethodNode fatal = method(node, "fatalError", "(Ljava/lang/RuntimeException;)V");
         expect((fatal.access & Opcodes.ACC_STATIC) == 0, "fatalError instance method");

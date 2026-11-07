@@ -76,21 +76,48 @@ public final class TestMenuHookPatch {
                 }
             }
         }
+        for (String[] hook : PatchMenuHook.START_HOOKS) {
+            if (hook[0].equals(m.name) && hook[1].equals(m.desc)) {
+                return "start:" + hook[2];
+            }
+        }
         if (m.name.equals("fatalError") && m.desc.equals("(Ljava/lang/RuntimeException;)V")) {
-            return "failure";
+            return "start:failure";
         }
         return null;
     }
 
-    static void checkHooked(MethodNode stock, MethodNode patched, String hook) {
+    static void checkHooked(MethodNode stock, MethodNode patched, String spec) {
+        boolean atStart = spec.startsWith("start:");
+        String hook = atStart ? spec.substring(6) : spec;
         List<AbstractInsnNode> a = real(stock);
         List<AbstractInsnNode> b = real(patched);
-        int j = 0;
         int calls = 0;
-        for (AbstractInsnNode insn : b) {
-            if (j < a.size() && same(a.get(j), insn)) {
-                j++;
+        int at = -1;
+        // factory instructions matched in order: from the end for a hook at the start (the guard's ALOAD 0 spill
+        // must not take the place of the factory's first ALOAD 0), from the start for a hook before RETURN
+        int[] matchPos = new int[a.size()];
+        boolean[] added = new boolean[b.size()];
+        int j;
+        if (atStart) {
+            j = a.size() - 1;
+            for (int k = b.size() - 1; k >= 0; k--) {
+                if (j >= 0 && same(a.get(j), b.get(k))) matchPos[j--] = k; else added[k] = true;
+            }
+            j = j < 0 ? a.size() : -1;
+        } else {
+            j = 0;
+            for (int k = 0; k < b.size(); k++) {
+                if (j < a.size() && same(a.get(j), b.get(k))) matchPos[j++] = k; else added[k] = true;
+            }
+        }
+        for (int k = 0; k < b.size(); k++) {
+            AbstractInsnNode insn = b.get(k);
+            if (!added[k]) {
                 continue;
+            }
+            if (insn instanceof MethodInsnNode) {
+                at = k;
             }
             int op = insn.getOpcode();
             if (insn instanceof MethodInsnNode) {
@@ -113,12 +140,30 @@ public final class TestMenuHookPatch {
             String pType = patched.tryCatchBlocks.get(i + 1).type;
             check(sType == null ? pType == null : sType.equals(pType), "factory handler kept in " + stock.name);
         }
-        if (hook.equals("failure")) {
-            // first real instructions: the guard spills this and e, then calls failure
-            check(b.get(b.size() - 1).getOpcode() == a.get(a.size() - 1).getOpcode(), "fatalError end unchanged");
+        if (atStart) {
+            check(at < matchPos[0], hook + " before the first factory instruction of " + stock.name);
         } else {
-            check(b.get(b.size() - 1).getOpcode() == Opcodes.RETURN, hook + " still ends with RETURN");
+            int last = a.size() - 1;
+            check(matchPos[last - 1] < at && at < matchPos[last] && matchPos[last] == b.size() - 1
+                    && b.get(b.size() - 1).getOpcode() == Opcodes.RETURN,
+                    hook + " between the factory body and its final RETURN in " + stock.name);
         }
+        // factory handlers keep their ranges: start, end and handler map to the same factory instructions
+        for (int i = 0; i < stock.tryCatchBlocks.size(); i++) {
+            TryCatchBlockNode x = stock.tryCatchBlocks.get(i);
+            TryCatchBlockNode y = patched.tryCatchBlocks.get(i + 1);
+            check(b.indexOf(first(y.start)) == matchPos[a.indexOf(first(x.start))]
+                    && b.indexOf(first(y.end)) == matchPos[a.indexOf(first(x.end))]
+                    && b.indexOf(first(y.handler)) == matchPos[a.indexOf(first(x.handler))],
+                    "factory handler range kept in " + stock.name);
+        }
+    }
+
+    static AbstractInsnNode first(LabelNode label) {
+        for (AbstractInsnNode n = label; n != null; n = n.getNext()) {
+            if (n.getOpcode() >= 0) return n;
+        }
+        throw new IllegalStateException("label without code");
     }
 
     static List<AbstractInsnNode> real(MethodNode m) {

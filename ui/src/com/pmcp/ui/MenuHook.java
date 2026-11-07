@@ -15,13 +15,15 @@ import java.util.Hashtable;
  * Each call site in the factory class is also wrapped in catch (Throwable) by the patcher: nothing from here, not even
  * a missing class, reaches the HMI.
  *
- *   setup()       end  -> attach   (widget tree built, before the factory View.init)
+ *   init(boolean) start-> attach   (widget tree built, before the factory View.init; also after deinit -> init
+ *                                    without a new setup, which the factory does on some screen-area paths)
  *   activate()    end  -> refresh
  *   deinit()      end  -> detach
  *   destroy()     end  -> detach
  *   fatalError()  start-> failure
  *
- * Switches: /tmp/pmcp-ui-off (RAM) keeps every view factory until the next start; a lifecycle error in our view sets it.
+ * Switches: /tmp/pmcp-ui-off (RAM) keeps every view factory until the next start; a lifecycle error in our view sets it
+ * and puts the factory widget tree back at once (also a factory lifecycle-order message counts: safe side).
  * GEM "Off ui" removes the package.
  */
 public final class MenuHook {
@@ -87,13 +89,20 @@ public final class MenuHook {
         }
     }
 
-    /** A lifecycle error in a view that has our page: no page again until the next start, and the stack in the log. */
+    /**
+     * A lifecycle error in a view that has our page: the factory tree back now (the factory code rethrows or goes on
+     * with its own widgets only), no page again until the next start, and the stack in the log.
+     */
     public static void failure(AbstractViewHandler handler, RuntimeException error) {
         try {
             if (PAGES.isEmpty() || !PAGES.containsKey(handler)) {
                 return;
             }
             disabled = true;
+            SettingsPage page = (SettingsPage) PAGES.remove(handler);
+            if (page != null) {
+                page.detach();
+            }
             FileOutputStream marker = new FileOutputStream(offSwitch);
             marker.close();
             StringWriter text = new StringWriter();

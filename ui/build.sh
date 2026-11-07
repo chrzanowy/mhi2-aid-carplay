@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Build the optional CarPlay settings page package (ui) from the exact MU1161 AbstractViewHandler.
 #   ASM_DIR=/path/to/asm-9.7 build.sh <converted lsd.jar> <fresh work dir>
-# Requires JDK 17+ (host tests use MethodHandles.privateLookupIn) and Python 3. JAVA_HOME may select the JDK.
+# Requires JDK 11+ (host tests use MethodHandles.privateLookupIn and Path.of) and Python 3. JAVA_HOME may select the JDK.
 set -euo pipefail
 
 STOCK_JAR=${1:?converted lsd jar}; W=${2:?fresh work dir}

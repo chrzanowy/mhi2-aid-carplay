@@ -272,6 +272,12 @@ public final class TestUi {
         javaSet(root, "rg-7b187484+sl-37b5d948+ui-12345678", "trial", true);
     }
 
+    /** As the factory: setup() then init(false); lifecycle CREATED -> INITIALIZED. */
+    static void start(Object handler) throws Exception {
+        HostRuntime.call(handler, "setup");
+        HostRuntime.init(handler);
+    }
+
     static void factoryState(Tree t, String what) {
         check(t.view.getChildren() == t.viewChildren || Arrays.equals(t.view.getChildren(), t.viewChildren),
                 what + ": view children are the factory ones");
@@ -283,8 +289,8 @@ public final class TestUi {
         hookEnv("page");
         Tree t = tree("SMI_SETUP_MAIN", 1280, 640, true);
         Object handler = HostRuntime.createdHandler(t.view);
-        HostRuntime.call(handler, "setup");
-        check(MenuHook.attachedCount() == 1, "attached at the end of setup()");
+        start(handler);
+        check(MenuHook.attachedCount() == 1, "attached at the start of init(), before View.init");
         SettingsPage page = MenuHook.pageOf((de.vw.mib.view.internal.AbstractViewHandler) handler);
         WidgetModel[] vc = t.view.getChildren();
         check(vc.length == t.viewChildren.length + 2, "view gets page and popup");
@@ -295,8 +301,14 @@ public final class TestUi {
         check(((TemplateListModel) t.list).getWidgetCloneFactory() != t.factory, "entry clone factory installed");
         check(SettingsPage.findId(t.view, SettingsPage.ID_SELECTOR).getParent() == t.listChildren[1], "selector untouched");
 
-        HostRuntime.init(handler);   // lifecycle 2 -> 3, as the factory does after setup()
-        check(page.isAttached() && MenuHook.attachedCount() == 1, "factory View.init over our widgets");
+        check(page.isAttached(), "factory View.init ran over our widgets");
+        // the setup list clones our entry while scrolling: the clone gets a listener, which goes with the clone
+        int listenersBefore = page.listenerCount();
+        WidgetCloneFactory cf = ((TemplateListModel) t.list).getWidgetCloneFactory();
+        WidgetCloneable clone = cf.createWidgetCloneable((WidgetCloneable) page.entry());
+        check(clone != null && clone != page.entry() && page.listenerCount() == listenersBefore + 1, "entry clone with listener");
+        cf.destroyWidgetCloneable(clone);
+        check(page.listenerCount() == listenersBefore, "destroyed clone drops its listener");
         HostRuntime.call(handler, "activate");
         check(!page.isPageVisible() && !page.isPopupVisible(), "activate: factory list shown");
         check("Before street name".equals(page.rowValue(0)) || "Off".equals(page.rowValue(0)), "row value " + page.rowValue(0));
@@ -346,12 +358,20 @@ public final class TestUi {
         check(MenuHook.attachedCount() == 0 && !page.isAttached(), "deinit detaches");
         factoryState(t, "after deinit");
         check(t.view.getChildren() == t.viewChildren, "exact factory view array back");
+        // the factory may run deinit -> init again without a new setup (screen-area zoom paths): the page comes back
+        HostRuntime.setLifeCycle(handler, 2);
+        HostRuntime.init(handler);
+        check(MenuHook.attachedCount() == 1, "deinit -> init without setup: attached again");
+        HostRuntime.call(handler, "activate");
+        HostRuntime.call(handler, "deactivate");
+        HostRuntime.call(handler, "deinit");
+        factoryState(t, "after the second deinit");
         HostRuntime.setLifeCycle(handler, 1);
         HostRuntime.call(handler, "destroy");
         factoryState(t, "after destroy");
         // setup again (view reused after teardown): a fresh page
         HostRuntime.setLifeCycle(handler, 1);
-        HostRuntime.call(handler, "setup");
+        start(handler);
         check(MenuHook.attachedCount() == 1, "attached again after a new setup");
         HostRuntime.setLifeCycle(handler, 3);
         HostRuntime.call(handler, "deinit");
@@ -363,7 +383,7 @@ public final class TestUi {
         hookEnv("missing");
         Tree t = tree("SMI_SETUP_MAIN", 1280, 640, false);
         Object handler = HostRuntime.createdHandler(t.view);
-        HostRuntime.call(handler, "setup");
+        start(handler);
         check(MenuHook.attachedCount() == 0, "no attach without the selector donor");
         factoryState(t, "missing donor");
         check(t.view.getChildren() == t.viewChildren, "view array not even replaced");
@@ -377,7 +397,7 @@ public final class TestUi {
         hookEnv("canvas");
         Tree small = tree("SMI_SETUP_MAIN", 800, 480, true);
         handler = HostRuntime.createdHandler(small.view);
-        HostRuntime.call(handler, "setup");
+        start(handler);
         check(MenuHook.attachedCount() == 0, "800x480 canvas refused");
         factoryState(small, "800x480");
     }
@@ -386,7 +406,7 @@ public final class TestUi {
         hookEnv("other");
         Tree t = tree("SYSTEM_SETUP_UNITS", 1280, 640, true);
         Object handler = HostRuntime.createdHandler(t.view);
-        HostRuntime.call(handler, "setup");
+        start(handler);
         check(MenuHook.attachedCount() == 0, "other view not attached");
         factoryState(t, "other view");
         HostRuntime.setLifeCycle(handler, 3);
@@ -400,24 +420,26 @@ public final class TestUi {
         Files.write(Path.of(MenuHook.offSwitch), new byte[0]);
         Tree t = tree("SMI_SETUP_MAIN", 1280, 640, true);
         Object handler = HostRuntime.createdHandler(t.view);
-        HostRuntime.call(handler, "setup");
+        start(handler);
         check(MenuHook.attachedCount() == 0, "off switch keeps the view factory");
         factoryState(t, "off switch");
 
         hookEnv("failure");
         Tree a = tree("SMI_SETUP_MAIN", 1280, 640, true);
         Object h1 = HostRuntime.createdHandler(a.view);
-        HostRuntime.call(h1, "setup");
+        start(h1);
         check(MenuHook.attachedCount() == 1, "attached before the failure");
         HostRuntime.fatal(h1, new IllegalStateException("lifecycle error in our view"));
         check(new File(MenuHook.offSwitch).exists(), "failure sets the off switch");
+        check(MenuHook.attachedCount() == 0, "failure detaches at once");
+        factoryState(a, "right after the failure");
         check(readLog().indexOf("lifecycle error in our view") >= 0, "stack logged");
         HostRuntime.setLifeCycle(h1, 3);
         HostRuntime.call(h1, "deinit");
         factoryState(a, "detached after failure");
         Tree b = tree("SMI_SETUP_MAIN", 1280, 640, true);
         Object h2 = HostRuntime.createdHandler(b.view);
-        HostRuntime.call(h2, "setup");
+        start(h2);
         check(MenuHook.attachedCount() == 0, "no new page after a failure");
         factoryState(b, "after failure");
         MenuHook.resetForTest();

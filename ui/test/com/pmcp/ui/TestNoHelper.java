@@ -25,13 +25,13 @@ public final class TestNoHelper {
         view.set_name("SMI_SETUP_MAIN");
         Object handler = HostRuntime.createdHandler(view);
         HostRuntime.call(handler, "setup");
-        HostRuntime.setLifeCycle(handler, 3);
+        HostRuntime.init(handler);
         HostRuntime.call(handler, "activate");
         HostRuntime.fatal(handler, new IllegalStateException("factory error path"));
         HostRuntime.setLifeCycle(handler, 3);
         HostRuntime.call(handler, "deinit");
         HostRuntime.setLifeCycle(handler, 1);
         HostRuntime.call(handler, "destroy");
-        System.out.println("UI_NO_HELPER_PASS 5");
+        System.out.println("UI_NO_HELPER_PASS 6");
     }
 }

@@ -103,6 +103,7 @@ final class SettingsPage {
     private final TextAreaModel[] optionLabels = new TextAreaModel[MAX_CHOICES];
 
     private final Vector listeners = new Vector();
+    private final Hashtable cloneListeners = new Hashtable();
     private final Hashtable copies = new Hashtable();
     private int nextId = 1049000000;
     private int activeRow = -1;
@@ -316,7 +317,7 @@ final class SettingsPage {
     }
 
     /**
-     * The only changes to the factory tree, done last. Called from MenuHook at the end of AbstractViewHandler.setup(),
+     * The only changes to the factory tree, done last. Called from MenuHook at the start of AbstractViewHandler.init(),
      * before the factory View.init(): its initialization then builds list caches and touch delegation for our widgets
      * too, once, like for its own. If one of the three changes fails, the ones already done are undone.
      */
@@ -326,9 +327,10 @@ final class SettingsPage {
             ((ContainerModel) stockList).setChildren(append(originalStockChildren, entryItem));
             view.setChildren(append(append(originalViewChildren, page), popup));
             attached = true;
-        } catch (RuntimeException error) {
+        } catch (Throwable error) {
+            // also a LinkageError: never leave our clone factory or entry in a list that is not in MenuHook's table
             detach();
-            throw error;
+            throw new IllegalStateException(new StringBuffer("attach rolled back: ").append(error).toString());
         }
         UiLog.log(new StringBuffer("PAGE_ATTACHED rows=").append(settings.length)
                 .append(" entries=").append(originalStockChildren.length).append("+1").toString());
@@ -390,6 +392,10 @@ final class SettingsPage {
         fill();
         ((WidgetListModel) stockList).validateList();
         entryItem.repaint();
+    }
+
+    int listenerCount() {
+        return listeners.size();
     }
 
     boolean isAttached() {
@@ -592,9 +598,8 @@ final class SettingsPage {
                 ListItemModel item = (ListItemModel) cloneTree(entryItem);
                 ButtonModel button = findButton(item);
                 prepareStaticItem(item, button);
-                push(button, ACTION_OPEN);
+                cloneListeners.put(item, push(button, ACTION_OPEN));
                 entryClones.addElement(item);
-                UiLog.log("ENTRY_CLONE_CREATED");
                 return (WidgetCloneable) item;
             } catch (Exception error) {
                 throw new IllegalStateException(error.toString());
@@ -603,7 +608,11 @@ final class SettingsPage {
 
         public void destroyWidgetCloneable(WidgetCloneable clone) {
             if (entryClones.removeElement(clone)) {
-                UiLog.log("ENTRY_CLONE_DESTROYED");
+                Object listener = cloneListeners.remove(clone);
+                if (listener != null) {
+                    removeListener(listener);
+                    listeners.removeElement(listener);
+                }
                 return;
             }
             originalCloneFactory.destroyWidgetCloneable(clone);
@@ -644,20 +653,21 @@ final class SettingsPage {
         }
     }
 
-    private void listen(WidgetModel widget, de.vw.mib.widgets.controller.WidgetController controller, int code) {
+    private Action listen(WidgetModel widget, de.vw.mib.widgets.controller.WidgetController controller, int code) {
         Action listener = new Action(controller, code);
         controller.addOutEventListener(listener);
         listeners.addElement(listener);
+        return listener;
     }
 
-    private void push(ButtonModel button, int code) {
+    private Action push(ButtonModel button, int code) {
         DefaultPushButtonController controller = new DefaultPushButtonController();
         button.setController(controller);
         controller.setWidget(button);
         button.set_predictiveActivation(false);
         button.set_buttonMode(ButtonModel.BUTTONMODE_DEFAULT);
         button.set_interactive(true);
-        listen(button, controller, code);
+        return listen(button, controller, code);
     }
 
     private static void prepareStaticItem(ListItemModel item, ButtonModel button) {

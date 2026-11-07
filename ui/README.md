@@ -23,7 +23,7 @@ Planned rows (later, they need changes in `core.so`): map layout, fps, IDR.
 
   | Method | Point | Call |
   |---|---|---|
-  | `setup()` | end | `attach` |
+  | `init(boolean)` | start, before the factory `View.init` | `attach` |
   | `activate()` | end | `refresh` |
   | `deinit()` | end | `detach` |
   | `destroy()` | end | `detach` |
@@ -32,6 +32,8 @@ Planned rows (later, they need changes in `core.so`): map layout, fps, IDR.
   Each call is wrapped in `catch (Throwable)` ([`buildtools/Guard.java`](../buildtools/Guard.java)), so nothing
   from this package can reach the HMI, not even a missing class. The build compares every method with the factory
   one ([`patcher/TestMenuHookPatch.java`](patcher/TestMenuHookPatch.java)).
+- `attach` runs at the start of `init` rather than at the end of `setup`. The factory can run `deinit` and then `init`
+  again without a new `setup`, and the entry must come back in that case too.
 - `attach` acts only on the view `SMI_SETUP_MAIN` on a 1280x640 canvas. It finds every factory widget it needs by
   targetId before it changes anything. If any of them is missing, or the canvas is a different size, the view stays
   factory and the reason is written to the log.
@@ -41,7 +43,12 @@ Planned rows (later, they need changes in `core.so`): map layout, fps, IDR.
   step at a time.
 - Log: `/tmp/pmcp-ui.log` (RAM, up to 64 KB).
 - Off switch for the current boot: create `/tmp/pmcp-ui-off`. A lifecycle error in the App-Connect view sets this
-  switch automatically.
+  switch automatically and puts the factory widget tree back at once. A factory lifecycle-order message counts as an
+  error here; that is the safe side.
+- The mode file is written as `.pmcp-new`, synced, renamed over the file and read back. Unlike `pmcp.sh`, there is no
+  file-system `sync` after the rename, so a power cut right after a change can bring back the previous mode.
+- If the HMI restarts while a save holds the lock (a very short window), the lock stays in `/ramdisk` until the next
+  unit start. Until then, GEM speed-limit and package actions answer `SPEEDLIMIT_LOCK_BUSY`.
 - To remove the package for good, use GEM *Off ui*. All Java packages also have the usual safety net: the trial boot
   plus *4. Confirm*, and the rescue card.
 

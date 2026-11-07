@@ -51,16 +51,17 @@ final class SpeedLimitSetting extends Setting {
     }
 
     String hint() {
-        int saved = current();
-        String reason = null;
-        for (int i = 1; i < MODES.length && reason == null; i++) {
-            reason = blocked(i);
-        }
-        if (saved < 0) {
+        if (current() < 0) {
             return "The saved mode is not valid: the limit is off. Pick a mode to replace it.";
         }
-        if (reason != null) {
-            return reason;
+        // street needs less than turnto (no rg): its reason covers both; otherwise only turnto is blocked
+        String street = blocked(2);
+        if (street != null) {
+            return street;
+        }
+        String turnto = blocked(1);
+        if (turnto != null) {
+            return turnto;
         }
         return "Applies within a second and stays after a restart.";
     }
@@ -151,20 +152,27 @@ final class SpeedLimitSetting extends Setting {
             if (staged.exists() && !staged.delete()) {
                 throw new IllegalStateException("Cannot remove the old staged file.");
             }
-            FileOutputStream out = new FileOutputStream(staged);
+            boolean renamed = false;
             try {
-                out.write(data);
-                out.getFD().sync();
+                FileOutputStream out = new FileOutputStream(staged);
+                try {
+                    out.write(data);
+                    out.getFD().sync();
+                } finally {
+                    out.close();
+                }
+                if (!equalsBytes(readSmall(staged, 16), data)) {
+                    throw new IllegalStateException("Staged file did not read back.");
+                }
+                if (!staged.renameTo(file)) {
+                    throw new IllegalStateException("Could not save the mode.");
+                }
+                renamed = true;
             } finally {
-                out.close();
-            }
-            if (!equalsBytes(readSmall(staged, 16), data)) {
-                staged.delete();
-                throw new IllegalStateException("Staged file did not read back.");
-            }
-            if (!staged.renameTo(file)) {
-                staged.delete();
-                throw new IllegalStateException("Could not save the mode.");
+                if (!renamed) {
+                    // as the trap in pmcp.sh: no staged file stays behind, the saved mode is unchanged
+                    staged.delete();
+                }
             }
             if (!equalsBytes(readSmall(file, 16), data)) {
                 throw new IllegalStateException("Saved file did not read back.");
