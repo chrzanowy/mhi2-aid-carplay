@@ -416,11 +416,11 @@ run "core.so map layout variants (from the pinned omonob base)" python3 -I "$PRO
 run_long "NavActiveIgnore.jar" bash "$PROJ/navactiveignore/build.sh" MU1161 "$LSD_JAR" "$BUILD/nai-mu1161-v2"
 run_long "pmcp-np.jar (track title and artist)" bash "$PROJ/nowplaying/build.sh" "$LSD_JAR" "$BUILD/np-mu1161-v2"
 run_long "pmcp-zoom.jar and pmcp-dn.jar (zoom, day/night)" bash "$PROJ/hmiextras/build.sh" "$LSD_JAR" "$BUILD/extras-mu1161-v2"
-run_long "route guidance (pmcp-rg.jar with lanes, distance bar, street and maneuver fallbacks; iAP2 driver, iap2.cfg, reader)" \
-    bash "$PROJ/rg/build.sh" "$LSD_JAR" "$BUILD/rg-mu1161-lanes-uturn-asf-m" lanes-uturn-asf-m
+run_long "route guidance (pmcp-rg.jar with lanes, distance bar, street, maneuver fallbacks, Android Auto arrows; iAP2 driver, iap2.cfg, reader)" \
+    bash "$PROJ/rg/build.sh" "$LSD_JAR" "$BUILD/rg-mu1161-lanes-uturn-asf-m-aa-150" lanes-uturn-asf-m-aa
 run_long "optional native-map speed-limit reader (pmcp-sl.jar)" bash "$PROJ/speedlimit/build.sh" "$LSD_JAR" "$BUILD/sl-mu1161"
 run "rg finds the speed-limit helper in pmcp-sl.jar (rg/lanes/TestSpeedLimitText real)" java -Xverify:all \
-    -cp "$BUILD/rg-mu1161-lanes-uturn-asf-m/tests:$BUILD/rg-mu1161-lanes-uturn-asf-m/pmcp-rg.jar:$BUILD/sl-mu1161/pmcp-sl.jar:$LSD_JAR" \
+    -cp "$BUILD/rg-mu1161-lanes-uturn-asf-m-aa-150/tests:$BUILD/rg-mu1161-lanes-uturn-asf-m-aa-150/pmcp-rg.jar:$BUILD/sl-mu1161/pmcp-sl.jar:$LSD_JAR" \
     com.cpmap.rgi.TestSpeedLimitText real
 ok "all components built"
 

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Route guidance for Android Auto too (experimental branch, package rg-aa, audit A-AA22; after apply_lanes.py, uturn.py, asf.py and maneuvers.py, on
-the staged copies only).
+"""Route guidance for Android Auto too (package rg since v1.5.0, rg/build.sh lanes-uturn-asf-m-aa; v1.4.x experimental
+cards shipped it as the separate package rg-aa; audit A-AA22). Runs after apply_lanes.py, uturn.py, asf.py and
+maneuvers.py, on the staged copies only.
 
 Tomasz's LiveBridge publishes only while the phone connection is CarPlay (getSmarphoneIntegrationActiveConnectionType()
 == 2) and reads /ramdisk/carplay-route-guidance. The pmcp AA gamma hook (aa/hook/pmcp_rg.c) writes the same RGM1/RGI1
@@ -15,7 +16,9 @@ Changes:
     adapter-status.txt goes to the directory being read;
   - with AA, destination distance / time the mailbox does not carry are left to the factory path (the helper returns
     false), instead of being published as invalid: the AA picture shows them.
-CarPlay (connection 2) behaves exactly as before. Each replacement must match exactly once.
+CarPlay (connection 2) behaves exactly as before: with connection 2 or no phone the reader stays on the CarPlay directory,
+nothing under /ramdisk/pmcp-aa-rg is read, and no thread is added (the existing reader thread switches directories).
+Each replacement must match exactly once.
 
 After asf.py (package rgluasfa) the reader loop is Tomasz's v1.4.3 FeedRecovery loop: the source switch is switchRoot(),
 which starts a fresh FeedRecovery on the other directory (frame dropped, error / fatal latch / retry wait cleared), and
@@ -173,6 +176,21 @@ ASF_TEST = '''        // rgluasfa: (a) a source switch drops the frame and clear
         check(ArrowProgress.remaining(f, f.laneAt + ArrowProgress.ROUTE_AGE - 1) == 50
             && ArrowProgress.remaining(f, f.laneAt + ArrowProgress.ROUTE_AGE) == -1,
             "bar ends ROUTE_AGE after the last route update (5 s; 180 s with the quiet-route hold), not after the manoeuvre change");
+        // (c) CarPlay (connection 2) and no phone (0): the reader stays on the CarPlay directory across ticks; no AA feed
+        // (reader of /ramdisk/pmcp-aa-rg) is created
+        int[] others = {2, 0};
+        for (int i = 0; i < others.length; i++) {
+            TestLive.connection = others[i]; LiveBridge.factoryContext();
+            check(LiveBridge.phone == others[i], "connection recorded");
+            FeedRecovery own = new FeedRecovery(LiveBridge.ROOT);
+            b.root = LiveBridge.ROOT;
+            for (int k = 0; k < 5; k++) {
+                TestLive.clock += 1000; b.tick(TestLive.clock);
+                FeedRecovery next = b.switchRoot(own);
+                check(next == own && b.root == LiveBridge.ROOT && own.root.equals(LiveBridge.ROOT),
+                    "connection " + others[i] + ": root stays ROOT, no AA reader");
+            }
+        }
 '''
 # rgluasfma only (letter m staged before aa.py): the status line names the connection type and the directory read, so the
 # "connection 3 = Android Auto" assumption can be checked from the logs (AA review 2026-11-03, m3). rglua/rgluasfa unchanged.

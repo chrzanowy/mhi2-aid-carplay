@@ -14,10 +14,11 @@
 # "lanes-uturn" (v1.3 package rglu): lanes + rg/lanes/uturn.py on the staged copies (U-turn lanes as VW 114/146).
 # "lanes-uturn-asf": lanes-uturn + rg/lanes/asf.py (tomasz-twardzicki MU1367 v1.4.3, git 1d69473: bargraph before the
 # maneuver, current road name in TurnToInfo, FeedRecovery), tested with his TestArrow, TestRoad and TestRecovery.
-# "lanes-uturn-asf-m" (v1.4 package rg, everything): lanes-uturn-asf + rg/lanes/maneuvers.py (arrow fallbacks where the
+# "lanes-uturn-asf-m" (v1.4 package rg): lanes-uturn-asf + rg/lanes/maneuvers.py (arrow fallbacks where the
 # strict mapping shows none: start of route, roundabout turns), tested with TestManeuvers.
-# "lanes-uturn-asf-m-aa" (experimental branch only, package rg-aa): lanes-uturn-asf-m + rg/lanes/aa.py (Android Auto too:
-# connection 3 reads /ramdisk/pmcp-aa-rg written by the AA gamma hook; CarPlay unchanged), tested also with TestAa.
+# "lanes-uturn-asf-m-aa" (package rg since v1.5.0; the v1.4.x experimental cards' rg-aa): lanes-uturn-asf-m + rg/lanes/aa.py
+# (Android Auto too: connection 3 reads /ramdisk/pmcp-aa-rg written by the AA gamma hook; CarPlay unchanged), tested with
+# every lanes-uturn-asf-m suite and also with TestAa.
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # do not write __pycache__ into upstream/tomasz (review 2)
 
