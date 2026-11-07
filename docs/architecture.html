@@ -521,15 +521,14 @@ MOST channel. Two things differ:</p>
     <li>0x8007: metres to that maneuver.</li>
   </ul>
   It writes them in tomasz-twardzicki's mailbox format (synthetic iAP2 0x5201/0x5202) to its <b>own</b> directory
-  <code>/ramdisk/pmcp-aa-rg</code>, never to the CarPlay directory. An AA variant of the guidance package reads that directory on an
+  <code>/ramdisk/pmcp-aa-rg</code>, never to the CarPlay directory. The guidance package <code>rg</code> (since v1.5.0) reads that directory on an
   AA connection and works like <code>rg</code> with CarPlay. Distance and time to destination stay factory, because the AA picture
   shows them. Stale data expires after 1.5 s. In a test drive 94 of 94 maneuvers were recognised.</li>
   <li><b>AA trial start:</b> separate from the Java one. <code>AA_BOOT</code> is the set id: the mode plus hashes of the hook, the feeder and
   the settings. A new set runs with the hook for one head unit start only, and stays after "AA Confirm". The markers
   <code>DISABLED</code> (rescue card) and <code>AA_DISABLED</code> turn the hook off. "AA remove" and "Remove everything" put the factory
-  <code>gal</code> back. The v1.4 release card can always do that too ("Remove experimental Android Auto", and as the first step
-  of button 3 and of "Remove everything"): it writes only on a pmcp install and only from a <code>gal.real</code> with the
-  factory hash.</li>
+  <code>gal</code> back, only on a pmcp install and only from a <code>gal.real</code> with the factory hash. Button 3 never
+  changes Android Auto (since v1.5.0 it has its own screen on the main screen).</li>
   <li><b>Known limits:</b>
   <ul>
     <li>open: in about half of the connections the picture starts dark with artefacts, and it can also be lost during a

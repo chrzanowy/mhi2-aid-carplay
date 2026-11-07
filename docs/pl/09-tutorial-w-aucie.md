@@ -137,10 +137,11 @@ zestaw i `This boot: set=... use=yes`.
 4. **„4. Confirm: everything works (only in the first start after 3)”** w tym samym starcie, potem restart.
 5. Zrób **nową kartę 2** (pomocnik kopiowania, opcja 2): karty ratunkowe sprzed v1.4 nie przywracają sterownika iAP2 z v1.4.
 
-**Użytkownicy karty eksperymentalnej:** gdy w radiu jest Android Auto z karty eksperymentalnej, „1. Check” pokazuje stan
-`UNKNOWN` („Android Auto of an experimental card is installed ...”). Przycisk 3 najpierw je zdejmuje (fabryczny `gal`
-z kopii o sprawdzonym hashu), potem zastępuje eksperymentalne paczki prowadzenia paczką `rg`; restart, test, „4. Confirm”.
-Samo zdjęcie AA: pmcp_advanced -> „Remove experimental Android Auto (factory gal back; button 3 does it too)”.
+**Użytkownicy karty eksperymentalnej (Android Auto):** przycisk 3 zostawia Android Auto bez zmian i zastępuje
+eksperymentalną paczkę prowadzenia `rg-aa` paczką `rg` (która ma teraz strzałki Android Auto); restart, test,
+„4. Confirm”. Potem, jeśli „Status” pokazuje `Android Auto: old`: pmcp_android_auto -> „AA 1. Android Auto on: ...”
+aktualizuje Android Auto (nowa próba AA). Android Auto w aucie i jego usuwanie:
+[13-instrukcja-android-auto.md](13-instrukcja-android-auto.md).
 
 ---
 

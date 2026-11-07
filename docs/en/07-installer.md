@@ -93,12 +93,13 @@ Safe area = x / y / width / height on the 800×480 stream:
    - Route guidance system (`RGSYS`, shown by "Status"): `off`, `on`, `old` (on, but with the driver and/or reader of an
      earlier card, `RG_KNOWN`: v1.0-v1.3 driver `76926bde…`, Tomasz's reader `b683cef7…`; `rg-update` replaces them) or `unknown`.
    - `PARTIAL`: an interrupted action, stock copies intact. Only `restore` (and `rg-system-off`) is allowed.
-   - `UNKNOWN`: anything else, e.g. another mod or a modified `lsd.sh`. **Everything is refused.** This includes an
-     experimental card's Android Auto (`carplaymaps/aa`, leftovers of an interrupted install, or a non-factory `gal`), with
-     one way out: `aa-remove` ("Remove experimental Android Auto", also the first step of button 3 and of `restore`). It
-     writes only on a pmcp install and only when `gal` is factory or `carplaymaps/aa/gal.real` has the factory hash: the
-     factory `gal` is staged from that copy, verified and moved in, then the AA files and markers go. Running it again
-     finishes an interrupted run. After it, button 3 updates the experimental `rg` variants to `rg`.
+   - `UNKNOWN`: anything else, e.g. another mod or a modified `lsd.sh`. **Everything is refused.**
+   - Android Auto (`AASYS`, since v1.5.0, shown by "Status"): `off`, `on` (this card's set), `old` (a whole set of an
+     earlier card, `AA_OLD`; "AA 1" / `aa-on` updates it) or `unknown` (a mix or an interrupted action: the unit state is
+     then `PARTIAL`). Button 3 never changes it. `aa-remove` ("AA remove", also the first step of `restore`) writes only
+     on a pmcp install and only when `gal` is factory or `carplaymaps/aa/gal.real` has the factory hash: the factory `gal`
+     is staged from that copy, verified and moved in, then the AA files and markers go. Running it again finishes an
+     interrupted run.
 5. **Every staged copy** is hashed before the swap; `chmod` is checked, `dio_manager` must be executable. Right before the swap the
    installer checks again that `lsd.sh` and `dio_manager` are still stock.
 6. **After the swap** the state must be the expected one and `core.so` must have the expected hash. Otherwise automatic rollback.

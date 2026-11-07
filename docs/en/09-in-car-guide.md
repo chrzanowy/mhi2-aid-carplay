@@ -140,10 +140,10 @@ Restart once more. From now on the set loads at every start. **"Status (read-onl
 4. **"4. Confirm: everything works (only in the first start after 3)"** in the same start, then restart.
 5. Make a **new card 2** (copy helper option 2): rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
 
-**Experimental card users:** with the experimental card's Android Auto installed, "1. Check" shows state `UNKNOWN`
-("Android Auto of an experimental card is installed ..."). Button 3 takes it off first (factory `gal` back from its
-verified copy) and then replaces the experimental guidance packages by `rg`; restart, test, "4. Confirm". The same
-removal alone: pmcp_advanced -> "Remove experimental Android Auto (factory gal back; button 3 does it too)".
+**Experimental card users (Android Auto):** button 3 keeps Android Auto as it is and replaces the experimental guidance
+package `rg-aa` by `rg` (which now carries the Android Auto arrows); restart, test, "4. Confirm". Then, if "Status" shows
+`Android Auto: old`: pmcp_android_auto -> "AA 1. Android Auto on: ..." brings Android Auto up to date (a new AA trial).
+Android Auto in the car, and how to remove it: [13-android-auto-guide.md](13-android-auto-guide.md).
 
 ---
 

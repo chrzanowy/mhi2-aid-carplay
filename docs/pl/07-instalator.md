@@ -91,12 +91,13 @@ Warianty `core.so` (`switch` zmienia tylko ten plik, potem restart, bez „4. Co
      wcześniejszej karty, `RG_KNOWN`: sterownik v1.0–v1.3 `76926bde…`, czytnik Tomasza `b683cef7…`; zastępuje je `rg-update`)
      albo `unknown`.
    - `PARTIAL`: przerwana akcja, kopie fabryczne nienaruszone. Wolno tylko `restore` (i `rg-system-off`).
-   - `UNKNOWN`: cokolwiek innego, np. inny mod albo zmieniony `lsd.sh`. **Wszystko jest odrzucane.** Także Android Auto
-     z karty eksperymentalnej (`carplaymaps/aa`, resztki przerwanej instalacji albo niefabryczny `gal`), z jednym wyjściem:
-     `aa-remove` („Remove experimental Android Auto”, też pierwszy krok przycisku 3 i `restore`). Zapisuje tylko na instalacji
-     pmcp i tylko gdy `gal` jest fabryczny albo `carplaymaps/aa/gal.real` ma fabryczny hash: fabryczny `gal` jest
-     kopiowany z tej kopii, sprawdzany i przenoszony, potem znikają pliki i znaczniki AA. Ponowne uruchomienie kończy
-     przerwane. Potem przycisk 3 zmienia eksperymentalne warianty `rg` na `rg`.
+   - `UNKNOWN`: cokolwiek innego, np. inny mod albo zmieniony `lsd.sh`. **Wszystko jest odrzucane.**
+   - Android Auto (`AASYS`, od v1.5.0, pokazuje go „Status”): `off`, `on` (zestaw tej karty), `old` (cały zestaw
+     wcześniejszej karty, `AA_OLD`; „AA 1” / `aa-on` go aktualizuje) albo `unknown` (mieszanka albo przerwana akcja: stan
+     radia to wtedy `PARTIAL`). Przycisk 3 nigdy go nie zmienia. `aa-remove` („AA remove”, też pierwszy krok `restore`)
+     zapisuje tylko na instalacji pmcp i tylko gdy `gal` jest fabryczny albo `carplaymaps/aa/gal.real` ma fabryczny hash:
+     fabryczny `gal` jest kopiowany z tej kopii, sprawdzany i przenoszony, potem znikają pliki i znaczniki AA. Ponowne
+     uruchomienie kończy przerwane.
 5. **Każda skopiowana kopia** (staging) jest hashowana przed przełączeniem; `chmod` sprawdzany, `dio_manager` musi być wykonywalny.
    Bezpośrednio przed przełączeniem jeszcze raz sprawdzamy, czy `lsd.sh` i `dio_manager` są dalej fabryczne.
 6. **Po przełączeniu** stan musi być oczekiwany, a `core.so` mieć oczekiwany hash. Inaczej automatyczny rollback.
