@@ -101,7 +101,7 @@ PART 2 - IN THE CAR
   To remove everything: "Remove everything (back to factory files)", then restart.
   "Status (read-only)" shows what is installed.
 
-  UPDATING from an earlier version (v1.0 - v1.3):
+  UPDATING from an earlier version (v1.0 - v1.4):
     1. Make CARD 1 from this package. In the car: "1. Check card and unit (read-only)".
        Expected: PMCP_VERIFY_OK state=JAVA. "Status (read-only)" may show
        "Route guidance system: old" and "packages of an earlier card: rglu" - that is expected.
@@ -110,8 +110,9 @@ PART 2 - IN THE CAR
     4. "4. Confirm: everything works" in this same start, then restart.
     5. Make a NEW CARD 2 with the copy helper (option 2): rescue cards made before v1.4
        do not restore the new route guidance driver.
-    Used the experimental card with Android Auto? Step 1 then shows state UNKNOWN; that is
-    expected. Button 3 first puts the factory Android Auto back, then updates the rest.
+    Used an experimental card with Android Auto? Button 3 keeps Android Auto as it is and
+    replaces its rg-aa by rg. To bring Android Auto itself up to date: Android Auto screen
+    (pmcp_android_auto), "AA 1. Android Auto on: ...". See docs/en/13-android-auto-guide.md.
 
 ------------------------------------------------------------------------------------------
 EMERGENCY - CARD 2 (RESCUE)

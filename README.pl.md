@@ -1,15 +1,11 @@
 # mhi2-aid-carplay
 
-Mapa CarPlay i natywne prowadzenie na wirtualnym kokpicie (AID) **VW Passata B8 (MY2018)** z radiem **Discover Pro MHI2**:
-**MU1161**, train `MHI2_ER_VWG13_P4512`, AID 791.
+CarPlay i Android Auto na AID: mapa z telefonu i natywne prowadzenie VW na wirtualnym kokpicie (AID) **VW Passata B8
+(MY2018)** z radiem **Discover Pro MHI2**: **MU1161**, train `MHI2_ER_VWG13_P4512`, AID 791.
 
 [English version: README.md](README.md)
 
 ![Mapa CarPlay z natywnym prowadzeniem VW na AID](docs/img/aid-carplay-2026-10/IMG_1127.jpg)
-
-> **Gałąź `experimental`:** to wydanie v1.4.2 plus Android Auto na AID (jeden tryb, „gamma”: obraz Google Maps + strzałki
-> VW, pakiet `rg-aa`). To nie jest wydanie. Android Auto: [aa/README.pl.md](aa/README.pl.md), w aucie:
-> [docs/pl/13-instrukcja-eksperymentalna.md](docs/pl/13-instrukcja-eksperymentalna.md). Reszta poniżej to tekst wydania.
 
 W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy projektów wymienionych w sekcji
 [Podziękowania](#podziękowania). Tam jest ogólne rozwiązanie mapy CarPlay na liczniku MHI2.
@@ -35,6 +31,7 @@ W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy proj
 | Tytuł i wykonawca utworu z CarPlay na AID | działa |
 | Przełączanie dzień/noc mapy na liczniku | działa |
 | Ograniczenie prędkości z telefonu (`showSpeedLimit=yes`) | na tym radiu nic nie pokazuje |
+| Android Auto 0.1 (otwarta alfa, v1.5.0): obraz Google Maps na AID, strzałki VW z Google Maps | działa, ze znanymi ograniczeniami: [Android Auto](#android-auto-na-aid-android-auto-01-otwarta-alfa) |
 | Opcjonalnie (v1.4.1, paczka `sl`; przyciski trybu poprawione w v1.4.2 od amjad-alarori): limit z map samego auta VW przed nazwą ulicy albo próbnie w CurrentPositionInfo | 50 → 70 km/h potwierdzone w e-Golfie (AID 795A); na AID 791 jeszcze nie sprawdzone. [Opis po angielsku](docs/en/16-native-speed-limits.md) |
 
 Prowadzenie iAP2 nie przenosi liczbowego ograniczenia prędkości (badania
@@ -63,6 +60,7 @@ Więcej zdjęć i interaktywny model ramki AID (gdzie obraz trafia na panel w ka
 | [`rg/`](rg/README.pl.md) | natywne prowadzenie (jedna paczka `rg`): port rozwiązania tomasz-twardzicki z MU1427 na MU1161 (iAP2 RouteGuidance → BAP) z jego pasami, paskiem odległości i nazwą ulicy, nasze pasy do zawracania i zastępcze strzałki, nasza bramka logu iAP2 i czytnik | Java, sterownik iAP2, `iap2.cfg`, czytnik |
 | [`nowplaying/`](nowplaying/README.pl.md) | tytuł i wykonawca utworu CarPlay na liczniku | Java (HMI) |
 | [`hmiextras/`](hmiextras/README.pl.md) | zoom z kierownicy i ponowne wysłanie dzień/noc do mapy na liczniku | Java (HMI) |
+| [`aa/`](aa/) | Android Auto na AID: wrapper `gal`, hook MacsInSpace (przypięty, bez ścieżek do karty SD), nasz feeder MOST | wrapper `gal`, pliki w `carplaymaps/aa/` |
 | [`speedlimit/`](speedlimit/) | opcjonalny limit prędkości z map VW w tekście nawigacji licznika | Java (HMI), zapisywane ustawienie. [Opis po angielsku](docs/en/16-native-speed-limits.md) |
 | [`installer/`](installer/) | instalator na kartę SD uruchamiany z menu GEM w M.I.B., karta ratunkowa, testy na Macu | nic sam z siebie |
 | [`buildtools/`](buildtools/) | kontrole przy budowaniu: osłona try/catch każdego wywołania haka, zgodność z API J9 CDC | nic |
@@ -101,9 +99,8 @@ Wszystkie warianty deklarują rozmiar fizyczny 240×144 mm. Zmiana wariantu podm
 **Aktualizacja z v1.0–v1.3:** karta 1 z tego wydania, „1. Check”, potem **3. Install all features or update** → restart
 (start próbny) → test → **4. Confirm**. Przycisk 3 zastępuje wcześniejszy sterownik, czytnik i paczki Java (`rglu` → `rg`)
 plikami z tej karty. Zrób też nową kartę 2: karty ratunkowe sprzed v1.4 nie przywracają sterownika iAP2 z v1.4.
-Eksperymentalne Android Auto z gałęzi `experimental` ta karta też zdejmuje: przycisk 3 (i „Remove everything”) najpierw
-przywraca fabryczny `gal` z kopii o sprawdzonym hashu; w menu zaawansowanym jest osobny przycisk „Remove experimental
-Android Auto”.
+Z v1.4.x przycisk 3 zamienia `rg` (`pmcp-guidance4.jar`, teraz ze strzałkami Android Auto). Android Auto z karty
+eksperymentalnej przycisk 3 zostawia bez zmian (jej `rg-aa` staje się `rg`); aktualizuje je „AA 1” na ekranie Android Auto.
 
 Wcześniej potrzebny jest [M.I.B. w radiu i backup](docs/pl/01-mib-instalacja-backup.md). Instalator na karcie najpierw
 sprawdza każdy plik radia; przy innym firmware zatrzymuje się i niczego nie zmienia.
@@ -170,49 +167,42 @@ Po polsku w [`docs/pl/`](docs/pl/), po angielsku w [`docs/en/`](docs/en/):
 | Projekt instalatora | [07-instalator](docs/pl/07-instalator.md) | [07-installer](docs/en/07-installer.md) |
 | Audyt: szybki start mapy na AID (próby, porażka, dlaczego AID wymagał uśpienia auta) | [14-audyt-szybki-start](docs/pl/14-audyt-szybki-start.md) | [14-fast-start-audit](docs/en/14-fast-start-audit.md) |
 | Instrukcja krok po kroku w aucie | [09-tutorial-w-aucie](docs/pl/09-tutorial-w-aucie.md) | [09-in-car-guide](docs/en/09-in-car-guide.md) |
+| Android Auto w aucie: instalacja, potwierdzenie, co sfotografować, usuwanie | [13-instrukcja-android-auto](docs/pl/13-instrukcja-android-auto.md) | [13-android-auto-guide](docs/en/13-android-auto-guide.md) |
 | Interaktywny model ramki AID | [aid-frame-map.pl.html](docs/aid-frame-map.pl.html) | [aid-frame-map.html](docs/aid-frame-map.html) |
 
 Katalogi składników mają `README.md` po angielsku i `README.pl.md` po polsku.
 
-## Eksperymentalnie: Android Auto na AID (w toku)
+## Android Auto na AID (Android Auto 0.1, otwarta alfa)
 
-Jeszcze w żadnym wydaniu. Pracujemy nad tym samym dla Android Auto: obraz Google Maps na AID i natywne strzałki VW
-z manewrów Google Maps, przez własną drogę MOST radia (bez dodatkowego adaptera). Stan na 2026-11-04, sprawdzony w aucie:
+Od v1.5.0 ta sama karta daje też Android Auto na AID: obraz Google Maps z telefonu z Androidem, przez własną drogę MOST
+radia (bez dodatkowego adaptera), oraz natywne strzałki VW z Google Maps.
 
-Jak to działa:
-- fabryczny odbiornik Android Auto `gal` uruchamia mały wrapper z hookiem (na bazie
-  [mib-cluster-map](https://github.com/MacsInSpace/mib-cluster-map) MacsInSpace, bez ścieżek do karty SD);
-- hook proponuje telefonowi drugi ekran „cluster” 800×480 i oddaje jego strumień H.264 naszemu feederowi;
-- feeder przejmuje kanał wideo MOST i zapisuje klatki do tego samego ringu i `altscreen-most-bridge`, z których korzysta
-  CarPlay;
-- każdy nowy zestaw Android Auto rusza raz jako próba i zostaje dopiero po potwierdzeniu w GEM, jak paczki Java.
+![Android Auto 0.1 w aucie: Google Maps z telefonu z Androidem na AID, skręt w lewo za 400 m](docs/img/aa-cluster.jpg)
 
-Co działa:
-- obraz Google Maps na AID (26 minut jazdy bez problemów w trybie „AA 2”);
-- przełączenie z CarPlay na Android Auto bez restartu (feeder używa teraz ringu wideo CarPlay w miejscu; `dio_manager`
-  trzyma ten ring zmapowany, więc jego usuwanie zapełniało `/ramdisk`);
-- natywne strzałki VW z dystansem z manewrów Google Maps („gamma”). Hook tłumaczy komunikaty nawigacji Android Auto na
-  ten sam format skrzynki, który zapisuje czytnik CarPlay, a ten sam kod Java je pokazuje. W jeździe testowej rozpoznał
-  94 z 94 manewrów.
+*Android Auto 0.1 w aucie (2026-11): obraz Google Maps z telefonu z Androidem na AID.*
 
-Co jeszcze nie działa:
-- **gubiony obraz:** w mniej więcej połowie połączeń obraz startuje ciemny, z artefaktami, a AID potrafi też zgubić obraz
-  w trakcie jazdy (ekran ładowania). Ta sama przyczyna: telefon wysyła tylko jedną klatkę kluczową na sesję.
-  - Bez skutku próbowaliśmy: czekania 5 albo 10 s po przejęciu kanału MOST oraz przytrzymania i powtarzania tej klatki.
-  - Dalej: feeder dawkuje klatki do mostka (ok. 2 Mbit/s) i zapisuje przerwy w strumieniu (zbudowane i sprawdzone na
-    komputerze, jeszcze nie w aucie); inny `idr_pic_id` w powtórkach zostaje pomysłem. Własnego oprogramowania wideo radia
-    nie ruszamy.
-  - Obejście: ponownie podłączyć telefon.
-- brak strzałki VW na samym starcie trasy z Android Auto (krok „depart” nie jest jeszcze mapowany).
+Co działa (sprawdzone w aucie, Samsung Galaxy A16 z Androidem 16):
+- obraz Google Maps na AID, także po przełączeniu z CarPlay na Android Auto bez restartu;
+- strzałki VW z dystansem z manewrów Google Maps, pokazywane przez ten sam pakiet prowadzenia `rg` co dla CarPlay.
 
-Co ustaliliśmy:
-- ponowne wysłanie konfiguracji wideo do telefonu zrywa połączenie Android Auto po ok. 9 s;
-- cykl fokusu w radiu psuje sesję telefonu (spada do ok. 3 kl./s i po ok. dwóch minutach zrywa połączenie);
-- pełne komunikaty nawigacji Google Maps wymagają protokołu Android Auto 1.7;
-- dystans i czas do celu zostawiamy obrazowi Android Auto, który już je pokazuje.
+Znane ograniczenia:
+- strumień rusza około 5 s po podłączeniu telefonu;
+- czasem obraz startuje ciemny (albo AID pokazuje ekran ładowania) aż do następnej klatki kluczowej z telefonu;
+  pomaga ponowne podłączenie telefonu;
+- brak strzałki VW na pierwszym kroku trasy; dystans i czas do celu zostają w obrazie Google Maps.
 
-Karta z wydania v1.4 zawsze potrafi zdjąć to eksperymentalne Android Auto („Remove experimental Android Auto”; przycisk 3
-i „Remove everything” robią to najpierw): przywraca fabryczny `gal` tylko z kopii o fabrycznym hashu.
+Instalacja (potrzebna mapa CarPlay z „2.” albo „3.”; dla strzałek „3. Install all features or update” i „4. Confirm”):
+1. GEM → pmcp → **pmcp_android_auto** (na ekranie głównym) → „AA 1. Android Auto on: Google Maps on the AID + VW arrows
+   (also updates an earlier card's AA)”.
+2. Restart, telefon z Androidem na kablu, trasa w Google Maps. Ta pierwsza sesja to próba.
+3. Jeśli obraz jest na AID: „AA 2. Confirm: AA works (only in the start of the AA trial)” w tym samym starcie.
+
+Usuwanie: „AA remove (factory Android Auto back)” na tym samym ekranie albo „Remove everything (back to factory files)”
+na ekranie głównym. Oba przywracają fabryczny odbiornik Android Auto (`gal`), tylko z kopii o fabrycznym hashu.
+Przycisk 3 ani nie instaluje, ani nie usuwa Android Auto.
+
+Krok po kroku i co sfotografować, gdy coś nie działa: [docs/pl/13-instrukcja-android-auto.md](docs/pl/13-instrukcja-android-auto.md).
+Jak to działa (hook `gal` od MacsInSpace, nasz feeder, start próbny): [aa/README.pl.md](aa/README.pl.md).
 
 ## Podziękowania
 
@@ -241,6 +231,9 @@ Ten projekt nie powstałby bez:
   (PR #5, v1.4.2).
 - **maxim-smirnov**: opis formatu kontenera LZOZ oraz badania pokazujące, że prowadzenie iAP2 nie przenosi ograniczenia
   prędkości ([mhi2-carplay-cluster](https://github.com/maxim-smirnov/mhi2-carplay-cluster)).
+- **[MacsInSpace/mib-cluster-map](https://github.com/MacsInSpace/mib-cluster-map)**: hook `gal`, na którym opiera się
+  Android Auto na AID (commit `07361db`, budowany w `aa/hook/` bez ścieżek do karty SD): drugi ekran „cluster”
+  zgłaszany telefonowi i przekazanie jego strumienia H.264.
 - **MacsInSpace**: wskazówka „Zapomnij to auto”, gdy licznik nie dostaje obrazu.
 - Społeczność **MQB Toolbox**: pierwotny pomysł NavActiveIgnore.
 

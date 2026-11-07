@@ -1,15 +1,12 @@
 # mhi2-aid-carplay
 
-CarPlay map and native route guidance on the Active Info Display (AID, virtual cockpit) of a **VW Passat B8 (MY2018)**
-with a **Discover Pro MHI2** head unit: **MU1161**, train `MHI2_ER_VWG13_P4512`, AID part 791.
+CarPlay and Android Auto on the AID: the phone's map and native VW route guidance on the Active Info Display (AID,
+virtual cockpit) of a **VW Passat B8 (MY2018)** with a **Discover Pro MHI2** head unit: **MU1161**, train
+`MHI2_ER_VWG13_P4512`, AID part 791.
 
 [Polska wersja: README.pl.md](README.pl.md)
 
 ![CarPlay map with native VW guidance on the AID](docs/img/aid-carplay-2026-10/IMG_1127.jpg)
-
-> **Branch `experimental`:** this is the v1.4.2 release plus Android Auto on the AID (one mode, "gamma": Google Maps
-> picture + VW arrows, package `rg-aa`). Not a release. Android Auto: [aa/README.md](aa/README.md), in the car:
-> [docs/en/13-experimental-guide.md](docs/en/13-experimental-guide.md). Everything else below is the release's text.
 
 This repository holds only what is specific to this head unit. It builds on the work of the projects listed under
 [Credits](#credits). The general MHI2 CarPlay-on-cluster work lives there.
@@ -34,6 +31,7 @@ This repository holds only what is specific to this head unit. It builds on the 
 | CarPlay track title and artist on the AID | works |
 | Day/night switching of the cluster map | works |
 | Speed limit from the phone (`showSpeedLimit=yes`) | shows nothing on this unit |
+| Android Auto 0.1 (open alpha, v1.5.0): Google Maps picture on the AID, VW arrows from Google Maps | works, with known limits: [Android Auto](#android-auto-on-the-aid-android-auto-01-open-alpha) |
 | Optional (v1.4.1, package `sl`; mode buttons fixed in v1.4.2 by amjad-alarori): the car's own VW map speed limit in front of the street name, or a trial in CurrentPositionInfo | 50 → 70 km/h confirmed on an e-Golf (AID 795A); not yet tried on AID 791. [Details](docs/en/16-native-speed-limits.md) |
 
 iAP2 route guidance carries no numeric speed limit (research by
@@ -63,6 +61,7 @@ More photos and an interactive model of the AID frame (where the video lands on 
 | [`rg/`](rg/) | Native route guidance (one package `rg`): port of tomasz-twardzicki's MU1427 solution to MU1161 (iAP2 RouteGuidance → BAP) with his lanes, distance bar and street name, our U-turn lanes and maneuver fallbacks, our iAP2 log gate and reader | Java, iAP2 driver, `iap2.cfg`, reader |
 | [`nowplaying/`](nowplaying/) | CarPlay track title and artist on the cluster | Java (HMI) |
 | [`hmiextras/`](hmiextras/) | Steering-wheel zoom and day/night resend for the cluster map | Java (HMI) |
+| [`aa/`](aa/) | Android Auto on the AID: `gal` wrapper, MacsInSpace's hook (pinned, no SD-card paths), our MOST feeder | `gal` wrapper, files in `carplaymaps/aa/` |
 | [`speedlimit/`](speedlimit/) | Optional native VW map speed limit in the cluster's navigation text | Java (HMI), saved opt-in setting |
 | [`installer/`](installer/) | SD-card installer run from the M.I.B. GEM menu, the rescue card, host tests | nothing by itself |
 | [`buildtools/`](buildtools/) | Host checks: try/catch guard around every hook call, J9 CDC API check | nothing |
@@ -101,9 +100,9 @@ All variants declare a physical size of 240×144 mm. Switching a variant swaps o
 **Updating from v1.0-v1.3:** card 1 of this release, "1. Check", then **3. Install all features or update** → restart
 (trial start) → test → **4. Confirm**. Button 3 replaces the earlier driver, reader and Java packages (`rglu` → `rg`) by
 this card's. Make a new card 2 as well: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
-Experimental Android Auto from the `experimental` branch is taken off by this card too: button 3 (and "Remove everything")
-first puts the factory `gal` back from its hash-verified copy; the advanced menu has a separate "Remove experimental
-Android Auto" button.
+From v1.4.x button 3 replaces `rg` (`pmcp-guidance4.jar`, now with the Android Auto arrows). Android Auto of an
+experimental card stays as it is with button 3 (its `rg-aa` becomes `rg`); "AA 1" on the Android Auto screen brings it
+up to date.
 
 Before you start you need [M.I.B. installed on the unit and a backup](docs/en/01-mib-install-backup.md). The installer
 on the card checks every file of your head unit first. On any other firmware it stops and changes nothing.
@@ -186,54 +185,44 @@ English in [`docs/en/`](docs/en/), Polish in [`docs/pl/`](docs/pl/):
 | Installer design | [07-installer](docs/en/07-installer.md) | [07-instalator](docs/pl/07-instalator.md) |
 | Audit: AID fast start (tried, failed, why the AID needed a bus sleep) | [14-fast-start-audit](docs/en/14-fast-start-audit.md) | [14-audyt-szybki-start](docs/pl/14-audyt-szybki-start.md) |
 | Step-by-step guide in the car | [09-in-car-guide](docs/en/09-in-car-guide.md) | [09-tutorial-w-aucie](docs/pl/09-tutorial-w-aucie.md) |
+| Android Auto in the car: install, confirm, what to photograph, removal | [13-android-auto-guide](docs/en/13-android-auto-guide.md) | [13-instrukcja-android-auto](docs/pl/13-instrukcja-android-auto.md) |
 | Interactive AID frame model | [aid-frame-map.html](docs/aid-frame-map.html) | [aid-frame-map.pl.html](docs/aid-frame-map.pl.html) |
 | Architecture: what is replaced, intercepted and left alone (picture, guidance, HMI, Android Auto) | [architecture.html](docs/architecture.html) | — |
 | What changed in each release | [CHANGELOG.md](CHANGELOG.md) | — |
 
 The component directories have an English `README.md` and a Polish `README.pl.md`.
 
-## Experimental: Android Auto on the AID (work in progress)
+## Android Auto on the AID (Android Auto 0.1, open alpha)
 
-Not part of any release yet. We are working on the same result for Android Auto: the Google Maps picture on the AID and
-native VW arrows from Google Maps maneuvers, over the head unit's own MOST path (no extra adapter). Status as of
-2026-11-04, tested in the car:
+Since v1.5.0 the same card also brings Android Auto to the AID: the Google Maps picture from an Android phone, over the
+head unit's own MOST path (no extra adapter), and the native VW arrows from Google Maps.
 
-How it works:
-- the factory Android Auto receiver `gal` is started by a small wrapper with a hook (based on MacsInSpace's
-  [mib-cluster-map](https://github.com/MacsInSpace/mib-cluster-map), without SD-card paths);
-- the hook offers the phone a second 800×480 "cluster" screen and hands its H.264 stream to our feeder;
-- the feeder takes the MOST video channel and writes the frames into the same ring and `altscreen-most-bridge` that
-  CarPlay uses;
-- every new Android Auto set runs once as a trial and stays only after a confirm in GEM, like the Java packages.
+![Android Auto 0.1 in the car: Google Maps from an Android phone on the AID, a left turn in 400 m](docs/img/aa-cluster.jpg)
 
-What works:
-- the Google Maps picture on the AID (a 26-minute drive without problems in mode "AA 2");
-- switching from CarPlay to Android Auto without a restart (the feeder now reuses CarPlay's video ring in place;
-  `dio_manager` keeps that ring mapped, so deleting it had filled `/ramdisk`);
-- native VW arrows with distance from Google Maps maneuvers ("gamma"). The hook translates the Android Auto navigation
-  messages into the same mailbox format the CarPlay reader writes, and the same Java code shows them. In a test drive it
-  recognised 94 of 94 maneuvers.
+*Android Auto 0.1 in the car (2026-11): the Google Maps picture from an Android phone on the AID.*
 
-What does not work yet:
-- **lost picture:** in about half of the connections the picture starts dark with artefacts, and the AID can also lose
-  the picture during a drive (loading screen). Same cause: the phone sends only one key frame per session.
-  - Already tried without success: waiting 5 or 10 s after taking the MOST channel, and holding and repeating that key
-    frame.
-  - Next: the feeder paces the frames into the bridge (about 2 Mbit/s) and logs gaps in the stream (built and tested on
-    the computer, not yet in the car); a different `idr_pic_id` in repeated key frames stays an idea. The head unit's own
-    video software is not touched.
-  - Workaround: plug the phone in again.
-- no VW arrow at the very start of a route with Android Auto (its "depart" step is not mapped yet).
+What works (tested in the car, Samsung Galaxy A16 with Android 16):
+- the Google Maps picture on the AID, also when switching from CarPlay to Android Auto without a restart;
+- VW arrows with distance from Google Maps manoeuvres, shown by the same route guidance package `rg` as for CarPlay.
 
-What we learned:
-- re-sending the video configuration to the phone drops the Android Auto connection about 9 s later;
-- a focus cycle on the head unit breaks the phone's session (it drops to about 3 fps and resets the connection about
-  two minutes later);
-- full Google Maps navigation messages need Android Auto protocol 1.7;
-- destination distance and arrival time are left to the Android Auto picture, which shows them already.
+Known limits:
+- the stream starts about 5 s after the phone connects;
+- now and then the picture starts dark (or the AID shows its loading screen) until the phone's next key frame;
+  plugging the phone in again helps;
+- no VW arrow at the very first step of a route; destination distance and arrival time stay in the Google Maps picture.
 
-The v1.4 release card can always take this experimental Android Auto off again ("Remove experimental Android Auto";
-button 3 and "Remove everything" do it first): it puts the factory `gal` back only from a copy with the factory hash.
+Install (needs the CarPlay map from "2." or "3."; for the arrows "3. Install all features or update" and "4. Confirm"):
+1. GEM → pmcp → **pmcp_android_auto** (on the main screen) → "AA 1. Android Auto on: Google Maps on the AID + VW arrows
+   (also updates an earlier card's AA)".
+2. Restart, connect the Android phone (cable), start a route in Google Maps. This first session is a trial.
+3. If the picture is on the AID: "AA 2. Confirm: AA works (only in the start of the AA trial)" in that same start.
+
+Remove: "AA remove (factory Android Auto back)" on the same screen, or "Remove everything (back to factory files)" on
+the main screen. Both put the factory Android Auto receiver (`gal`) back, only from a copy with the factory hash.
+Button 3 neither installs nor removes Android Auto.
+
+Step by step, and what to photograph if something goes wrong: [docs/en/13-android-auto-guide.md](docs/en/13-android-auto-guide.md).
+How it works (MacsInSpace's `gal` hook, our feeder, the trial start): [aa/README.md](aa/README.md).
 
 ## Credits
 
@@ -262,6 +251,9 @@ This project would not exist without:
   on the unit (PR #5, v1.4.2).
 - **maxim-smirnov**: documentation of the LZOZ container format, and the research showing that iAP2 route guidance
   carries no speed limit ([mhi2-carplay-cluster](https://github.com/maxim-smirnov/mhi2-carplay-cluster)).
+- **[MacsInSpace/mib-cluster-map](https://github.com/MacsInSpace/mib-cluster-map)**: the `gal` hook that Android Auto
+  on the AID builds on (commit `07361db`, built in `aa/hook/` without SD-card paths): the second "cluster" display
+  offered to the phone and the hand-off of its H.264 stream.
 - **MacsInSpace**: the "Forget this car" tip when the cluster gets no picture.
 - The **MQB Toolbox** community: the original NavActiveIgnore idea.
 

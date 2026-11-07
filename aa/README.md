@@ -1,17 +1,17 @@
-# Android Auto on the AID (experimental, branch `experimental`)
+# Android Auto on the AID (Android Auto 0.1, open alpha, since v1.5.0)
 
 [Polska wersja: README.pl.md](README.pl.md)
 
-Status (2026-11-04, car-tested on a Passat B8, MU1161 / AID 791, Samsung Galaxy A16 with Android 16):
+Status (2026-11-07, car-tested on a Passat B8, MU1161 / AID 791, Samsung Galaxy A16 with Android 16):
 
 - **Works:** the Google Maps picture on the AID over the unit's own MOST path; switching from CarPlay to Android Auto
   without a restart; native VW arrows with distance from Google Maps manoeuvres (94 of 94 recognised on a test drive).
-- **Open:** the phone sends one key frame (IDR) per session. When the AID loses the picture, at the start (about half of
-  the connections) or now and then while driving, it stays dark or on its loading screen until the phone is plugged in
-  again. Feeder v9 paces large frames and logs gaps between frames to narrow this down.
-- **Open:** no VW arrow at the very first step of a route with Android Auto (its "depart" step is not mapped yet).
+- **Known limits:** the stream starts about 5 s after the phone connects; now and then the picture starts dark until the
+  phone's next key frame (feeder v10: start sync, pacing at 6 Mbit/s without bursts, no focus cycle); no VW arrow at the
+  very first step of a route ("depart" is not mapped yet).
 
-This branch is the release (`main`, v1.4.2) plus Android Auto. Everything CarPlay works exactly as in the release.
+Android Auto has its own GEM screen (`pmcp_android_auto`, on the main screen) and is installed separately from CarPlay:
+button 3 neither installs nor removes it. CarPlay works exactly as without it.
 
 ## How it works
 
@@ -28,8 +28,9 @@ AA phone -> gal (the unit's AA receiver) + hook -> aa-most-feeder -> ring /ramdi
 - The feeder (`feeder/`) takes the AID's MOST video channel, waits until the AID is ready, then writes the frames into the
   same ring the CarPlay map uses. It paces large frames and keeps statistics for `AA status`.
 - The hook also reads Google Maps' navigation messages (0x8006 next step, 0x8007 distance) and writes the same mailbox
-  format the CarPlay route guidance reader writes, to `/ramdisk/pmcp-aa-rg` (`hook/pmcp_rg.c`). The Java package
-  **rg-aa** (rg + `rg/lanes/aa.py`) reads it while an Android Auto phone is connected and shows the VW arrows.
+  format the CarPlay route guidance reader writes, to `/ramdisk/pmcp-aa-rg` (`hook/pmcp_rg.c`). The route guidance
+  package **rg** (since v1.5.0 with `rg/lanes/aa.py`; the experimental cards had it as a separate package `rg-aa`) reads
+  it while an Android Auto phone is connected and shows the VW arrows. With CarPlay or no phone it never reads it.
   Destination distance and arrival time stay in the Android Auto picture.
 
 ## Files in the unit
@@ -39,9 +40,9 @@ AA phone -> gal (the unit's AA receiver) + hook -> aa-most-feeder -> ring /ramdi
 | `/mnt/app/eso/bin/apps/gal` | `unit/gal.wrapper.sh` | wrapper: trial start, then Confirm (like the Java packages) |
 | `carplaymaps/aa/gal.real` | the unit's factory `gal` (`3b422d47…`) | copy made by `aa-on`; the way back |
 | `carplaymaps/aa/libgal_hook.so`, `libdmdt_flush.so` | `hook/build.sh <dir> gamma` | hook g2 |
-| `carplaymaps/aa/aa-most-feeder` | `feeder/build.sh` | feeder v9 |
+| `carplaymaps/aa/aa-most-feeder` | `feeder/build.sh` | feeder v10 |
 | `carplaymaps/aa/gal-hook.conf` | `unit/gal-hook-gamma.conf` | protocol 1.7, `GAL_PMCP_RG=1` |
-| `carplaymaps/aa/feeder.conf` | `unit/feeder-gamma.conf` | MOST, 5 s wait, start sync, pacing |
+| `carplaymaps/aa/feeder.conf` | `unit/feeder-gamma.conf` | MOST, 5 s wait, start sync, pacing 6 Mbit/s, 20 ms gap |
 | `carplaymaps/aa/AA_BOOT` | `pmcp.sh` | set id: `gamma-` + 8 hex of hook, feeder and hook settings |
 
 Nothing changes in `/mnt/system`. Saved logs go to `carplaymaps/logs/` (`AA save log`).
@@ -52,8 +53,7 @@ Nothing changes in `/mnt/system`. Saved logs go to `carplaymaps/logs/` (`AA save
   `gal` is factory again. `DISABLED` from the rescue card also switches the hook off.
 - **Nothing on an SD card affects `gal`:** `hook/patch_no_sd.py` removes the hook's SD card and `/tmp` paths before the build.
 - The feeder reads only its settings keys from `feeder.conf`, never paths.
-- `AA remove`, "Remove everything" and the release card's "Remove experimental Android Auto" put the factory `gal` back,
-  only from a copy with the factory hash.
+- `AA remove` and "Remove everything" put the factory `gal` back, only from a copy with the factory hash.
 - AA sets of earlier experimental cards are recognised (`AA_OLD`): status `old`, `AA 1` brings them up to date without
   removing anything first.
 
@@ -72,12 +72,12 @@ Nothing changes in `/mnt/system`. Saved logs go to `carplaymaps/logs/` (`AA save
 python3 -I aa/feeder/test/run_host_test.py <feeder built for the host>   # cc -O2 -Wall -Wextra -Werror -std=gnu99
 aa/hook/test/run_keyframe_test.sh ; aa/hook/test/run_rg_test.sh
 aa/hook/build.sh   build/aa-g2 gamma     # Docker image qnx65-armv7-toolchain:8.5; two builds, must be identical
-aa/feeder/build.sh build/aa-v9/feeder
-rg/build.sh <converted lsd.jar> build/rg-mu1161-lanes-uturn-asf-m-aa lanes-uturn-asf-m-aa   # package rg-aa
+aa/feeder/build.sh build/aa-v10/feeder
+rg/build.sh <converted lsd.jar> build/rg-mu1161-lanes-uturn-asf-m-aa lanes-uturn-asf-m-aa   # package rg
 python3 -I installer/build_sd.py build/sd
 python3 -I installer/build_logcard.py build/card3-logs   # card 3 (logs), a separate SD card
 ```
 
 `build_sd.py` accepts files only with pinned hashes.
 
-In-car steps: [docs/en/13-experimental-guide.md](../docs/en/13-experimental-guide.md).
+In-car steps: [docs/en/13-android-auto-guide.md](../docs/en/13-android-auto-guide.md).

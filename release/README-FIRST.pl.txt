@@ -105,7 +105,7 @@ CZĘŚĆ 2 - W AUCIE
   Żeby usunąć wszystko: "Remove everything (back to factory files)", potem restart.
   "Status (read-only)" pokazuje, co jest zainstalowane.
 
-  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.3):
+  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.4):
     1. Zrób KARTĘ 1 z tej paczki. W aucie: "1. Check card and unit (read-only)".
        Oczekiwane: PMCP_VERIFY_OK state=JAVA. "Status (read-only)" może pokazać
        "Route guidance system: old" i "packages of an earlier card: rglu" - tak ma być.
@@ -114,8 +114,9 @@ CZĘŚĆ 2 - W AUCIE
     4. "4. Confirm: everything works" w tym samym starcie, potem restart.
     5. Zrób NOWĄ KARTĘ 2 pomocnikiem kopiowania (opcja 2): karty ratunkowe sprzed v1.4
        nie przywracają nowego sterownika prowadzenia.
-    Używałeś karty eksperymentalnej z Android Auto? Krok 1 pokaże wtedy stan UNKNOWN; tak
-    ma być. Przycisk 3 najpierw przywraca fabryczne Android Auto, potem aktualizuje resztę.
+    Używałeś karty eksperymentalnej z Android Auto? Przycisk 3 zostawia Android Auto bez zmian
+    i zamienia jego rg-aa na rg. Samo Android Auto aktualizuje ekran Android Auto
+    (pmcp_android_auto), "AA 1. Android Auto on: ...". Zobacz docs/pl/13-instrukcja-android-auto.md.
 
 ------------------------------------------------------------------------------------------
 AWARIA - KARTA 2 (RATUNKOWA)
