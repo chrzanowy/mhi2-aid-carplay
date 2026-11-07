@@ -555,6 +555,13 @@ do_aa_on() {
         check "$A/feeder.conf.pmcp-new" "$M_SHA" "$M_SIZE" STAGED_AA_MODE
         check "$A/aa-most-feeder.pmcp-new" "$F_SHA" "$F_SIZE" STAGED_AA_FEEDER
         check "$A/gal-hook.conf.pmcp-new" "$C_SHA" "$C_SIZE" STAGED_AA_HOOK_CONF
+        # the set id does not cover feeder.conf: an earlier set with the same id (030b7df2: same hook, feeder and hook
+        # settings, 2 Mbit/s) is still a different set, so its confirmation and trial markers go before anything changes
+        if [ "`cat "$A/AA_BOOT" 2>/dev/null`" = "$SET" ]; then
+            rm -f "$PERSIST/aa-ok.$SET" "$PERSIST/aa-trial.$SET" "$RAMDISK/pmcp-aa-trial.$SET" 2>/dev/null
+            [ ! -e "$PERSIST/aa-ok.$SET" ] && [ ! -e "$PERSIST/aa-trial.$SET" ] && [ ! -e "$RAMDISK/pmcp-aa-trial.$SET" ] \
+                || fail "AA_MARKER_REMOVE_FAILED"
+        fi
         echo "$SET" > "$A/AA_BOOT.pmcp-new" || fail "AA_SET_STAGE_FAILED"
         [ "`cat "$A/AA_BOOT.pmcp-new" 2>/dev/null`" = "$SET" ] || fail "AA_SET_STAGE_READBACK_FAILED"
         mv "$A/AA_BOOT.pmcp-new" "$A/AA_BOOT" || fail "AA_SET_ACTIVATION_FAILED_RUN_AA_REMOVE"

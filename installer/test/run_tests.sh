@@ -833,7 +833,7 @@ PEOF
         [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" = "$aa_before" ] && [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-')" ] \
             && ok "AA files, AA_BOOT and AA markers untouched" || bad "AA changed by button 3"
         [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa2.jar" ] \
-            && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] && ok "pmcp-guidance-aa2.jar -> pmcp-guidance4.jar (same bytes, now rg)" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
+            && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] && ok "pmcp-guidance-aa2.jar -> pmcp-guidance4.jar (this card's rg)" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
         o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance4.jar*) ok "one trial start" ;; *) bad "boot: $o" ;; esac
         run java-confirm; rc_is 0
         allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
@@ -1019,6 +1019,30 @@ PEOF
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
     else
         bad "experimental card b2bcbbe3 missing: $EXPB2 (set PMCP_EXPB2_SD)"
+    fi
+
+    echo "[31] confirmed AA set of card 030b7df2 (same set id, feeder.conf 2 Mbit/s) -> AA 1: new settings get a trial"
+    if [ -f "$EXP143" ]; then
+        fresh_unit; factory=$(snapshot "$W/unit")
+        runexp143 install map-square-fps40; rc_is 0; runexp143 aa-on; rc_is 0
+        S=$(cat "$U/carplaymaps/aa/AA_BOOT"); P="$W/unit/mnt/persist/pmcp"; mkdir -p "$P"
+        [ "$S" = gamma-bdd76a85-c5f8b0ef-716516eb ] && ok "030b7df2 set has this card's set id ($S)" || bad "set id $S"
+        grep -q '^PMCP_AA_PACE_KBPS=2000$' "$U/carplaymaps/aa/feeder.conf" && ok "2 Mbit/s settings" || bad "setup feeder.conf"
+        touch "$P/aa-trial.$S" "$P/aa-ok.$S"
+        new_start; o=$(gal_start); case "$o" in "use=yes "*) ok "confirmed: hook on every start" ;; *) bad "before AA 1: $o" ;; esac
+        run status; expect_out "Android Auto: old mode=gamma" "status: old (earlier card's set)"
+        run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "AA 1 updates it, same set id"
+        expect_out "That first Android Auto session in this start is a TRIAL" "AA 1 announces a trial"
+        grep -q "confirmed before" "$W/out" && bad "AA 1 kept the old confirmation" || ok "no 'confirmed before'"
+        [ ! -e "$P/aa-ok.$S" ] && [ ! -e "$P/aa-trial.$S" ] && ok "old confirmation and trial markers removed" || bad "markers left: $(ls "$P")"
+        grep -q '^PMCP_AA_PACE_KBPS=6000$' "$U/carplaymaps/aa/feeder.conf" && ok "6 Mbit/s settings" || bad "feeder.conf not updated"
+        run status; expect_out "Android Auto: on mode=gamma" "status: on"
+        new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "next start: trial with the hook" || bad "trial start: $o"
+        o=$(gal_start); case "$o" in "use=trial "*) ok "reconnection in the trial start: still the trial" ;; *) bad "reconnect: $o" ;; esac
+        new_start; o=$(gal_start); case "$o" in "use=no real=gal.real preload= "*) ok "without AA 2 Confirm: factory gal, no hook" ;; *) bad "start after the trial: $o" ;; esac
+        run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+    else
+        bad "experimental card 84472aa9 missing: $EXP143 (set PMCP_EXP143_SD)"
     fi
 done
 

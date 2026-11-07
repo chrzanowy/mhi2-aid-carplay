@@ -632,6 +632,11 @@ def main():
             pairs[h] = h1
             hs.append("%s %d" % (h, size))
         assert [(f[0], f[2]) for f in files] != cur_aa, "AA_OLD tuple equals this card's AA set"
+        # the set id (mode + hook, feeder, hook settings) does not cover feeder.conf: pmcp.sh aa-on drops the markers of
+        # such a set, so its confirmation does not carry over to this card's settings (card 030b7df2: same id, 2 Mbit/s)
+        if mode == "gamma" and [f[0][:8] for f in files[:3]] == [c[0][:8] for c in cur_aa[:3]]:
+            print("WARNING: AA_OLD set %s (feeder.conf %s) has this card's AA set id: AA 1 removes its confirmation, the "
+                  "next AA connection is a trial" % ("-".join([mode] + [f[0][:8] for f in files[:3]]), files[3][0][:8]))
         aa_old.append(mode + " " + " ".join(hs))
     for key, h, size, rel in rows:
         data = (pm / "payload" / rel).read_bytes()
