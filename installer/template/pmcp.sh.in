@@ -15,10 +15,10 @@
 #   pmcp.sh rg-update           RG on with an older pmcp driver/reader (RG_KNOWN): replace them in place by this card's
 #                               ones; the factory copies are checked, kept and stay the way back (rg-system-off)
 #   pmcp.sh java-update         Java set with packages of an earlier card (JAVA_OLD): one new set with this card's
-#                               packages (rglu and the experimental rg variants become rg), one trial boot
+#                               packages (rglu, rg-aa and the other earlier rg variants become rg), one trial boot
 #   pmcp.sh aa-remove           Android Auto off: factory gal back (only from a copy with the factory hash), its files and
 #                               markers removed
-# Experimental branch (Android Auto on the AID, aa/README.md):
+# Android Auto on the AID (aa/README.md), installed separately from CarPlay (its own GEM screen):
 #   pmcp.sh aa-on               Android Auto: Google Maps picture on the AID + VW arrows (gal wrapper + hook + feeder);
 #                               also brings an earlier card's AA set up to date
 #   pmcp.sh aa-confirm          during the AA trial start only: keep this AA set
@@ -235,11 +235,6 @@ java_old() {
     done
 }
 
-# java_alternative NAME -> the package that replaces the same classes (never in one set with NAME), or nothing
-java_alternative() {
-    case "$1" in rg) echo rg-aa ;; rg-aa) echo rg ;; esac
-}
-
 java_jarfile() {
     java_catalog | while read _w_n _w_f; do [ "$_w_n" = "$1" ] && echo "$_w_f"; done
 }
@@ -421,9 +416,6 @@ detect_state() {
     STATE_WHY="pmcp factory copies are intact, live files are mixed (interrupted action or rescue card): run restore"
 }
 
-# Android Auto of an experimental card (branch experimental, aa-on): gal replaced by its wrapper, carplaymaps/aa with
-# the factory gal copy gal.real, or leftovers of an interrupted aa-on / aa-off (.aa-new, gal.pmcp-new, gal.pmcp-restore).
-# Its saved logs (carplaymaps/logs/aa-log-*) are left alone: harmless, and restore removes carplaymaps anyway.
 # carplaymaps is our install: version file, verified factory dio_manager and lsd.sh copies, no other navigation mod
 pmcp_root() {
     [ -s "$ROOT/PMCP_VERSION" ] && [ ! -e "$JARS/CarPlayNavigationPatch.jar" ] \
@@ -431,15 +423,18 @@ pmcp_root() {
         && matches "$ROOT/rollback/lsd.sh" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"
 }
 
-aa_exp_present() {
+# Android Auto (aa-on, this card or an earlier one): gal replaced by its wrapper, carplaymaps/aa with the factory gal copy
+# gal.real, or leftovers of an interrupted aa-on / aa-off (.aa-new, gal.pmcp-new, gal.pmcp-restore).
+# Its saved logs (carplaymaps/logs/aa-log-*) are left alone: harmless, and restore removes carplaymaps anyway.
+aa_present() {
     [ -e "$ROOT/aa" ] || [ -e "$ROOT/.aa-new" ] || [ -e "$GAL.pmcp-new" ] || [ -e "$GAL.pmcp-restore" ] \
         || ! matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE"
 }
 
-# aa_exp_off: factory gal back (staged from carplaymaps/aa/gal.real, which must have the factory hash), then the AA files
+# aa_off: factory gal back (staged from carplaymaps/aa/gal.real, which must have the factory hash), then the AA files
 # and markers go. Fails before any write when gal is not factory and no verified copy exists. Idempotent: an interrupted
 # run is finished by running it again (gal is factory then, so no copy is needed).
-aa_exp_off() {
+aa_off() {
     if ! matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE"; then
         matches "$ROOT/aa/gal.real" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE" || fail "AA_REMOVE_FACTORY_GAL_COPY_NOT_VERIFIED"
     fi
@@ -461,9 +456,9 @@ do_aa_remove() {
     selftest
     firmware_identity
     [ -d "$ROOT" ] || fail "AA_REMOVE_ALREADY_NOT_INSTALLED"
-    aa_exp_present || fail "AA_REMOVE_ALREADY_NOT_INSTALLED"
+    aa_present || fail "AA_REMOVE_ALREADY_NOT_INSTALLED"
     pmcp_root || fail "AA_REMOVE_NOT_A_PMCP_INSTALL"
-    aa_exp_off
+    aa_off
     flush
     detect_state
     say "PMCP_AA_REMOVE_OK (factory gal verified; unit state now: $STATE)"
@@ -471,7 +466,7 @@ do_aa_remove() {
 }
 
 
-# ---- Android Auto (experimental branch) -------------------------------------------------------------------------------
+# ---- Android Auto ------------------------------------------------------------------------------------------------------
 # One mode, gamma: the gamma hook (Google Maps manoeuvres -> rg mailbox /ramdisk/pmcp-aa-rg), the feeder with start sync
 # and pacing, protocol 1.7. AA set id = mode and the first 8 hex of hook, feeder and hook settings (the same formula as on
 # the earlier cards, so their confirm markers keep their meaning).
@@ -600,7 +595,7 @@ do_aa_on() {
         say "Activating"
         # the files first, the wrapper last: until gal is replaced nothing of this is used
         mv "$NEWA" "$AADIR" || fail "AA_DIR_ACTIVATION_FAILED"
-        mv "$GAL.pmcp-new" "$GAL" || { aa_exp_off; fail "AA_WRAPPER_ACTIVATION_FAILED"; }
+        mv "$GAL.pmcp-new" "$GAL" || { aa_off; fail "AA_WRAPPER_ACTIVATION_FAILED"; }
     fi
     # a set confirmed before stays confirmed; any other set gets a new trial start
     if [ -e "$PERSIST/aa-ok.$SET" ]; then _o_kept=yes
@@ -608,7 +603,7 @@ do_aa_on() {
     rm -f "$PERSIST/aa-capture" 2>/dev/null
     detect_state
     if [ "$AASYS" != on ]; then
-        aa_exp_off
+        aa_off
         fail "POST_AA_ON_STATE_${AASYS}_ROLLED_BACK"
     fi
     flush
@@ -619,11 +614,12 @@ do_aa_on() {
         say "Connect the Android phone (cable). That first Android Auto session in this start is a TRIAL."
         say "If AA works: open this menu again and press AA Confirm, in that same start. Otherwise restart: factory AA."
     fi
+    # rg reads the hook's manoeuvres during an Android Auto connection (connection type 3) and gives the VW arrows
+    _a_rg=no
     if [ "$STATE" = JAVA ]; then
-        case " `current_set` " in *" rg-aa "*) ;; *) say "VW arrows from Google Maps need the route guidance package rg-aa (Packages)." ;; esac
-    else
-        say "VW arrows from Google Maps need the route guidance package rg-aa (Packages)."
+        case " `current_set` " in *" rg "*) _a_rg=yes ;; esac
     fi
+    [ $_a_rg = yes ] || say "VW arrows from Google Maps need rg: main menu, 3. Install all features or update."
     return 0
 }
 
@@ -719,7 +715,7 @@ do_aa_status() {
     firmware_identity
     detect_state
     say "Unit state: $STATE"
-    say "Android Auto (experimental): $AASYS${AAMODE:+ mode=$AAMODE}"
+    say "Android Auto: $AASYS${AAMODE:+ mode=$AAMODE}"
     [ "$AASYS" = old ] && say "  AA files from an earlier card (mode $AAMODE): Android Auto on brings them up to date (no AA remove needed)"
     if [ "$AASYS" = on ]; then
         SET=`aa_set_id $AAMODE`
@@ -1025,20 +1021,10 @@ do_java_on() {
     [ "$STATE" = VIDEO ] && cur=""
     [ -z "$JAVA_OLD_SET" ] || fail "JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST"
     case " $cur " in *" $ARG "*) fail "JAVA_PACKAGE_ALREADY_ON_$ARG" ;; esac
-    case "$ARG" in rg|rg-aa) [ "$RGSYS" = on ] || fail "JAVA_RG_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
-    # button 3 asks for rg: rg-aa (rg + Android Auto arrows) stays, counted as done
-    if [ "${PMCP_ALL_ON:-}" = 1 ] && [ "$ARG" = rg ]; then
-        case " $cur " in *" rg-aa "*) fail "JAVA_PACKAGE_ALREADY_ON_rg_AS_rg-aa" ;; esac
-    fi
-    # the alternative package (same classes) leaves the set; its JAR is removed after the new set is active
-    ALT=""; ALTFILE=""
-    for _a in `java_alternative "$ARG"`; do
-        case " $cur " in *" $_a "*) ALT=$_a; ALTFILE=`java_jarfile "$_a"` ;; esac
-    done
+    case "$ARG" in rg) [ "$RGSYS" = on ] || fail "JAVA_RG_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
     # new set in catalog order, so the same packages always give the same set id
     new=""
     for n in `java_catalog | while read a b; do echo $a; done`; do
-        [ -n "$ALT" ] && [ "$n" = "$ALT" ] && continue
         case " $cur $ARG " in *" $n "*) new="$new${new:+ }$n" ;; esac
     done
     set -- `manifest_get "JAR_$ARG"`; J_SHA=$1; J_SIZE=$2; J_PATH=$3
@@ -1064,10 +1050,6 @@ do_java_on() {
     commit_set_files || fail "SET_ACTIVATION_FAILED_RUN_RESTORE"
     if [ "$STATE" = VIDEO ]; then
         mv "$LSD.pmcp-new" "$LSD" || fail "LSD_ACTIVATION_FAILED_RUN_RESTORE"
-    fi
-    if [ -n "$ALTFILE" ]; then
-        rm -f "$JARS/$ALTFILE" || fail "ALTERNATIVE_JAR_REMOVE_FAILED_RUN_RESTORE"
-        say "  $ALT replaced by $ARG"
     fi
     rm -f "$PERSIST/DISABLED" 2>/dev/null
     detect_state
@@ -1095,7 +1077,7 @@ do_java_off() {
     [ "$ARG" != sl ] || clear_speedlimit_mode
     # turnto shows only through rg's TurnToInfo text: without rg it would be a saved mode that shows nothing and comes
     # back silently with a later java-on rg
-    case "$ARG" in rg|rg-aa) [ "`cat "$SL_MODE" 2>/dev/null`" = turnto ] && clear_speedlimit_mode ;; esac   # rg-aa: rg + AA (experimental)
+    if [ "$ARG" = rg ] && [ "`cat "$SL_MODE" 2>/dev/null`" = turnto ]; then clear_speedlimit_mode; fi
     if [ -z "$new" ]; then
         # last package: factory lsd.sh first (switch off), then remove the JAR and set files
         cp "$ROOT/rollback/lsd.sh" "$LSD.pmcp-rb" || fail "LSD_RESTORE_STAGE_FAILED"
@@ -1150,7 +1132,7 @@ do_java_retry() {
 }
 
 # java-update: the set holds packages of an earlier card (JAVA_OLD). One new set with this card's packages: each old one
-# becomes its successor (rg, rglu and the experimental rg variants -> rg), the others stay. New JARs have file names no
+# becomes its successor (rg, rglu, rg-aa and the other earlier rg variants -> rg), the others stay. New JARs have file names no
 # earlier card used, so the old set stays intact until HMI_BOOT switches (one mv); old JARs are removed after it.
 do_java_update() {
     selftest
@@ -1182,7 +1164,7 @@ do_java_update() {
         [ "$_u_part" = "$_u_x" ] && break
         _u_x=${_u_x#*+}
     done
-    case " $want " in *" rg "*|*" rg-aa "*) [ "$RGSYS" = on ] || fail "JAVA_UPDATE_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
+    case " $want " in *" rg "*) [ "$RGSYS" = on ] || fail "JAVA_UPDATE_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
     new=""
     for n in `java_catalog | while read a b; do echo $a; done`; do
         case " $want " in *" $n "*) new="$new${new:+ }$n" ;; esac
@@ -1229,7 +1211,7 @@ do_speedlimit_mode() {
         case " `current_set` " in *" sl "*) ;; *) fail "SPEEDLIMIT_PACKAGE_NOT_INSTALLED" ;; esac
         # since v1.4 rg owns TurnToInfo and adds the prefix (rg/lanes/SpeedLimitText.java): without rg nothing shows it
         if [ "$ARG" = turnto ]; then
-            case " `current_set` " in *" rg "*|*" rg-aa "*) ;; *) fail "SPEEDLIMIT_TURNTO_NEEDS_RG_PACKAGE" ;; esac
+            case " `current_set` " in *" rg "*) ;; *) fail "SPEEDLIMIT_TURNTO_NEEDS_RG_PACKAGE" ;; esac
         fi
         set_id=`boot_set_id`
         [ ! -e "$PERSIST/DISABLED" ] || fail "JAVA_DISABLED_BY_RESCUE_CARD"
@@ -1393,10 +1375,10 @@ do_rg_system_off() {
 do_restore() {
     selftest
     firmware_identity
-    # an experimental card's Android Auto goes first (its factory gal copy lives in carplaymaps, removed below)
-    if [ -d "$ROOT" ] && aa_exp_present && pmcp_root; then
-        say "Android Auto of an experimental card: taking it off first"
-        aa_exp_off
+    # Android Auto goes first (its factory gal copy lives in carplaymaps, removed below)
+    if [ -d "$ROOT" ] && aa_present && pmcp_root; then
+        say "Android Auto: taking it off first"
+        aa_off
     fi
     detect_state
     case "$STATE" in
@@ -1450,7 +1432,7 @@ do_status() {
     [ -n "$JAVA_STRAY" ] && say "  unused JAR files (not loaded): $JAVA_STRAY (button 3 or Java update removes them)"
     say "Route guidance system: $RGSYS"
     [ "$RGSYS" = old ] && say "  driver or reader of an earlier card (button 3 or Route guidance update replaces them)"
-    say "Android Auto (experimental): $AASYS${AAMODE:+ mode=$AAMODE}"
+    say "Android Auto: $AASYS${AAMODE:+ mode=$AAMODE}"
     if [ -d "$PERSIST" ]; then
         say "Trial markers: `ls "$PERSIST" 2>/dev/null`"
         [ -s "$PERSIST/last-boot" ] && say "This boot: `cat "$PERSIST/last-boot"`"

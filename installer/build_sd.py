@@ -18,7 +18,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
-PMCP_BASE_VERSION = "pmcp-0.4.3-exp-mu1161-791"   # branch experimental on release v1.4.3: + Android Auto (aa/)
+PMCP_BASE_VERSION = "pmcp-0.5.0-mu1161-791"   # release v1.5.0: CarPlay + Android Auto (aa/, installed separately)
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)
@@ -33,21 +33,18 @@ MIB_ESD = (REPO / "archives/mib-3.6.0/Launcher-sda0.esd",
 JAVA_PACKAGES = [("nai", "nai: AID map stays while the iPhone navigates (NavActiveIgnore)"),
                  ("np", "np: CarPlay song title and artist on the AID"),
                  ("rg", "rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)"),
-                 ("rg-aa", "rg-aa: rg + VW arrows from Android Auto (Google Maps); replaces rg (experimental)"),
                  ("zoom", "zoom: CarPlay map zoom with the steering wheel arrows"),
                  ("dn", "dn: CarPlay map day/night on the AID (sent again after start)"),
                  # optional (not in button 3), output off until enabled with speedlimit-mode
                  ("sl", "sl: native VW map speed limit in the AID road text (optional, output off until enabled)")]
-# rg = everything for route guidance in one package (v1.4): Tomasz's port + his lanes, our VW U-turn lanes, his MU1367
-# v1.4.3 distance bar / street name / feed recovery, and the maneuver fallbacks (rg/build.sh lanes-uturn-asf-m; the
-# experimental branch's rgluasfm, car-tested 2026-11-04). The rg and rglu of v1.3 and the experimental rg variants are
-# replaced by java-update (JAVA_OLD below).
-# Tried and not shipped (docs/en/14-fast-start-audit.md, branch experimental): day/night v2 and the cluster day/night
-# module (no effect on Google Maps), AID fast start kf..kf4, Android Auto.
-# Branch experimental: rg-aa = rg + rg/lanes/aa.py (rg/build.sh lanes-uturn-asf-m-aa; v1.4.1's rg with the sl hook): Android Auto (connection 3) reads the gamma hook's mailbox /ramdisk/pmcp-aa-rg. rg and rg-aa
-# replace the same classes, so they are alternatives (java-on of one takes the other out of the set). Otherwise no two
-# packages replace the same class (checked in main).
-JAVA_ALTERNATIVES = {("JAR_rg", "JAR_rg-aa")}
+# rg = everything for route guidance in one package: Tomasz's port + his lanes, our VW U-turn lanes, his MU1367
+# v1.4.3 distance bar / street name / feed recovery, the maneuver fallbacks, the quiet-route hold (v1.4.3) and, since
+# v1.5.0, the VW arrows from Android Auto (rg/build.sh lanes-uturn-asf-m-aa: lanes-uturn-asf-m + rg/lanes/aa.py; with
+# connection 3 it reads the AA hook's mailbox /ramdisk/pmcp-aa-rg, CarPlay unchanged). The rg and rglu of v1.3, v1.4.x's
+# rg and the experimental cards' rg-aa are replaced by java-update (JAVA_OLD below).
+# Tried and not shipped (docs/en/14-fast-start-audit.md): day/night v2 and the cluster day/night module (no effect on
+# Google Maps), AID fast start kf..kf4.
+# No two packages replace the same class (checked in main).
 # In-car set (chosen in the car, 2026-10-24): 1 clean map (default), 2 clean card, 3 map with showSpeedLimit (the variant the
 # unit has had since 2026-10-23, name kept), 4 clean map 40 columns left. All with url-map-hybrid's area.
 VARIANTS = ["map-clean", "card-clean", "url-map-hybrid", "map-clean-l40", "map-square", "map-square-fps40"]
@@ -60,7 +57,7 @@ STOCK = {
     "IAP2CFG": (BACKUP.parent / "MU1161-system/mm/iap2.cfg", "1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37", 5951),
     "LSD": (BACKUP / "eso/hmi/lsd/lsd.sh", "97bbd4ecb51045b34c2a41955d9f53e1f144d174bff1aa8560e911525808e8d8", 16567),
     "DIO": (BACKUP / "eso/bin/apps/dio_manager", "609e42723ab3e36c7be5ceade81e03672ba4acd251f8eeb8b100e074aaf3c250", 686249),
-    # Android Auto receiver: never changed by this card; must be the factory file (the experimental card's AA is refused)
+    # Android Auto receiver: aa-on replaces it by the AA wrapper and keeps this factory file as carplaymaps/aa/gal.real
     "GAL": (BACKUP / "eso/bin/apps/gal", "3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9", 1269219),
 }
 
@@ -83,11 +80,10 @@ PAYLOAD = {
             "dbd031ecb28a2ec91c4704e133f4e2126cf1fe11498f673bc2e07fc0b1aaa7ab", 13285, "jars/NavActiveIgnore.jar"),
     "JAR_np": (PROJ / "build/np-mu1161-v2/pmcp-np.jar",
                "6b638868e65a6e573117cbf249850bb29e7b9aac3cd0502c2830652411f1dc23", 17928, "jars/pmcp-np.jar"),
-    # rg/build.sh <lsd> <dir> lanes-uturn-asf-m; a file name no earlier card used (java-update keeps the old set intact)
-    "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m/pmcp-rg.jar",
-               "7b1874847c5cf9714ed3b7e24c948b425aafc367c03a884d6309c8fda93c8661", 52951, "jars/pmcp-guidance3.jar"),
-    "JAR_rg-aa": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-143/pmcp-rg.jar",
-                  "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", 53309, "jars/pmcp-guidance-aa2.jar"),
+    # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa (the same bytes as the experimental card 84472aa9's rg-aa); a file name
+    # no earlier card used (java-update keeps the old set intact)
+    "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/pmcp-rg.jar",
+               "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", 53309, "jars/pmcp-guidance4.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
                  "046f48210dbee3177fbaa2a25f69154b56055f59b074fced1a0202700dd78d7b", 4740, "jars/pmcp-zoom.jar"),
     "JAR_dn": (PROJ / "build/extras-mu1161-v2/pmcp-dn.jar",
@@ -99,15 +95,15 @@ PAYLOAD = {
     "JAR_sl": (PROJ / "build/sl-mu1161/pmcp-sl.jar",
                "37b5d9488b818e4a4de58dc9541b6618de364e5a46d81439c1f3206762e5249f", 16527, "jars/pmcp-sl2.jar"),
     # Tomasz's driver patch + our log gate: his RGI receive log only with /dev/shmem/pmcp-rgi-debug (rg/driver/)
-    "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m/ipod-drvr-iap2-gated.so",
+    "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/ipod-drvr-iap2-gated.so",
                   "519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3", 743272, "rg/ipod-drvr-iap2.so"),
-    "RG_CFG": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m/iap2.cfg",
+    "RG_CFG": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/iap2.cfg",
                "c61407d9c6cd0d2529afedad0c9a120d5da5a504739e273bbb3dbea1e0b9b491", 6079, "rg/iap2.cfg"),
     # rgi-observer pmcp-r1 (rg/reader/, prebuilt in the repository): a stuck driver read costs one invalid record, not the reader
     "RG_READER": (PROJ / "rg/reader/prebuilt/rgi-observer",
                   "3166df9b91119475f93043ac8c150e2641732e602161839a137a1907d4ef11df", 13552, "rg/rgi-observer"),
 }
-# Experimental Android Auto (aa/README.md), one mode "gamma": MacsInSpace's gal hook (pinned commit, no SD card paths,
+# Android Auto 0.1 (aa/README.md), one mode "gamma": MacsInSpace's gal hook (pinned commit, no SD card paths,
 # aa/hook/build.sh gamma: Google Maps manoeuvres -> rg mailbox), our feeder (aa/feeder, v10: start sync + pacing without bursts) and the
 # gal wrapper. Built into build/ by those scripts (docker, QNX 6.5 toolchain).
 AA_GAMMA = PROJ / "build/aa-g2"    # hook g2 (A-AA24): liveness / unknown-type fixes
@@ -121,9 +117,9 @@ PAYLOAD.update({
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", 1219, "aa/feeder.conf"),
 })
-# AA sets of earlier experimental cards (whole tuples: hook, feeder, hook settings, feeder settings, each from the card it was
+# AA sets of earlier (experimental) cards (whole tuples: hook, feeder, hook settings, feeder settings, each from the card it was
 # on; pmcp.sh aa_state reports them as "old" with that card's AA_BOOT, aa-on brings them up to date). All modes of those
-# cards count: this branch has only gamma, aa-on replaces any of them.
+# cards count: this card has only gamma, aa-on ("AA 1") replaces any of them.
 AA_OLD = [
     # AA 3 (1.5) feeder v6 (card 892eed6f)
     ("sync15", [(PROJ / "build/sd-892eed6f/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
@@ -234,23 +230,27 @@ RG_KNOWN = [
     ("READER", "b683cef78828bfab2b8cdf43e4ea82e5d7c16d0d47730936d936e82af6ee08ac", "1b6cb87d2aa1148f28996f72cb00349519b19077", 16606),
 ]
 # Java packages of earlier cards that java-update replaces (pmcp.sh JAVA_OLD): (name, sha256, sha1, size, jar file on the
-# unit, successor). v1.2/v1.3 rg and rglu, and the experimental branch's rg variants (rg/build.sh modes base,
-# lanes-uturn, and on branch experimental lanes-uturn-aa, -asf, -asf-aa, -asf-m, -asf-m-aa). Only their hashes go to the card.
+# unit, successor). v1.2/v1.3 rg and rglu, v1.4.x rg, and the experimental cards' rg variants (rg/build.sh modes base,
+# lanes-uturn, lanes-uturn-aa, -asf, -asf-aa, -asf-m, -asf-m-aa): all become rg. Only their hashes go to the card.
 JAVA_OLD = [
     ("rg", "717fb53c667c612e6f3b483ea93620559eaa23404a2e237d255f5af40798a754", "f748313879a40e3c8d69304dcfbfbbf003a412c6", 34082, "pmcp-rg.jar", "rg"),
     ("rglu", "72ab72214ee91a0d95ba0ec4d57a65cbee95d8ee82cb23af82fcb6b082591a33", "29b4bbcacc1c4251b7a47efd3c11445ba33e41f8", 38529, "pmcp-rglu.jar", "rg"),
-    ("rglua", "a9a25b1eb9aeed1347bb9c6c38aef3549dc2416d844c10b203fd175319f62161", "809f18a0deb12667fe651c5309a6be5c63a3849a", 38832, "pmcp-rglua.jar", "rg-aa"),
+    ("rglua", "a9a25b1eb9aeed1347bb9c6c38aef3549dc2416d844c10b203fd175319f62161", "809f18a0deb12667fe651c5309a6be5c63a3849a", 38832, "pmcp-rglua.jar", "rg"),
     ("rgluasf", "a092ef2a617cd63cde454d2bb18e8ea249f374770474ac030e5aea53edc373ed", "4fa0c5b25cbddc70b7c672ce58043fbd8eb3f68d", 47187, "pmcp-rgluasf.jar", "rg"),
-    ("rgluasfa", "b3a35c9b40ae4bb5360189178b18218005a194f4585ee491a916bfce539c034d", "385c81be0210bdbd9f599a7739124d528f3d8770", 47510, "pmcp-rgluasfa.jar", "rg-aa"),
+    ("rgluasfa", "b3a35c9b40ae4bb5360189178b18218005a194f4585ee491a916bfce539c034d", "385c81be0210bdbd9f599a7739124d528f3d8770", 47510, "pmcp-rgluasfa.jar", "rg"),
     ("rgluasfm", "13ca11c4e2a5fbe155165071f69fbee0e2b5b318e87fbfc079a9f76fefb62770", "517763a46b37afac546ec45e24b72cf15307ad9a", 47817, "pmcp-rgluasfm.jar", "rg"),
-    ("rgluasfma", "de39c893d8ea86abe4f57bc350fd7bd2d9b4a79f9023fc28a430cc2a20957ace", "ca03f2696567e24866b30e370159835a2cfae3db", 48161, "pmcp-rgluasfma.jar", "rg-aa"),
+    ("rgluasfma", "de39c893d8ea86abe4f57bc350fd7bd2d9b4a79f9023fc28a430cc2a20957ace", "ca03f2696567e24866b30e370159835a2cfae3db", 48161, "pmcp-rgluasfma.jar", "rg"),
     # v1.4.0 rg (the same bytes as rgluasfm, under the v1.4.0 file name); v1.4.1 adds the speed-limit prefix hook
     ("rg", "13ca11c4e2a5fbe155165071f69fbee0e2b5b318e87fbfc079a9f76fefb62770", "517763a46b37afac546ec45e24b72cf15307ad9a", 47817, "pmcp-guidance.jar", "rg"),
     # v1.4.1/v1.4.2 rg (speed-limit prefix hook); v1.4.3 adds the quiet-route hold for Apple Maps (rg/lanes/hold.py)
     ("rg", "8e25ae00d155c1cf47cb7661b376c93464ea505141bf83d915b1867047f437cb", "e7222ae3bf7a796ba7a87b09774bf073d9d74689", 49045, "pmcp-guidance2.jar", "rg"),
-    # experimental cards f2a7ceb5 / 030b7df2 (v1.4.1/v1.4.2 + Android Auto): rg-aa = rg with the AA guidance reader; on this
-    # branch it stays rg-aa (the new one with the quiet-route hold), AA stays on
-    ("rg-aa", "4f9215bfacb61e12cf2f1444a8b9297d2fa925d48bacd6ca6b778140088e9dc9", "c7125f3321201df065594a0ee84daecbcb3bcd67", 49388, "pmcp-guidance-aa.jar", "rg-aa"),
+    # v1.4.3 rg (quiet-route hold, without the Android Auto reader)
+    ("rg", "7b1874847c5cf9714ed3b7e24c948b425aafc367c03a884d6309c8fda93c8661", "3cdf677c3824956b2da7546e9d69578af51030f6", 52951, "pmcp-guidance3.jar", "rg"),
+    # experimental cards f2a7ceb5 / 030b7df2 / b2bcbbe3 (v1.4.1/v1.4.2 + Android Auto): rg-aa = rg with the AA reader
+    ("rg-aa", "4f9215bfacb61e12cf2f1444a8b9297d2fa925d48bacd6ca6b778140088e9dc9", "c7125f3321201df065594a0ee84daecbcb3bcd67", 49388, "pmcp-guidance-aa.jar", "rg"),
+    # experimental card 84472aa9 (v1.4.3 + Android Auto): rg-aa with the quiet-route hold, the same bytes as this card's rg
+    # (only the file name and the package name differ, so java-update copies it once more under pmcp-guidance4.jar)
+    ("rg-aa", "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", "9af25147b2bad492cde17451966f689a37cd077f", 53309, "pmcp-guidance-aa2.jar", "rg"),
 ]
 for name in VARIANTS:
     PAYLOAD["CORE_" + name] = (TUNING / name / "core.so", None, 75099, "core/%s/core.so" % name)
@@ -426,7 +426,6 @@ trap '' 2
 echo "pmcp: %(label)s"
 echo "Do not press Back and do not remove the SD card until PMCP_ALL_ON_OK or PMCP_FAIL is shown."
 PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh
-export PMCP_ALL_ON=1   # java-on rg: a set with rg-aa (rg + Android Auto) counts as done
 NEW=0
 for A in %(actions)s; do
     echo "- ${A%%%%_*} ${A#*_}"
@@ -484,7 +483,8 @@ def menu_entries():
     return top, adv, inst, sw, java, AA_MENU
 
 
-# Experimental: Android Auto (aa/), its own screen pmcp_android_auto under pmcp_advanced
+# Android Auto (aa/), its own screen pmcp_android_auto on the main screen; installed separately from CarPlay (button 3
+# neither installs nor removes it; Remove everything removes it)
 AA_MENU = [("aa-on", "aa-on", "AA 1. Android Auto on: Google Maps on the AID + VW arrows (also updates an earlier card's AA)"),
            ("aa-confirm", "aa-confirm", "AA 2. Confirm: AA works (only in the start of the AA trial)"),
            ("aa-retry", "aa-retry", "AA 3. Try again: the next AA connection is a new trial"),
@@ -494,12 +494,12 @@ AA_MENU = [("aa-on", "aa-on", "AA 1. Android Auto on: Google Maps on the AID + V
            ("aa-remove", "aa-remove", "AA remove (factory Android Auto back)")]
 
 
-# actions of "Install all features or update", in order (on this branch Android Auto stays as it is): an earlier
+# actions of "Install all features or update", in order (Android Auto stays as it is: it has its own screen): an earlier
 # card's RG driver/reader and Java packages replaced by
 # this card's (rg-update, java-update), the main map (an older install gets START_VARIANT, already there: skipped), the
 # route guidance system (rg needs it), then every package except the optional sl. Steps already done answer *_ALREADY_* and are skipped, so
 # the same button brings any earlier pmcp install to this card's set.
-ALL_ON = ["rg-update", "java-update", "switch_" + START_VARIANT, "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n not in ("sl", "rg-aa")]
+ALL_ON = ["rg-update", "java-update", "switch_" + START_VARIANT, "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
 
 
 def menu_script(args, label):
@@ -525,7 +525,13 @@ def esd_block(version, top, adv, inst, sw, java, aa):
            '#', '#' * 91, 'screen pmcp_CarPlay_AID =>M.I.B.<=', '']
     out += kv(version) + kv("Every action checks all files first and changes nothing on a mismatch. Photograph each result.")
     out += kv("After 2 and after 3: restart the unit (hold the volume knob ~10 s).")
+    out += kv("Android Auto has its own screen: pmcp_android_auto (below).")
     for n, _, l in top:
+        out += sc(n, l)
+    out += ['screen pmcp_android_auto pmcp_CarPlay_AID', '']
+    out += kv("Android Auto 0.1: Google Maps on the AID. AA 1, connect the phone, then AA 2 in that start.")
+    out += kv("VW arrows from Google Maps: rg (main menu, 3). Lost picture: AA status, then AA save log.")
+    for n, _, l in aa:
         out += sc(n, l)
     out += ['screen pmcp_advanced pmcp_CarPlay_AID', '']
     out += kv("Advanced: diagnostics (read-only), single packages and other map layouts.")
@@ -542,11 +548,6 @@ def esd_block(version, top, adv, inst, sw, java, aa):
     out += kv("Without Confirm the next start is the factory one (then: 5. Try again).")
     out += kv("Black screen: hold the volume knob ~10 s, the next start loads none of our JARs.")
     for n, _, l in java:
-        out += sc(n, l)
-    out += ['screen pmcp_android_auto pmcp_advanced', '']
-    out += kv("Experimental: Android Auto map on the AID. AA 1, connect the phone, then AA 2 in that start.")
-    out += kv("VW arrows from Google Maps: package rg-aa (Packages). Lost picture: AA status, then AA save log.")
-    for n, _, l in aa:
         out += sc(n, l)
     return "\r\n".join(out) + "\r\n"
 
@@ -580,7 +581,7 @@ def main():
             with zipfile.ZipFile(pm / "payload" / rel) as z:
                 for n in z.namelist():
                     if n.endswith(".class"):
-                        if n in owner and tuple(sorted((owner[n], key))) not in JAVA_ALTERNATIVES:
+                        if n in owner:
                             sys.exit("class %s is in both %s and %s" % (n, owner[n], key))
                         owner[n] = key
     if {k for k in PAYLOAD if k.startswith("JAR_")} != {"JAR_" + n for n, _ in JAVA_PACKAGES}:

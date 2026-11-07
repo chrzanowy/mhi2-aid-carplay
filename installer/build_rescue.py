@@ -71,7 +71,7 @@ def sha(b, algo="sha256"):
 
 def mib_card(out, head, tail):
     """The pinned M.I.B. 3.6.0 tree in OUT, armed, with HEAD/TAIL added around M.I.B.'s own stuff.sh lines
-    (also used by build_logcard.py on the experimental branch)."""
+    (also used by build_logcard.py, the Android Auto log card)."""
     if out.exists():
         sys.exit("output exists: %s" % out)
     data = ZIP.read_bytes()

@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Experimental AA: build the MacsInSpace gal hook (libgal_hook.so) and libdmdt_flush.so for MU1161 from a pinned commit,
+# Android Auto: build the MacsInSpace gal hook (libgal_hook.so) and libdmdt_flush.so for MU1161 from a pinned commit,
 # with every SD card path taken out (patch_no_sd.py) and the player's fresh-IDR request (patch_keyframe.py, audit A-AA6).
 # and the experimental setup-response resend (patch_config_kf.py, A-AA15). Built twice; both builds must be byte-identical. Host test of the keyframe patch: test/run_keyframe_test.sh.
 #

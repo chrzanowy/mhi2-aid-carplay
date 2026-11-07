@@ -45,16 +45,19 @@ mode_digest() {
 }
 # "v13:ACTION": the v1.3.0 release card (an earlier install that rg-update / java-update bring to this card); not a target
 V13="${PMCP_V13_SD:-$SDB/../sd-v1.3.0}/pmcp/pmcp.sh"
-# "exp:ACTION": the last experimental card (Android Auto), likewise only to prepare a unit
+# "exp:ACTION": an earlier experimental card (ab9fb348, Android Auto AA 3 / gamma), likewise only to prepare a unit
 EXP="${PMCP_EXP_SD:-$SDB/../sd-ab9fb348}/pmcp/pmcp.sh"
-[ -f "$V13" ] && [ -f "$EXP" ] || { echo "earlier cards missing: $V13 $EXP"; exit 99; }
+# "x143:ACTION": the experimental card 84472aa9 (v1.4.3 + Android Auto, rg-aa in pmcp-guidance-aa2.jar), likewise
+EXP143="${PMCP_EXP143_SD:-$SDB/../sd-84472aa9}/pmcp/pmcp.sh"
+[ -f "$V13" ] && [ -f "$EXP" ] && [ -f "$EXP143" ] || { echo "earlier cards missing: $V13 $EXP $EXP143"; exit 99; }
 run() { case "$1" in v13:*) _a=${1#v13:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$V13" $_a "$@" > "$W/out" 2>&1 ;;
                      exp:*) _a=${1#exp:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP" $_a "$@" > "$W/out" 2>&1 ;;
+                     x143:*) _a=${1#x143:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP143" $_a "$@" > "$W/out" 2>&1 ;;
                      *) PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1 ;; esac; }
 runfi() { rm -f "$W/cnt"; PMCP_KILL_AT=$1 PMCP_FI_CNT=$W/cnt PMCP_FI_LOG=$W/filog PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp-fi.sh" "${@:2}" > "$W/outfi" 2>&1; }
 # the user confirmed the set during its trial boot
 confirm_set() {
-    if [ -s "$U/carplaymaps/aa/AA_BOOT" ]; then   # likewise for the AA set (experimental branch)
+    if [ -s "$U/carplaymaps/aa/AA_BOOT" ]; then   # likewise for the AA set
         mkdir -p "$W/unit/mnt/persist/pmcp"; read s < "$U/carplaymaps/aa/AA_BOOT"
         touch "$W/unit/mnt/persist/pmcp/aa-trial.$s" "$W/unit/mnt/persist/pmcp/aa-ok.$s"
     fi
@@ -92,8 +95,9 @@ CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on
        "install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" \
        "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-on zoom" "restore" \
        "exp:install map-clean" "exp:aa-on gamma" "aa-remove" "exp:aa-on most" "restore" \
-       "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on rg-aa" "java-on rg" "aa-remove" "aa-on" "restore" \
-       "exp:install map-clean" "exp:aa-on gamma" "aa-on" "restore")
+       "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore" \
+       "exp:install map-clean" "exp:aa-on gamma" "aa-on" "restore" \
+       "x143:install map-square-fps40" "x143:rg-system-on" "x143:java-on nai" "x143:java-on rg-aa" "x143:aa-on" "java-update" "aa-on" "restore")
 if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
     # turnto needs rg in the set (rg writes TurnToInfo since v1.4); street (CurrentPositionInfo trial) does not
     CHAIN=("install map-clean" "rg-system-on" "java-on rg" "java-on sl" "speedlimit-mode turnto" "speedlimit-mode street" \
@@ -102,7 +106,7 @@ fi
 fresh_unit; FACTORY=$(snapshot)
 for ((t=0; t<${#CHAIN[@]}; t++)); do
     target=${CHAIN[$t]}
-    case "$target" in v13:*|exp:*) continue ;; esac
+    case "$target" in v13:*|exp:*|x143:*) continue ;; esac
     if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
         case "$target" in "java-on sl"|"java-off sl"|"speedlimit-mode "*) ;; *) continue ;; esac
     fi
@@ -167,7 +171,7 @@ for ((t=0; t<${#CHAIN[@]}; t++)); do
             bad "[$target] kill@$n ($killed): gal is not factory and no verified factory copy (Android Auto dead)"
         fi
         # AA left half done (killed aa-on / aa-remove, or restore before its AA step finished): aa-remove finishes it
-        if run status && grep -q "Android Auto (experimental): unknown" "$W/out"; then
+        if run status && grep -q "Android Auto: unknown" "$W/out"; then
             run aa-remove; grep -q PMCP_AA_REMOVE_OK "$W/out" || bad "[$target] kill@$n ($killed): aa-remove again did not finish: $(grep PMCP_FAIL "$W/out")"
         fi
         st=$(state)
