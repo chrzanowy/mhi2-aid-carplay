@@ -106,121 +106,120 @@ PAYLOAD = {
 # Android Auto 0.1 (aa/README.md), one mode "gamma": MacsInSpace's gal hook (pinned commit, no SD card paths,
 # aa/hook/build.sh gamma: Google Maps manoeuvres -> rg mailbox), our feeder (aa/feeder, v10: start sync + pacing without bursts) and the
 # gal wrapper. Built into build/ by those scripts (docker, QNX 6.5 toolchain).
-AA_GAMMA = PROJ / "build/aa-g2"    # hook g2 (A-AA24): liveness / unknown-type fixes
-AA_KF5 = PROJ / "build/aa-kf5"     # libdmdt_flush.so (unchanged since AA 1)
-AA_FEED = PROJ / "build/aa-v10"    # feeder v10 (A-AA33)
+# The three QNX binaries are prebuilt in aa/prebuilt/ (built with Docker, see aa/prebuilt/README.md), so install.sh
+# needs no QNX toolchain: hook g2 (A-AA24), libdmdt_flush.so (unchanged since AA 1), feeder v10 (A-AA33).
 PAYLOAD.update({
     "AA_WRAPPER": (PROJ / "aa/unit/gal.wrapper.sh", "57b63037a7d82d45f47773ec76e99ad659490f6d29d540f20de90930f0d65137", 3259, "aa/gal.wrapper.sh"),
-    "AA_HOOK": (AA_GAMMA / "hook/libgal_hook.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823, "aa/libgal_hook.so"),
-    "AA_DMDT_FLUSH": (AA_KF5 / "hook/libdmdt_flush.so", "4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f", 5328, "aa/libdmdt_flush.so"),
-    "AA_FEEDER": (AA_FEED / "feeder/aa-most-feeder", "c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", 34856, "aa/aa-most-feeder"),
+    "AA_HOOK": (PROJ / "aa/prebuilt/libgal_hook.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823, "aa/libgal_hook.so"),
+    "AA_DMDT_FLUSH": (PROJ / "aa/prebuilt/libdmdt_flush.so", "4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f", 5328, "aa/libdmdt_flush.so"),
+    "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", 34856, "aa/aa-most-feeder"),
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", 1219, "aa/feeder.conf"),
 })
-# AA sets of earlier (experimental) cards (whole tuples: hook, feeder, hook settings, feeder settings, each from the card it was
-# on; pmcp.sh aa_state reports them as "old" with that card's AA_BOOT, aa-on brings them up to date). All modes of those
-# cards count: this card has only gamma, aa-on ("AA 1") replaces any of them.
+# AA sets of earlier (experimental) cards: whole tuples of (sha256, sha1, size) for hook, feeder, hook settings, feeder
+# settings, as they were on that card. pmcp.sh aa_state reports them as "old" with that card's AA_BOOT; aa-on ("AA 1")
+# brings them up to date. Only the hashes go to the card, so no earlier build is needed here.
 AA_OLD = [
     # AA 3 (1.5) feeder v6 (card 892eed6f)
-    ("sync15", [(PROJ / "build/sd-892eed6f/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/aa-most-feeder-v6", "a71e02fc8a20e3d0080d0a04cf301e85a3c06fb32dc0b95b71e0c7244cae9f7c", 28744),
-              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
-              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/feeder-sync15.conf", "50f6b4e78e589c75841afe36640dbd655a027bdf1edef7d8fb1884a446f2237c", 358)]),
+    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("a71e02fc8a20e3d0080d0a04cf301e85a3c06fb32dc0b95b71e0c7244cae9f7c", "de660427721dec1db848d7391b5f3289daffdf59", 28744),
+              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
+              ("50f6b4e78e589c75841afe36640dbd655a027bdf1edef7d8fb1884a446f2237c", "95a77038130433aef2e83a887fd7a9ef95ca0b88", 358)]),
     # AA 3 (1.7) feeder v6 (card 892eed6f)
-    ("sync17", [(PROJ / "build/sd-892eed6f/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/aa-most-feeder-v6", "a71e02fc8a20e3d0080d0a04cf301e85a3c06fb32dc0b95b71e0c7244cae9f7c", 28744),
-              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
-              (PROJ / "build/sd-892eed6f/pmcp/payload/aa/feeder-sync17.conf", "28d3de87de2621c118d441f044d49960817d1d7669ceb2e6ff4c7891e4d073e4", 282)]),
+    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("a71e02fc8a20e3d0080d0a04cf301e85a3c06fb32dc0b95b71e0c7244cae9f7c", "de660427721dec1db848d7391b5f3289daffdf59", 28744),
+              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
+              ("28d3de87de2621c118d441f044d49960817d1d7669ceb2e6ff4c7891e4d073e4", "01bcfbcf5d8377102df318aa9a7f32299e855213", 282)]),
     # AA 3 (1.5) v7 with probe C (card 9766265d)
-    ("sync15", [(PROJ / "build/sd-9766265d/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-9766265d/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
-              (PROJ / "build/sd-9766265d/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
-              (PROJ / "build/sd-9766265d/pmcp/payload/aa/feeder-sync15.conf", "9dc1cda65298c89f05d14c62ef72c22902602e8dbff5556ef2598cf2b1403f7a", 708)]),
+    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
+              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
+              ("9dc1cda65298c89f05d14c62ef72c22902602e8dbff5556ef2598cf2b1403f7a", "f0d7e75d0275183d64deea5c84947d5ad2b51b5b", 708)]),
     # AA 3 (1.7) v7 with probe C (card 9766265d)
-    ("sync17", [(PROJ / "build/sd-9766265d/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-9766265d/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
-              (PROJ / "build/sd-9766265d/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
-              (PROJ / "build/sd-9766265d/pmcp/payload/aa/feeder-sync17.conf", "08b43660b37df4837436d197968b96e8f216bc483ad1b945bcfb5164d9b72c3c", 802)]),
+    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
+              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
+              ("08b43660b37df4837436d197968b96e8f216bc483ad1b945bcfb5164d9b72c3c", "c535ce56ffc52b8bc689b54dd3aca01c278307d9", 802)]),
     # gamma hook g1, probe C (card 662eb7a8)
-    ("gamma", [(PROJ / "build/sd-662eb7a8/pmcp/payload/aa/libgal_hook-gamma.so", "aa0b97fc61ec554c0ca81340fe04d53214afe0c3b7c0ac2b891b15d9e7014ddc", 131136),
-              (PROJ / "build/sd-662eb7a8/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
-              (PROJ / "build/sd-662eb7a8/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
-              (PROJ / "build/sd-662eb7a8/pmcp/payload/aa/feeder-gamma.conf", "e09c810b52e35ee24484b57494752ee0a8aa5f805a301834f553cb66944842ad", 825)]),
+    ("gamma", [("aa0b97fc61ec554c0ca81340fe04d53214afe0c3b7c0ac2b891b15d9e7014ddc", "9d1645d7d3be0af6922c865369ee282f6b623dd9", 131136),
+              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("e09c810b52e35ee24484b57494752ee0a8aa5f805a301834f553cb66944842ad", "9728be87cd01538c7089d9eaf5cf1215a2847bfa", 825)]),
     # gamma hook g2, probe C (card 9766265d)
-    ("gamma", [(PROJ / "build/sd-9766265d/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
-              (PROJ / "build/sd-9766265d/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
-              (PROJ / "build/sd-9766265d/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
-              (PROJ / "build/sd-9766265d/pmcp/payload/aa/feeder-gamma.conf", "e09c810b52e35ee24484b57494752ee0a8aa5f805a301834f553cb66944842ad", 825)]),
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("e09c810b52e35ee24484b57494752ee0a8aa5f805a301834f553cb66944842ad", "9728be87cd01538c7089d9eaf5cf1215a2847bfa", 825)]),
     # AA 3 (1.5) v7 without probe C (card a32f55db)
-    ("sync15", [(PROJ / "build/sd-a32f55db/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
-              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
-              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/feeder-sync15.conf", "c29014492e545971404c6d46775bc82d36666bd8d3aedd5c0548e8aee37f5a51", 686)]),
+    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
+              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
+              ("c29014492e545971404c6d46775bc82d36666bd8d3aedd5c0548e8aee37f5a51", "9f5774fa9e36057794408ae8bcadc3e5a837ad39", 686)]),
     # AA 3 (1.7) v7 without probe C (card a32f55db)
-    ("sync17", [(PROJ / "build/sd-a32f55db/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
-              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
-              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/feeder-sync17.conf", "3588fc0dac530d9b2cd6caaaafbd532aa7990af04baa8ec3b980c4271036b21a", 780)]),
+    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
+              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
+              ("3588fc0dac530d9b2cd6caaaafbd532aa7990af04baa8ec3b980c4271036b21a", "0bda2030b907637e6c683074a0181660148a687f", 780)]),
     # gamma hook g2, v7 without probe C (card a32f55db)
-    ("gamma", [(PROJ / "build/sd-a32f55db/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
-              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/aa-most-feeder-sync", "27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", 29476),
-              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
-              (PROJ / "build/sd-a32f55db/pmcp/payload/aa/feeder-gamma.conf", "1f14e9d60c5cc939d53f195f8805738f1758a6e819b1aec3bdc8538fd26ffff5", 803)]),
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("1f14e9d60c5cc939d53f195f8805738f1758a6e819b1aec3bdc8538fd26ffff5", "6b8e1b47b473bb725a0ecc70bbe4b0601cc19afd", 803)]),
     # AA 3 (1.5) feeder v8, 5 s (card fc01e707)
-    ("sync15", [(PROJ / "build/sd-fc01e707/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
-              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
-              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/feeder-sync15.conf", "c29014492e545971404c6d46775bc82d36666bd8d3aedd5c0548e8aee37f5a51", 686)]),
+    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
+              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
+              ("c29014492e545971404c6d46775bc82d36666bd8d3aedd5c0548e8aee37f5a51", "9f5774fa9e36057794408ae8bcadc3e5a837ad39", 686)]),
     # AA 3 (1.7) feeder v8, 5 s (card fc01e707)
-    ("sync17", [(PROJ / "build/sd-fc01e707/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
-              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
-              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/feeder-sync17.conf", "3588fc0dac530d9b2cd6caaaafbd532aa7990af04baa8ec3b980c4271036b21a", 780)]),
+    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
+              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
+              ("3588fc0dac530d9b2cd6caaaafbd532aa7990af04baa8ec3b980c4271036b21a", "0bda2030b907637e6c683074a0181660148a687f", 780)]),
     # gamma g2, feeder v8, 5 s (card fc01e707)
-    ("gamma", [(PROJ / "build/sd-fc01e707/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
-              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
-              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
-              (PROJ / "build/sd-fc01e707/pmcp/payload/aa/feeder-gamma.conf", "1f14e9d60c5cc939d53f195f8805738f1758a6e819b1aec3bdc8538fd26ffff5", 803)]),
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("1f14e9d60c5cc939d53f195f8805738f1758a6e819b1aec3bdc8538fd26ffff5", "6b8e1b47b473bb725a0ecc70bbe4b0601cc19afd", 803)]),
     # AA 3 (1.5) feeder v8, 10 s (card 2d4483e5)
-    ("sync15", [(PROJ / "build/sd-2d4483e5/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
-              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
-              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/feeder-sync15.conf", "83ce7aecd794219bda21103b425d720bee100135bab904fca3b5b0d234237013", 755)]),
+    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
+              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
+              ("83ce7aecd794219bda21103b425d720bee100135bab904fca3b5b0d234237013", "037f5b702bada4af1a1708e02f60a5764c20b1a9", 755)]),
     # AA 3 (1.7) feeder v8, 10 s (card 2d4483e5)
-    ("sync17", [(PROJ / "build/sd-2d4483e5/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
-              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
-              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/feeder-sync17.conf", "ae2771afc6ef1344ded3d1054afa1b28b1c892010eecaf4d46e2e680f5cc5953", 849)]),
+    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
+              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
+              ("ae2771afc6ef1344ded3d1054afa1b28b1c892010eecaf4d46e2e680f5cc5953", "b9c94f5373308b64d4c4fa6fcaeae38357c6e2cd", 849)]),
     # gamma g2, feeder v8, 10 s (card 2d4483e5)
-    ("gamma", [(PROJ / "build/sd-2d4483e5/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
-              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
-              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
-              (PROJ / "build/sd-2d4483e5/pmcp/payload/aa/feeder-gamma.conf", "c8d19ef4c522726366b44c402fbec0f47b45387f228b87d26fbf39ecfd58ca09", 872)]),
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("c8d19ef4c522726366b44c402fbec0f47b45387f228b87d26fbf39ecfd58ca09", "14dbf37a63745a6529f2eab1a0978cffd46d991b", 872)]),
     # AA 3 (1.5) feeder v8, 5 s + start sync 3 s (card ab9fb348)
-    ("sync15", [(PROJ / "build/sd-ab9fb348/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
-              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/gal-hook.conf", "4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", 1514),
-              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/feeder-sync15.conf", "325f2a753f243b71b52422715e885937e5d2134ea74170965ec4b1316dbdd721", 958)]),
+    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
+              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
+              ("325f2a753f243b71b52422715e885937e5d2134ea74170965ec4b1316dbdd721", "b11ccc89ccb05f32f9d787951a7d507fae497814", 958)]),
     # AA 3 (1.7) feeder v8, 5 s + start sync 3 s (card ab9fb348)
-    ("sync17", [(PROJ / "build/sd-ab9fb348/pmcp/payload/aa/libgal_hook.so", "dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", 120396),
-              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
-              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/gal-hook-17.conf", "99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", 1578),
-              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/feeder-sync17.conf", "374c0f580779febd49e4ba2d0ad065c8174ebce3b0840ff9cf2bab68497af490", 1052)]),
+    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
+              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
+              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
+              ("374c0f580779febd49e4ba2d0ad065c8174ebce3b0840ff9cf2bab68497af490", "a11c570448ac1bb9a99bd9fecf014f6b9e65e165", 1052)]),
     # gamma g2, feeder v8, 5 s + start sync 3 s (card ab9fb348)
-    ("gamma", [(PROJ / "build/sd-ab9fb348/pmcp/payload/aa/libgal_hook-gamma.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
-              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/aa-most-feeder-sync", "5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", 30048),
-              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
-              (PROJ / "build/sd-ab9fb348/pmcp/payload/aa/feeder-gamma.conf", "65452c93449c1afc44fef6e70d00bd228ffd5d8580f9256b02876ae9c25bad9e", 1075)]),
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("65452c93449c1afc44fef6e70d00bd228ffd5d8580f9256b02876ae9c25bad9e", "efbc281e90e41e7ba85878d1230e3cfbc2fa022f", 1075)]),
     # gamma g2, feeder v9 (cards f2a7ceb5 / fd0c7a7c, v1.4.1 / v1.4.2 experimental)
-    ("gamma", [(PROJ / "build/sd-f2a7ceb5/pmcp/payload/aa/libgal_hook.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
-              (PROJ / "build/sd-f2a7ceb5/pmcp/payload/aa/aa-most-feeder", "5d2a0a026321196c1a2745dcb8e32f896e7fb3cace7a036bb910357f54afc630", 33464),
-              (PROJ / "build/sd-f2a7ceb5/pmcp/payload/aa/gal-hook.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
-              (PROJ / "build/sd-f2a7ceb5/pmcp/payload/aa/feeder.conf", "eaae73415ec6a2a3f4351764dcfdb96cd87d90aa3034cadd03bec52a09aad97a", 857)]),
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("5d2a0a026321196c1a2745dcb8e32f896e7fb3cace7a036bb910357f54afc630", "1441f41c60806e93e8bb84c1cf68be0080c35a94", 33464),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("eaae73415ec6a2a3f4351764dcfdb96cd87d90aa3034cadd03bec52a09aad97a", "67dd89345f0a46640dda69f3d8b4d1b10832a9c5", 857)]),
     # gamma g2, feeder v10 at 2 Mbit/s (card 030b7df2)
-    ("gamma", [(PROJ / "build/sd-030b7df2/pmcp/payload/aa/libgal_hook.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823),
-              (PROJ / "build/sd-030b7df2/pmcp/payload/aa/aa-most-feeder", "c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", 34856),
-              (PROJ / "build/sd-030b7df2/pmcp/payload/aa/gal-hook.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839),
-              (PROJ / "build/sd-030b7df2/pmcp/payload/aa/feeder.conf", "c26c69a8562f4773edbbbf287ecf20e52d208f27135b944df04c6f8bbf70dccc", 1160)]),
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", "5b86be4b6630da664e77d7435e8ffb04ca92ca51", 34856),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("c26c69a8562f4773edbbbf287ecf20e52d208f27135b944df04c6f8bbf70dccc", "785285dbeb3c719d83833b59aab31382d9137dee", 1160)]),
 ]
 
 # Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): the v1.0-v1.3 driver and
@@ -628,11 +627,10 @@ def main():
     cur_aa = [PAYLOAD[k][1:3] for k in ("AA_HOOK", "AA_FEEDER", "AA_HOOK_CONF", "AA_MODE")]
     for mode, files in AA_OLD:
         hs = []
-        for src, h, size in files:
-            data = read_pinned(src, h, size, "AA_OLD_" + mode)
-            pairs[h] = hashlib.sha1(data).hexdigest()
+        for h, h1, size in files:
+            pairs[h] = h1
             hs.append("%s %d" % (h, size))
-        assert [f[1:3] for f in files] != cur_aa, "AA_OLD tuple equals this card's AA set"
+        assert [(f[0], f[2]) for f in files] != cur_aa, "AA_OLD tuple equals this card's AA set"
         aa_old.append(mode + " " + " ".join(hs))
     for key, h, size, rel in rows:
         data = (pm / "payload" / rel).read_bytes()
