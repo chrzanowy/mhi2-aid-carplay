@@ -16,6 +16,12 @@ Changes:
     adapter-status.txt goes to the directory being read;
   - with AA, destination distance / time the mailbox does not carry are left to the factory path (the helper returns
     false), instead of being published as invalid: the AA picture shows them.
+  - with AA the quiet-route hold (hold.py's LiveModel.HOLD_MS, 180 s) is AA_HOLD_MS, 10 s: the hook repeats the route
+    every 2.5 s while Google Maps navigates, so a VW arrow / bar / road name ends 10 s after Maps goes quiet instead of
+    staying up to the hook's 60 s end (LiveBridge tick/current/lanes, ArrowProgress, RoadName, FeedRecovery on the AA
+    directory). CarPlay keeps 180 s;
+  - tick() and current() publish an active frame only while the reader reads the directory of the current connection
+    (rootFor(phone) equals root): no frame of the previous source in the window between factoryContext() and switchRoot().
 CarPlay (connection 2) behaves exactly as before: with connection 2 or no phone the reader stays on the CarPlay directory,
 nothing under /ramdisk/pmcp-aa-rg is read, and no thread is added (the existing reader thread switches directories).
 Each replacement must match exactly once.
@@ -130,6 +136,8 @@ public final class TestAa {
             && LiveBridge.rootFor(0).equals(LiveBridge.ROOT), "AA reads its own directory, CarPlay and the rest the CarPlay one");
         b.incoming = new LiveModel.Frame(true, 13, 64, 250, -1, -1, 1, TestLive.clock, 1); b.journalAt = TestLive.clock;
         TestLive.sent.clear(); b.tick(TestLive.clock);
+        check(!b.owned && b.current() == null, "AA connection, reader still on the CarPlay directory: nothing published");
+        b.root = LiveBridge.AA_ROOT; TestLive.clock += 250; b.journalAt = TestLive.clock; b.tick(TestLive.clock);
         check(b.owned, "AA frame published");
         ManeuverDescriptor_Status d = new ManeuverDescriptor_Status();
         check(LiveBridge.descriptor(d) && d.maneuver_1.mainElement == 13 && d.maneuver_1.direction == 64, "AA arrow");
@@ -140,12 +148,14 @@ public final class TestAa {
         check(!LiveBridge.destinationDistance(total) && !LiveBridge.destinationValidity(total) && !LiveBridge.destinationTime(time),
             "AA without remaining distance / time: factory path for destination");
         TestLive.connection = 2; LiveBridge.factoryContext();
+        check(b.current() == null, "CarPlay connection, reader still on the AA directory: the AA frame is not published");
+        b.root = LiveBridge.ROOT; TestLive.clock += 250; b.journalAt = TestLive.clock; b.tick(TestLive.clock);
         check(LiveBridge.destinationDistance(total) && !total.validityInformation.distanceToDestinationValid
             && LiveBridge.destinationTime(time) && !time.validityInformation.timeInfo_MinuteIsValid,
             "CarPlay unchanged: missing metrics still published as invalid");
         TestLive.connection = 0;
         check(LiveBridge.factoryContext() == 1, "no phone: blocked as before");
-%ASF%        TestLive.connection = 2;
+%ASF%%HOLD%        TestLive.connection = 2;
         System.out.println("{\\"aa_assertions\\":" + checks + "}");
     }
 }
@@ -202,5 +212,60 @@ if MAN:
               """.append(" error=").append(error).append(" phone=").append(phone).append(" root=").append(root).append('\\n');""",
               "status phone/root")
     p.write_text(s)
-(lane_dir / "TestAa.java").write_text(TEST.replace("%ASF%", ASF_TEST if ASF else ""))
+HOLD_TEST = '''        // (d) quiet route: Android Auto (connection 3) ends 10 s after the last route change (arrow and bar); CarPlay (2)
+        // keeps 180 s
+        int[] conns = {3, 2}; long[] holds = {10000, 180000};
+        for (int i = 0; i < conns.length; i++) {
+            TestLive.connection = conns[i]; LiveBridge.factoryContext(); TestLive.clock += 5000;
+            check(LiveBridge.hold() == holds[i] && LiveBridge.holdFor(LiveBridge.rootFor(conns[i])) == holds[i], "hold length");
+            long t0 = TestLive.clock;
+            LiveBridge q = TestLive.bridge(); q.root = LiveBridge.rootFor(conns[i]);
+            LiveModel.Frame g = new LiveModel.Frame(true, 13, 64, 100, -1, -1, 5, t0, 1, LaneData.EMPTY, t0, "Road", t0, 1);
+            q.incoming = g; q.journalAt = t0; q.tick(t0);
+            check(q.owned && TestArrow.output().bargraphInfo.bargraphOnOff == 1, "connection " + conns[i] + ": arrow and bar on");
+            for (long t = t0 + 1000; t < t0 + holds[i] - 1; t += 1000) { TestLive.clock = t; q.journalAt = t; q.tick(t); }
+            long last = t0 + holds[i] - 1; TestLive.clock = last; q.journalAt = last; q.tick(last);
+            check(q.owned && ArrowProgress.remaining(g, last) == 50 && RoadName.current(g, last).equals("Road")
+                && TestArrow.output().bargraphInfo.bargraphOnOff == 1, "connection " + conns[i] + ": quiet route held until the hold ends");
+            TestLive.clock = t0 + holds[i]; q.journalAt = TestLive.clock; q.tick(TestLive.clock);
+            check(!q.owned && q.current() != null && !q.current().active && ArrowProgress.remaining(g, TestLive.clock) == -1
+                && RoadName.current(g, TestLive.clock).equals(""), "connection " + conns[i] + ": arrow and bar end at the hold");
+        }
+'''
+# Android Auto: short quiet-route hold (review 2026-11-07). hold.py holds a quiet route for LiveModel.HOLD_MS (180 s, for
+# Apple Maps' sparse deltas). The AA hook repeats the route every 2.5 s while Google Maps navigates and keeps its 0.5 s
+# heartbeat while paused, so with 180 s a stopped Maps (crash, no 0x8003 end) left the VW arrow and bar up until the
+# hook's own 60 s end. With connection 3 (the AA directory for the feed) the hold is AA_HOLD_MS, 10 s; CarPlay keeps 180 s.
+HOLD = "static final long HOLD_MS" in (lane_dir / "LiveModel.java").read_text()
+if HOLD:
+    s = lb.read_text()
+    s = patch(s, '''    static String rootFor(int connection) { return connection==3?AA_ROOT:ROOT; }''',
+              '''    static String rootFor(int connection) { return connection==3?AA_ROOT:ROOT; }
+    // pmcp: quiet-route hold, 10 s for Android Auto, 180 s (hold.py) for CarPlay
+    static final long AA_HOLD_MS=10000;
+    static long hold() { return phone==3?AA_HOLD_MS:LiveModel.HOLD_MS; }
+    static long holdFor(String dir) { return AA_ROOT.equals(dir)?AA_HOLD_MS:LiveModel.HOLD_MS; }''', "hold()")
+    for old, new in (("time-selected.changed>=LiveModel.HOLD_MS", "time-selected.changed>=hold()"),
+                     ("time-frame.changed<LiveModel.HOLD_MS", "time-frame.changed<hold()"),
+                     ("time-f.laneAt<LiveModel.HOLD_MS?f:null;", "time-f.laneAt<hold()?f:null;")):
+        s = patch(s, old, new, "LiveBridge hold " + old)
+    if s.count("LiveModel.HOLD_MS") != 2:   # hold() and holdFor() only
+        sys.exit("aa.py: LiveBridge: LiveModel.HOLD_MS left %d times, want 2" % s.count("LiveModel.HOLD_MS"))
+    lb.write_text(s)
+    for name, old, new in (
+            ("ArrowProgress.java", "now-f.laneAt>=ROUTE_AGE)return -1;", "now-f.laneAt>=LiveBridge.hold())return -1;"),
+            ("RoadName.java", "time-f.laneAt<MAX_AGE", "time-f.laneAt<LiveBridge.hold()"),
+            ("FeedRecovery.java", "now-last.changed<LiveModel.HOLD_MS", "now-last.changed<LiveBridge.holdFor(root)")):
+        q = lane_dir / name
+        q.write_text(patch(q.read_text(), old, new, name + " hold"))
+
+# A source switch: factoryContext() (HMI thread) records the new connection before switchRoot() (reader thread) has
+# changed directories (up to ~100 ms). In that window the previous source's active frame must not go out.
+s = lb.read_text()
+s = patch(s, '''        boolean take=mode==2 && c==0 && lease && fresh && core;''',
+          '''        boolean take=mode==2 && c==0 && lease && fresh && core && rootFor(phone).equals(root);''', "tick() root")
+s = patch(s, '''selected.active && (mode!=2 ||''', '''selected.active && (!rootFor(phone).equals(root) || mode!=2 ||''',
+          "current() root")
+lb.write_text(s)
+(lane_dir / "TestAa.java").write_text(TEST.replace("%ASF%", ASF_TEST if ASF else "").replace("%HOLD%", HOLD_TEST if HOLD else ""))
 print("aa.py: LiveBridge patched, TestAa written in %s" % lane_dir)
