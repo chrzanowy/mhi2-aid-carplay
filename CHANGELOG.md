@@ -3,6 +3,43 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
+## v1.5.0 (unreleased)
+
+Android Auto on the AID, as a separate feature next to CarPlay. Installer version `pmcp-0.5.0-mu1161-791-<build id>`.
+
+- **Android Auto 0.1 (open alpha).** The Google Maps picture from an Android phone on the AID, over the head unit's own
+  MOST path, and the native VW arrows from Google Maps. Car-tested with a Samsung Galaxy A16 (Android 16).
+  - Feeder v10: start sync (the AID is ready before the phone's first key frame), pacing at 6 Mbit/s with a 20 ms gap
+    and no bursts into the video ring, no focus cycle when the bridge asks for a key frame (it broke the phone's
+    session).
+  - Every new Android Auto set runs once as a trial and stays only after "AA 2. Confirm", like the Java packages. The
+    rescue card switches it off too.
+  - Known limits: the stream starts about 5 s after the phone connects; now and then the picture starts dark until the
+    phone's next key frame; no VW arrow at the very first step of a route; destination distance and arrival time stay
+    in the Google Maps picture.
+- **Its own GEM screen.** `pmcp_android_auto` is on the main screen (not under Advanced), with "AA 1. Android Auto on",
+  "AA 2. Confirm", "AA 3. Try again", status, log save/clear and "AA remove". Button 3 neither installs nor removes
+  Android Auto; "Remove everything" still removes it and puts the factory `gal` back.
+- **One `rg` with the Android Auto arrows.** `rg` (`pmcp-guidance4.jar`) now also reads the Android Auto hook's
+  manoeuvres while an Android phone is connected. With CarPlay or no phone it behaves exactly like the v1.4.3 `rg`:
+  every rg test suite gives the same results, and a new check proves it reads nothing of Android Auto then. The
+  separate package `rg-aa` of the experimental cards is gone.
+- **Upgrade paths (button 3, one trial start, one Confirm).**
+  - v1.4.x: `rg` (`pmcp-guidance.jar`, `pmcp-guidance2.jar`, `pmcp-guidance3.jar`) → `pmcp-guidance4.jar`.
+  - Experimental cards (`rg-aa` in `pmcp-guidance-aa.jar` or `pmcp-guidance-aa2.jar`) → `rg`; their Android Auto stays
+    as it is. "AA 1" then brings an earlier Android Auto set up to date (status "old" → "on"); the set of the
+    experimental card b2bcbbe3 is already this card's.
+- **Docs.** README: CarPlay and Android Auto on the AID, with an Android Auto section and photo. In-car guide:
+  [docs/en/13-android-auto-guide.md](docs/en/13-android-auto-guide.md) /
+  [docs/pl/13-instrukcja-android-auto.md](docs/pl/13-instrukcja-android-auto.md).
+- **Tests:** upgrades from v1.4.2, v1.4.3-style units and the experimental cards f2a7ceb5, 84472aa9 and b2bcbbe3; button
+  3 on a unit without Android Auto creates no Android Auto file; power loss during java-update on an Android Auto unit.
+
+### Credits for this release
+
+- **[MacsInSpace/mib-cluster-map](https://github.com/MacsInSpace/mib-cluster-map)**: the `gal` hook Android Auto on
+  the AID builds on (commit `07361db`, built without SD-card paths, `aa/hook/`).
+
 ## v1.4.3 (2026-11-07)
 
 Source release only: no card zip. The v1.4.2 cards stay the download; to use v1.4.3, build it with `install.sh`.
