@@ -10,7 +10,9 @@ import java.io.FileOutputStream;
  * /mnt/persist/pmcp/native-speedlimit-mode holds exactly "off\n", "turnto\n" or "street\n"; no file means off.
  * The sl reader in the HMI polls that file, so a change shows within about a second, without a restart.
  *
- * The same rules as pmcp.sh (installer/template/pmcp.sh.in, do_speedlimit_mode):
+ * The rules of pmcp.sh (installer/template/pmcp.sh.in, do_speedlimit_mode) that can be read from Java, not all of
+ * them: pmcp.sh also checks the card, the firmware and the whole unit state (STATE=JAVA); the page relies on the set
+ * running in this boot instead:
  *  - off is always allowed (no file: nothing to do);
  *  - turnto and street need package sl in the Java set, turnto also rg; the set must be confirmed (ok.SET), running
  *    this boot (last-boot "set=SET use=yes|trial") and not disabled by the rescue card;
@@ -126,6 +128,9 @@ final class SpeedLimitSetting extends Setting {
         if (i < 0 || i >= MODES.length) {
             throw new IllegalArgumentException("Unknown choice.");
         }
+        // The lock is held across the fsync below, on the HMI thread (milliseconds). If the HMI dies inside that window
+        // the directory stays until the next unit start (/ramdisk is RAM) and GEM speed-limit and package actions, also
+        // main 4, answer SPEEDLIMIT_LOCK_BUSY until then (ui/README.md).
         File lock = new File(lockPath);
         if (!lock.mkdir()) {
             throw new IllegalStateException("Busy: a GEM action is running. Try again.");

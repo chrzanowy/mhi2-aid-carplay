@@ -167,6 +167,7 @@ public final class TestUi {
         View view;
         WidgetList list;
         WidgetCloneFactory factory;
+        WidgetCloneable factoryCloned;   // last source the factory clone factory was asked for
         WidgetModel[] viewChildren;
         WidgetModel[] listChildren;
     }
@@ -207,6 +208,7 @@ public final class TestUi {
         list.set_height(549);
         t.factory = new WidgetCloneFactory() {
             public WidgetCloneable createWidgetCloneable(WidgetCloneable source) {
+                t.factoryCloned = source;
                 return null;
             }
 
@@ -429,19 +431,62 @@ public final class TestUi {
         Object h1 = HostRuntime.createdHandler(a.view);
         start(h1);
         check(MenuHook.attachedCount() == 1, "attached before the failure");
+        HostRuntime.call(h1, "activate");
+        SettingsPage p1 = MenuHook.pageOf((de.vw.mib.view.internal.AbstractViewHandler) h1);
+        // an entry clone alive (the list scrolled), then a lifecycle error: the factory fatalError only logs and goes on
+        WidgetCloneFactory cf = ((TemplateListModel) a.list).getWidgetCloneFactory();
+        int listeners = p1.listenerCount();
+        WidgetCloneable alive = cf.createWidgetCloneable((WidgetCloneable) p1.entry());
+        check(p1.listenerCount() == listeners + 1, "entry clone alive before the failure");
         HostRuntime.fatal(h1, new IllegalStateException("lifecycle error in our view"));
         check(new File(MenuHook.offSwitch).exists(), "failure sets the off switch");
-        check(MenuHook.attachedCount() == 0, "failure detaches at once");
-        factoryState(a, "right after the failure");
+        check(MenuHook.attachedCount() == 1 && p1.isAttached(), "failure leaves the page in the tree until deinit");
+        check(((TemplateListModel) a.list).getWidgetCloneFactory() == cf, "our clone factory stays for the factory teardown");
         check(readLog().indexOf("lifecycle error in our view") >= 0, "stack logged");
+        // the factory teardown destroys the clone through the list's clone factory: still ours, no NPE on clone data
+        cf.destroyWidgetCloneable(alive);
+        check(p1.listenerCount() == listeners, "clone destroyed by our factory after the failure");
         HostRuntime.setLifeCycle(h1, 3);
         HostRuntime.call(h1, "deinit");
+        check(MenuHook.attachedCount() == 0 && !p1.isAttached(), "end-of-deinit hook detaches after the failure");
         factoryState(a, "detached after failure");
+        check(readLog().lastIndexOf("PAGE_DETACHED failures=0") > readLog().indexOf("lifecycle error in our view"),
+                "clean detach after the failure");
+        HostRuntime.setLifeCycle(h1, 1);
+        HostRuntime.call(h1, "destroy");
+        factoryState(a, "after destroy");
         Tree b = tree("SMI_SETUP_MAIN", 1280, 640, true);
         Object h2 = HostRuntime.createdHandler(b.view);
         start(h2);
         check(MenuHook.attachedCount() == 0, "no new page after a failure");
         factoryState(b, "after failure");
+        MenuHook.resetForTest();
+
+        // our entry clone fails (any Throwable): the list gets a factory clone of the factory entry, nothing thrown
+        hookEnv("clonefail");
+        Tree c = tree("SMI_SETUP_MAIN", 1280, 640, true);
+        Object h3 = HostRuntime.createdHandler(c.view);
+        start(h3);
+        SettingsPage p3 = MenuHook.pageOf((de.vw.mib.view.internal.AbstractViewHandler) h3);
+        WidgetCloneFactory cf3 = ((TemplateListModel) c.list).getWidgetCloneFactory();
+        int before = p3.listenerCount();
+        SettingsPage.failCloneForTest = true;
+        WidgetCloneable fallback;
+        try {
+            fallback = cf3.createWidgetCloneable((WidgetCloneable) p3.entry());
+        } finally {
+            SettingsPage.failCloneForTest = false;
+        }
+        check(c.factoryCloned != null && c.factoryCloned != p3.entry() && Arrays.asList(c.listChildren).contains(c.factoryCloned)
+                && p3.listenerCount() == before, "clone failure: the factory clones the factory entry instead");
+        check(new File(MenuHook.offSwitch).exists() && readLog().indexOf("ENTRY_CLONE_FAILED") >= 0, "clone failure: off switch, logged");
+        cf3.destroyWidgetCloneable(fallback);
+        HostRuntime.setLifeCycle(h3, 3);
+        HostRuntime.call(h3, "deinit");
+        factoryState(c, "after a clone failure");
+        Tree d = tree("SMI_SETUP_MAIN", 1280, 640, true);
+        start(HostRuntime.createdHandler(d.view));
+        check(MenuHook.attachedCount() == 0, "no page after a clone failure");
         MenuHook.resetForTest();
     }
 

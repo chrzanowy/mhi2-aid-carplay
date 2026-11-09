@@ -84,7 +84,10 @@ final class SettingsPage {
     private final WidgetCloneFactory originalCloneFactory;
     private final int stockHeight;
 
+    /** Host test only (TestUi): makes our entry clone fail. */
+    static boolean failCloneForTest;
     private final ListItemModel entryItem;
+    private final WidgetModel entryDonor;
     private final TextAreaModel entryLabel;
     private final Vector entryClones = new Vector();
     private final Container page;
@@ -162,7 +165,10 @@ final class SettingsPage {
         if (itemDonor == null || findButton(itemDonor) == null || find(findButton(itemDonor), "RowLabel") == null) {
             throw new IllegalStateException("OEM list item template missing");
         }
-        WidgetModel entryDonor = ancestorListItem(plainDonor);
+        entryDonor = ancestorListItem(plainDonor);
+        if (!(entryDonor instanceof WidgetCloneable)) {
+            throw new IllegalStateException("Native entry type");
+        }
         WidgetModel backgroundDonor = required(view, ID_BACKGROUND);
         WidgetModel headlineDonor = required(view, ID_HEADLINE);
         WidgetModel frameDonor = required(view, ID_FRAME);
@@ -580,7 +586,7 @@ final class SettingsPage {
             UiLog.log("ACTION_FAILED", error);
             try {
                 closePopup();
-                setNote("Error, see /tmp/pmcp-ui.log.");
+                setNote("Error, see /ramdisk/pmcp-ui.log.");
             } catch (Throwable ignored) {
                 // the page stays as it is; Back still works
             }
@@ -595,23 +601,35 @@ final class SettingsPage {
                 return originalCloneFactory.createWidgetCloneable(source);
             }
             try {
+                if (failCloneForTest) {
+                    throw new LinkageError("host test");
+                }
                 ListItemModel item = (ListItemModel) cloneTree(entryItem);
                 ButtonModel button = findButton(item);
                 prepareStaticItem(item, button);
                 cloneListeners.put(item, push(button, ACTION_OPEN));
                 entryClones.addElement(item);
                 return (WidgetCloneable) item;
-            } catch (Exception error) {
-                throw new IllegalStateException(error.toString());
+            } catch (Throwable error) {
+                // called by the factory list on the HMI thread (View.init, scrolling): never throw from here. Fallback:
+                // a factory clone of the factory entry our entry was copied from (valid clone data, destroyed by the
+                // factory); that row is a duplicate of a factory entry, and the page is off from the next start.
+                UiLog.log("ENTRY_CLONE_FAILED factory entry instead, page off from the next start:", error);
+                MenuHook.turnOff();
+                return originalCloneFactory.createWidgetCloneable((WidgetCloneable) entryDonor);
             }
         }
 
         public void destroyWidgetCloneable(WidgetCloneable clone) {
             if (entryClones.removeElement(clone)) {
-                Object listener = cloneListeners.remove(clone);
-                if (listener != null) {
-                    removeListener(listener);
-                    listeners.removeElement(listener);
+                try {
+                    Object listener = cloneListeners.remove(clone);
+                    if (listener != null) {
+                        removeListener(listener);
+                        listeners.removeElement(listener);
+                    }
+                } catch (Throwable error) {
+                    UiLog.log("ENTRY_CLONE_DESTROY_FAILED", error);
                 }
                 return;
             }
@@ -839,21 +857,9 @@ final class SettingsPage {
         while (keys.hasMoreElements()) {
             WidgetModel from = (WidgetModel) keys.nextElement();
             WidgetModel to = (WidgetModel) copies.get(from);
-            Method[] methods = from.getClass().getMethods();
-            for (int i = 0; i < methods.length; i++) {
-                Method getter = methods[i];
-                String name = getter.getName();
-                int prefix = name.startsWith("get_") ? 4 : name.startsWith("is_") ? 3 : 0;
-                if (prefix == 0 || getter.getParameterTypes().length != 0 || name.equals("is_activated")) {
-                    continue;
-                }
-                try {
-                    Method setter = to.getClass().getMethod(new StringBuffer("set_").append(name.substring(prefix))
-                            .toString(), new Class[] {getter.getReturnType()});
-                    setter.invoke(to, new Object[] {remap(getter.invoke(from, new Object[0]))});
-                } catch (NoSuchMethodException ignored) {
-                    // read-only property
-                }
+            Method[] pairs = accessors(from.getClass());
+            for (int i = 0; i < pairs.length; i += 2) {
+                pairs[i + 1].invoke(to, new Object[] {remap(pairs[i].invoke(from, new Object[0]))});
             }
             to.set_name(from.get_name());
             to.set_targetId(nextId++);
@@ -868,6 +874,38 @@ final class SettingsPage {
             to.enablePropertyChanged();
         }
         return (WidgetModel) copies.get(source);
+    }
+
+    /** Per widget class (copies have the class of their source): getter, setter, getter, setter, ... Built once. */
+    private static final Hashtable ACCESSORS = new Hashtable();
+
+    private static Method[] accessors(Class type) throws Exception {
+        Method[] cached = (Method[]) ACCESSORS.get(type);
+        if (cached != null) {
+            return cached;
+        }
+        Vector found = new Vector();
+        Method[] methods = type.getMethods();
+        for (int i = 0; i < methods.length; i++) {
+            Method getter = methods[i];
+            String name = getter.getName();
+            int prefix = name.startsWith("get_") ? 4 : name.startsWith("is_") ? 3 : 0;
+            if (prefix == 0 || getter.getParameterTypes().length != 0 || name.equals("is_activated")) {
+                continue;
+            }
+            try {
+                Method setter = type.getMethod(new StringBuffer("set_").append(name.substring(prefix)).toString(),
+                        new Class[] {getter.getReturnType()});
+                found.addElement(getter);
+                found.addElement(setter);
+            } catch (NoSuchMethodException ignored) {
+                // read-only property
+            }
+        }
+        Method[] pairs = new Method[found.size()];
+        found.copyInto(pairs);
+        ACCESSORS.put(type, pairs);
+        return pairs;
     }
 
     private void collect(WidgetModel from) throws Exception {

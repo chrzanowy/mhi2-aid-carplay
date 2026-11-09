@@ -30,7 +30,9 @@ Planned rows (later, they need changes in `core.so`): map layout, fps, IDR.
   | `fatalError()` | start | `failure` |
 
   Each call is wrapped in `catch (Throwable)` ([`buildtools/Guard.java`](../buildtools/Guard.java)), so nothing
-  from this package can reach the HMI, not even a missing class. The build compares every method with the factory
+  from these hooks can reach the HMI, not even a missing class. The other way in is the factory calling our code:
+  the button listeners and the list's clone factory. Each of them catches every `Throwable` as well; when our entry
+  clone fails, the list gets a factory clone of the factory entry instead and the page is off from the next start. The build compares every method with the factory
   one ([`patcher/TestMenuHookPatch.java`](patcher/TestMenuHookPatch.java)).
 - `attach` runs at the start of `init` rather than at the end of `setup`. The factory can run `deinit` and then `init`
   again without a new `setup`, and the entry must come back in that case too.
@@ -41,14 +43,18 @@ Planned rows (later, they need changes in `core.so`): map layout, fps, IDR.
   are not changed. Only three things change: the setup list gets one more entry, the view gets the page and the popup,
   and the list gets a clone factory that also knows our entry. `detach` puts back the original arrays and factory, one
   step at a time.
-- Log: `/tmp/pmcp-ui.log` (RAM, up to 64 KB).
-- Off switch for the current boot: create `/tmp/pmcp-ui-off`. A lifecycle error in the App-Connect view sets this
-  switch automatically and puts the factory widget tree back at once. A factory lifecycle-order message counts as an
-  error here; that is the safe side.
+- Log: `/ramdisk/pmcp-ui.log` (RAM, up to 64 KB). It also records how long `attach` took (`ATTACH_MS`).
+- Off switch for the current boot: create `/ramdisk/pmcp-ui-off` (RAM, gone at the next unit start). A lifecycle
+  error reported for the App-Connect view (factory `fatalError`, which only logs and goes on) sets this switch. The
+  page stays in the tree until that view's next `deinit` or `destroy`, whose end hook detaches it as usual, so the
+  factory teardown still finds our clone factory and widgets. From then on the view is factory until the next start.
 - The mode file is written as `.pmcp-new`, synced, renamed over the file and read back. Unlike `pmcp.sh`, there is no
   file-system `sync` after the rename, so a power cut right after a change can bring back the previous mode.
-- If the HMI restarts while a save holds the lock (a very short window), the lock stays in `/ramdisk` until the next
-  unit start. Until then, GEM speed-limit and package actions answer `SPEEDLIMIT_LOCK_BUSY`.
+- A save holds the lock `/ramdisk/pmcp-speedlimit.lock` across the `fsync`, on the HMI thread (milliseconds). If the
+  HMI dies inside that window, the lock stays until the next unit start, and until then GEM speed-limit and package
+  actions, also main 4 (features-reset takes the same lock), answer `SPEEDLIMIT_LOCK_BUSY`. A unit restart clears it.
+- The page checks fewer things than `pmcp.sh`: it cannot see the card or the firmware and does not compute the unit
+  state; it relies on the Java set that is confirmed and running in this boot.
 - **Going back to a card without `ui`:** a card with the new GEM menu (main screen `pmcp_stream_map_aid`) replaces a
   Java set it does not know with *4. Install additional features*, so nothing is needed first. Older cards (v1.5.0
   and earlier) see such a set as PARTIAL and change nothing (fail-closed): press *Off ui* on the `ui` card first, or

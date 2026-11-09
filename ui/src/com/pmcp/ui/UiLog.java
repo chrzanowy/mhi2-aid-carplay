@@ -4,10 +4,10 @@ package com.pmcp.ui;
 import java.io.File;
 import java.io.FileOutputStream;
 
-/** Append-only diagnostic log in /tmp (RAM, gone at the next start). It stops growing at LIMIT bytes. Never throws. */
+/** Append-only diagnostic log in /ramdisk (RAM, gone at the next start). It stops growing at LIMIT bytes. Never throws. */
 final class UiLog {
     static final int LIMIT = 65536;
-    static String path = "/tmp/pmcp-ui.log";
+    static String path = "/ramdisk/pmcp-ui.log";
 
     private UiLog() {
     }

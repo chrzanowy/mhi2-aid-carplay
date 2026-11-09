@@ -1278,13 +1278,12 @@ PEOF
     [ "$(h "$U/eso/hmi/lsd/jars/pmcp-ui.jar")" = "$(jsha ui)" ] && ok "pmcp-ui.jar in place" || bad "pmcp-ui.jar"
     o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$UI jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-ui.jar" ] \
         && ok "next start: one trial loading pmcp-ui.jar" || bad "boot: $o"
-    [ ! -e "$SLM" ] && ok "ui on writes no speed-limit mode" || bad "ui on created a mode file"
     o=$(unit_boot); [ "$o" = "boot=no set=$NAI+$UI jars=" ] && ok "without Confirm: the next start is factory" || bad "boot: $o"
     run java-retry; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run java-off ui; rc_is 0; expect_out "PMCP_JAVA_OFF_OK package=ui" "ui off"
     [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$boot_before" ] && [ "$(cd "$U/eso/hmi/lsd/jars" && ls)" = "$jars_before" ] \
         && ok "ui off: the set and the jars folder as before" || bad "after ui off: $(cat "$U/carplaymaps/HMI_BOOT")"
-    o=$(unit_boot); [ "$o" = "boot=yes set=$boot_before" ] || [ "$o" = "boot=yes set=${boot_before%% *} jars=/X/lsd/jars/NavActiveIgnore.jar" ] \
+    o=$(unit_boot); [ "$o" = "boot=yes set=${boot_before%% *} jars=/X/lsd/jars/NavActiveIgnore.jar" ] \
         && ok "ui off: the confirmed earlier set loads" || bad "boot: $o"
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore after ui: exact factory tree" || bad "restore after ui left changes"

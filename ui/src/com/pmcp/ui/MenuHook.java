@@ -22,13 +22,14 @@ import java.util.Hashtable;
  *   destroy()     end  -> detach
  *   fatalError()  start-> failure
  *
- * Switches: /tmp/pmcp-ui-off (RAM) keeps every view factory until the next start; a lifecycle error in our view sets it
- * and puts the factory widget tree back at once (also a factory lifecycle-order message counts: safe side).
+ * Switches: /ramdisk/pmcp-ui-off (RAM) keeps every view factory until the next start. A lifecycle error in our view
+ * sets it; the page stays in the tree until the factory's own deinit/destroy, whose end hook detaches it, so the
+ * factory teardown (clone destruction through our clone factory, listener deregistration) runs over a consistent tree.
  * GEM "Off ui" removes the package.
  */
 public final class MenuHook {
     static final String VIEW_NAME = "SMI_SETUP_MAIN";
-    static String offSwitch = "/tmp/pmcp-ui-off";
+    static String offSwitch = "/ramdisk/pmcp-ui-off";
     static String root = "";
     private static final Hashtable PAGES = new Hashtable();
     private static boolean disabled;
@@ -53,9 +54,11 @@ public final class MenuHook {
                 UiLog.log("OFF_SWITCH present, view stays factory");
                 return;
             }
+            long started = System.currentTimeMillis();
             SettingsPage page = new SettingsPage(view, settings());
             page.attach();
             PAGES.put(handler, page);
+            UiLog.log("ATTACH_MS", String.valueOf(System.currentTimeMillis() - started));
         } catch (Throwable error) {
             UiLog.log("ATTACH_FAILED view stays factory:", error);
         }
@@ -90,26 +93,33 @@ public final class MenuHook {
     }
 
     /**
-     * A lifecycle error in a view that has our page: the factory tree back now (the factory code rethrows or goes on
-     * with its own widgets only), no page again until the next start, and the stack in the log.
+     * A lifecycle error in a view that has our page: no page again until the next start, and the stack in the log.
+     * The page is NOT detached here: the factory fatalError only logs and the lifecycle goes on, and View.deInit must
+     * still find our page, popup and entry clones (with our clone factory) in the tree. The end-of-deinit and
+     * end-of-destroy hooks detach it as usual.
      */
     public static void failure(AbstractViewHandler handler, RuntimeException error) {
         try {
             if (PAGES.isEmpty() || !PAGES.containsKey(handler)) {
                 return;
             }
-            disabled = true;
-            SettingsPage page = (SettingsPage) PAGES.remove(handler);
-            if (page != null) {
-                page.detach();
-            }
-            FileOutputStream marker = new FileOutputStream(offSwitch);
-            marker.close();
+            turnOff();
             StringWriter text = new StringWriter();
             error.printStackTrace(new PrintWriter(text));
             UiLog.log("VIEW_LIFECYCLE_FAILURE page off until restart:", text.toString());
         } catch (Throwable ignored) {
             // diagnostics only
+        }
+    }
+
+    /** No page in any view attached from now on, and none until the next unit start (the RAM off switch). */
+    static void turnOff() {
+        disabled = true;
+        try {
+            FileOutputStream marker = new FileOutputStream(offSwitch);
+            marker.close();
+        } catch (Throwable ignored) {
+            // the flag above still holds for this HMI run
         }
     }
 
