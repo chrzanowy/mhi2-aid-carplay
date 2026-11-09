@@ -38,4 +38,4 @@ factory path runs. Test `test/TestZoomGuard.java`: a patched `updateKey2` withou
   is not enough (the phone ignores "no change"), the next step is a short night→day toggle. That is a separate variant, not built.
 - `ASLHandler` MU1161 = K4525 byte for byte, version 46.
 
-In the installer: Java packages `zoom` and `dn` (GEM → pmcp → stage B → "Wlacz: …"), with the same trial start as the rest.
+In the installer: Java packages `zoom` and `dn` (main menu "4. Install additional features", or GEM → pmcp_stream_map_aid → pmcp_advanced → features_advanced → "On zoom: …" / "On dn: …"), with the same trial start as the rest.

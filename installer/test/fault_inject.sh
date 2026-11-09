@@ -60,8 +60,21 @@ done
 run() { case "$1" in v13:*) _a=${1#v13:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$V13" $_a "$@" > "$W/out" 2>&1 ;;
                      exp:*) _a=${1#exp:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP" $_a "$@" > "$W/out" 2>&1 ;;
                      x143:*) _a=${1#x143:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP143" $_a "$@" > "$W/out" 2>&1 ;;
+                     fx:*) fx "${1#fx:}" > "$W/out" 2>&1 ;;
                      *) PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1 ;; esac; }
 runfi() { rm -f "$W/cnt"; PMCP_KILL_AT=$1 PMCP_FI_CNT=$W/cnt PMCP_FI_LOG=$W/filog PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp-fi.sh" "${@:2}" > "$W/outfi" 2>&1; }
+# states the main menu's 2, 3 and 4 replace: files of a version this card does not support (another card's set)
+fx() {
+    case "$1" in
+        aa-unknown) printf 'X' >> "$U/carplaymaps/aa/aa-most-feeder"; echo "gamma-11111111-22222222-33333333" > "$U/carplaymaps/aa/AA_BOOT" ;;
+        java-unknown) echo X > "$U/eso/hmi/lsd/jars/pmcp-ui.jar"; read _s _j < "$U/carplaymaps/HMI_BOOT"
+                      echo "$_s+ui-0479f0fa $_j pmcp-ui.jar" > "$U/carplaymaps/HMI_BOOT" ;;
+        rg-unknown) printf 'Z' >> "$U/carplaymaps/rg/rgi-observer" ;;
+        dio-mixed) echo junk > "$U/eso/bin/apps/dio_manager" ;;
+        *) echo "PMCP_FAIL=FX_$1"; return 1 ;;
+    esac
+    echo "PMCP_FX_OK $1"
+}
 # the user confirmed the set during its trial boot
 confirm_set() {
     if [ -s "$U/carplaymaps/aa/AA_BOOT" ]; then   # likewise for the AA set
@@ -101,6 +114,10 @@ state() { run status; sed -n 's/^Unit state: //p' "$W/out"; }
 OWN=("install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" \
      "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-on zoom" "restore" \
      "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore")
+# the main menu (2, 3, 4) over versions this card does not support
+MAIN=("map-install map-square-fps40" "aa-install" "fx:aa-unknown" "aa-install" "rg-system-on" "java-on rg" "java-on nai" \
+      "fx:java-unknown" "fx:rg-unknown" "features-reset" "rg-system-on" "java-on np" "fx:dio-mixed" "map-install map-square-fps40" "restore")
+OWN+=("${MAIN[@]}")
 if [ "$OLDCARDS" = yes ]; then
 CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on rglu" "rg-update" "java-update" "java-on np" \
        "switch map-clean-l40" "java-off np" "java-off rg" "rg-system-off" "java-off nai" "restore" \
@@ -109,7 +126,8 @@ CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on
        "exp:install map-clean" "exp:aa-on gamma" "aa-remove" "exp:aa-on most" "restore" \
        "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore" \
        "exp:install map-clean" "exp:aa-on gamma" "aa-on" "restore" \
-       "x143:install map-square-fps40" "x143:rg-system-on" "x143:java-on nai" "x143:java-on rg-aa" "x143:aa-on" "java-update" "aa-on" "restore")
+       "x143:install map-square-fps40" "x143:rg-system-on" "x143:java-on nai" "x143:java-on rg-aa" "x143:aa-on" "java-update" "aa-on" "restore" \
+       "${MAIN[@]}")
 else
 CHAIN=("${OWN[@]}")
 fi
@@ -121,13 +139,13 @@ fi
 fresh_unit; FACTORY=$(snapshot)
 for ((t=0; t<${#CHAIN[@]}; t++)); do
     target=${CHAIN[$t]}
-    case "$target" in v13:*|exp:*|x143:*) continue ;; esac
+    case "$target" in v13:*|exp:*|x143:*|fx:*) continue ;; esac
     if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
         case "$target" in "java-on sl"|"java-off sl"|"speedlimit-mode "*) ;; *) continue ;; esac
     fi
     fresh_unit
     for ((p=0; p<t; p++)); do
-        run ${CHAIN[$p]}; grep -q "_OK" "$W/out" || { echo "prep ${CHAIN[$p]} failed"; cat "$W/out"; exit 99; }; confirm_set
+        run ${CHAIN[$p]}; grep -q "_OK" "$W/out" && ! grep -q "PMCP_FAIL" "$W/out" || { echo "prep ${CHAIN[$p]} failed"; cat "$W/out"; exit 99; }; confirm_set
     done
     rm -rf "$W/tpl"; cp -Rp "$W/unit" "$W/tpl"
     before_boot=$(cat "$W/tpl/mnt/app/carplaymaps/HMI_BOOT" 2>/dev/null)
@@ -141,7 +159,7 @@ for ((t=0; t<${#CHAIN[@]}; t++)); do
     while :; do
         rm -rf "$W/unit"; cp -Rp "$W/tpl" "$W/unit"
         runfi $n $target
-        if ! grep -q "FI_KILLED" "$W/outfi" && grep -q "_OK" "$W/outfi"; then
+        if ! grep -q "FI_KILLED" "$W/outfi" && grep -q "_OK" "$W/outfi" && ! grep -q "PMCP_FAIL" "$W/outfi"; then
             echo "[$target] completes after $((n-1)) mutating commands"; break
         fi
         CASES=$((CASES+1))
@@ -179,6 +197,16 @@ for ((t=0; t<${#CHAIN[@]}; t++)); do
                 && ! grep -q "earlier card\|unused JAR" "$W/out" \
                 || bad "[$target] kill@$n ($killed): java-update again did not finish: $(grep PMCP_FAIL "$W/out")"
         fi
+        case "$target" in
+            "map-install "*|aa-install|features-reset)
+                # the main menu's own repair: the same button pressed again finishes the interrupted run
+                rm -rf "$W/rerun"; cp -Rp "$W/unit" "$W/rerun"; mv "$W/unit" "$W/unit.k"; mv "$W/rerun" "$W/unit"
+                run $target
+                if grep -q "PMCP_FAIL" "$W/out" && ! grep -q "PMCP_FAIL=.*_ALREADY_" "$W/out"; then
+                    bad "[$target] kill@$n ($killed): pressing it again did not finish: $(grep PMCP_FAIL "$W/out")"
+                fi
+                rm -rf "$W/unit"; mv "$W/unit.k" "$W/unit" ;;
+        esac
         # Android Auto must never be left dead: gal is the factory file, or a wrapper with a verified factory copy
         GALH=$(shasum -a 256 < "$U/eso/bin/apps/gal" | cut -d' ' -f1)
         if [ "$GALH" != 3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9 ] \

@@ -69,14 +69,15 @@ CZĘŚĆ 2 - W AUCIE
 
   Krok 1. Sprawdzenie (niczego nie zmienia)
     Włóż KARTĘ 1. Przytrzymaj przycisk MENU około 10 sekund -> otwiera się zielone menu.
-    Wejdź w  =>M.I.B.<=  ->  pmcp_CarPlay_AID.
+    Wejdź w  =>M.I.B.<=  ->  pmcp_stream_map_aid.
     Górna linia musi pokazać:  @@VERSION@@
     Naciśnij  "1. Check card and unit (read-only)".
     Oczekiwane:  PMCP_VERIFY_OK state=STOCK
     Cokolwiek innego: STOP, zrób zdjęcie, poproś o pomoc. Nic nie zostało zmienione.
 
   Krok 2. Instalacja mapy
-    Naciśnij  "2. Install the CarPlay map on the AID".   Oczekiwane:  PMCP_INSTALL_OK ...
+    Naciśnij  "2. Install CarPlay: the map on the AID (also repairs or updates it)".
+    Oczekiwane:  PMCP_INSTALL_OK ...
     Restart (pokrętło głośności 10 s).
     Podłącz iPhone'a, uruchom nawigację w Apple Maps albo Google Maps i przełącz licznik
     na widok nawigacji/mapy (przyciski po prawej stronie kierownicy).
@@ -84,43 +85,51 @@ CZĘŚĆ 2 - W AUCIE
     "Zapomnij to auto", potem podłącz ponownie. Dalej nic: nie przechodź do kroku 3.
 
   Krok 3. Instalacja reszty (tylko jeśli mapa działa)
-    Zielone menu -> pmcp_CarPlay_AID -> "3. Install all features or update: map, route guidance, ...".
+    Zielone menu -> pmcp_stream_map_aid ->
+    "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)".
     (Masz już zainstalowaną wcześniejszą wersję? Zobacz AKTUALIZACJA niżej.)
-    Oczekiwane:  PMCP_ALL_ON_OK
+    Oczekiwane:  PMCP_FEATURES_ON_OK
+    Android Auto (opcjonalnie, telefon z Androidem): naciśnij też
+    "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)".
+    Oczekiwane:  PMCP_AA_ON_OK mode=gamma. Zobacz docs/pl/13-instrukcja-android-auto.md.
     Restart (pokrętło głośności 10 s). Ten start jest PRÓBNY.
 
   Krok 4. Test, potem potwierdzenie
     Sprawdź: CarPlay się łączy, mapa jest na liczniku, a podczas nawigacji pojawia się
     strzałka skrętu VW, dystans i godzina przyjazdu (strzałka pokazuje się, gdy auto ruszy),
     a do tego pasy ruchu, pasek odległości przed skrętem i nazwa ulicy.
-      - Wszystko działa: otwórz zielone menu i naciśnij "4. Confirm: everything works"
-        W TYM SAMYM STARCIE (nie wyłączaj auta przed tym).
+      - Z Android Auto: podłącz też telefon z Androidem i sprawdź mapę na liczniku.
+      - Wszystko działa: otwórz zielone menu i naciśnij
+        "5. Confirm: everything works (in the first start after 3 or 4)"
+        W TYM SAMYM STARCIE (nie wyłączaj auta przed tym). Oczekiwane: PMCP_CONFIRM_OK
       - Coś jest nie tak albo ekran zostaje czarny: po prostu zrób restart
         (pokrętło głośności 10 s).
         Bez Confirm następny start jest oryginalny, fabryczny. Nie trzeba niczego naprawiać.
-        Żeby spróbować jeszcze raz: "5. Try again", potem restart.
+        Żeby spróbować jeszcze raz: "6. Try again: the next start is a new trial", potem restart.
 
   Krok 5. Jeszcze jeden restart (pokrętło głośności 10 s). Gotowe: od teraz tak to działa.
 
-  Żeby usunąć wszystko: "Remove everything (back to factory files)", potem restart.
-  "Status (read-only)" pokazuje, co jest zainstalowane.
+  Żeby usunąć wszystko: "8. Remove everything (back to factory files)", potem restart.
+  "7. Status (read-only)" pokazuje, co jest zainstalowane.
 
-  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.4):
+  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.5.0):
     1. Zrób KARTĘ 1 z tej paczki. W aucie: "1. Check card and unit (read-only)".
-       Oczekiwane: PMCP_VERIFY_OK state=JAVA. "Status (read-only)" może pokazać
+       Oczekiwane: PMCP_VERIFY_OK state=JAVA. "7. Status (read-only)" może pokazać
        "Route guidance system: old" i "packages of an earlier card: rglu" - tak ma być.
-    2. "3. Install all features or update: ..."  ->  PMCP_ALL_ON_OK
-    3. Restart: ten start jest PRÓBNY. Sprawdź strzałki, pasy, nazwę ulicy.
-    4. "4. Confirm: everything works" w tym samym starcie, potem restart.
-    5. Zrób NOWĄ KARTĘ 2 pomocnikiem kopiowania (opcja 2): karty ratunkowe sprzed v1.4
-       nie przywracają nowego sterownika prowadzenia.
-    Używałeś karty eksperymentalnej z Android Auto? Przycisk 3 zostawia Android Auto bez zmian
-    i zamienia jego rg-aa na rg. Samo Android Auto aktualizuje ekran Android Auto
-    (pmcp_android_auto), "AA 1. Android Auto on: ...". Zobacz docs/pl/13-instrukcja-android-auto.md.
-    Jeśli "Status (read-only)" pokazuje "Android Auto: unknown" (starszy eksperymentalny zestaw
-    AA, którego ta karta nie zna, albo przerwane AA 1), przycisk 3 się zatrzyma: najpierw na
-    ekranie Android Auto "AA remove (factory Android Auto back)", potem znowu przycisk 3,
-    potem "AA 1".
+    2. "2. Install CarPlay: the map on the AID ..."  ->  zwykle
+       PMCP_MAP_INSTALL_OK (already installed ...)
+    3. Tylko jeśli używasz Android Auto: "3. Install Android Auto: ..."  ->  PMCP_AA_ON_OK
+       albo PMCP_AA_INSTALL_OK (already installed: ...) (aktualizuje Android Auto z karty
+       eksperymentalnej; wersję, której ta karta nie obsługuje, najpierw usuwa i zastępuje).
+    4. "4. Install additional features: ..."  ->  PMCP_FEATURES_ON_OK
+       (zastępuje wcześniejsze pliki prowadzenia i paczki, także eksperymentalne rg-aa)
+       Z v1.5.0 zwykle 2, 3 i 4 piszą "already installed" / "everything was already on,
+       nothing changed": wtedy nic się nie zmieniło - bez restartu i bez 5, gotowe.
+    5. Tylko jeśli 3 albo 4 coś zainstalowały: restart, ten start jest PRÓBNY. Sprawdź strzałki, pasy, nazwę ulicy (i Android Auto,
+       jeśli naciśnięto 3: podłącz telefon).
+    6. "5. Confirm: everything works ..." w tym samym starcie, potem restart.
+    7. Przy przejściu z v1.0 - v1.3: zrób NOWĄ KARTĘ 2 pomocnikiem kopiowania (opcja 2):
+       karty ratunkowe sprzed v1.4 nie przywracają nowego sterownika prowadzenia.
 
 ------------------------------------------------------------------------------------------
 AWARIA - KARTA 2 (RATUNKOWA)
@@ -131,7 +140,7 @@ AWARIA - KARTA 2 (RATUNKOWA)
        aktualizacji i może kilka razy się zrestartować. Jeśli o coś zapyta, wybierz Kontynuuj.
        NIE wyjmuj karty podczas aktualizacji.
     2. Gdy wróci normalny ekran, wyjmij kartę. Funkcje są znowu wyłączone; obraz mapy
-       zostaje. W zielonym menu: "Remove everything (back to factory files)", jeśli chcesz
+       zostaje. W zielonym menu: "8. Remove everything (back to factory files)", jeśli chcesz
        cofnąć też mapę.
     3. Karta po użyciu sama się rozbraja, więc nie uruchomi się ponownie przypadkiem. Żeby
        przygotować ją na następny raz: na komputerze uruchom pomocnika kopiowania i wybierz 3
@@ -140,15 +149,18 @@ AWARIA - KARTA 2 (RATUNKOWA)
   bez naszych plików niczego nie zmienia. Potem uzbrój ją ponownie pomocnikiem kopiowania,
   opcja 3.
 
-  Pojedyncze funkcje i inne układy mapy są w podmenu  pmcp_advanced  (napisy po angielsku,
-  opisane w docs/tutorial-w-aucie.pl.md).
+  Pojedyncze funkcje, inne układy mapy, szczegóły Android Auto i przyciski logów są w podmenu
+  pmcp_advanced  (ekrany features_advanced, carplay_advanced, aa_advanced; napisy po
+  angielsku, opisane w docs/tutorial-w-aucie.pl.md).
 
 ------------------------------------------------------------------------------------------
-KARTA 3 (LOGI) - tylko do zgłoszeń problemów z Android Auto
+KARTA 3 (LOGI) - tylko do zgłoszeń problemów (Android Auto albo CarPlay)
 ------------------------------------------------------------------------------------------
-  Nie ma jej w tej paczce i install.sh jej nie robi. Kopiuje na kartę logi Android Auto
-  zapisane przez "AA save log". Zbuduj ją na komputerze z repozytorium (potrzebny zip
-  M.I.B. 3.6.0 w mib/downloads/, jak dla karty ratunkowej):
+  Nie ma jej w tej paczce i install.sh jej nie robi. Kopiuje na kartę logi zapisane przez
+  "AA save log" (aa_advanced) i "CP save log" (features_advanced). Plik wyniku kończy się
+  RESULT=OK copied=N aa_logs=A cp_logs=C (albo RESULT=NO_LOGS: nic wcześniej nie zapisano).
+  Zbuduj ją na komputerze z repozytorium (potrzebny zip M.I.B. 3.6.0 w mib/downloads/,
+  jak dla karty ratunkowej):
       python3 -I installer/build_logcard.py build/karta3-logi
   Zawartość tego folderu skopiuj na osobną, pustą kartę FAT32. Żeby pobrać logi, uruchamia
   pełny stuff.sh M.I.B. 3.6.0 w trybie aktualizacji (SWDL), jak przy instalacji M.I.B.

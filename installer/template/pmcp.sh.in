@@ -18,18 +18,25 @@
 #                               packages (rglu, rg-aa and the other earlier rg variants become rg), one trial boot
 #   pmcp.sh aa-remove           Android Auto off: factory gal back (only from a copy with the factory hash), its files and
 #                               markers removed
-# Android Auto on the AID (aa/README.md), installed separately from CarPlay (its own GEM screen):
+# Android Auto on the AID (aa/README.md), installed separately from CarPlay (main menu 3, details on aa_advanced):
 #   pmcp.sh aa-on               Android Auto: Google Maps picture on the AID + VW arrows (gal wrapper + hook + feeder);
 #                               also brings an earlier card's AA set up to date
 #   pmcp.sh aa-confirm          during the AA trial start only: keep this AA set
 #   pmcp.sh aa-retry            the next AA connection is a new trial
 #   pmcp.sh aa-status           read-only: AA state, the last session's stream analysis, the manoeuvres for rg
 #   pmcp.sh aa-log-save         copy this start's AA log from /ramdisk to carplaymaps/logs (for the log card)
-#   pmcp.sh aa-log-clear        delete the saved AA logs
+#   pmcp.sh aa-log-clear        delete the saved AA and CarPlay logs
 #   pmcp.sh speedlimit-mode MODE  optional native VW limit (package sl): off (default); turnto = before the street that rg
 #                               writes to TurnToInfo (needs rg); street = trial, in CurrentPositionInfo only
 #   pmcp.sh speedlimit-status   read-only saved mode and native-limit reader snapshot
 #   pmcp.sh restore             back to the exact factory files
+# Main menu (GEM pmcp_stream_map_aid), each repairs its own part and replaces versions this card does not support:
+#   pmcp.sh map-install VARIANT 2: factory -> install; ours -> layout VARIANT; mixed map files -> restore, then install
+#   pmcp.sh aa-install          3: this card's Android Auto; an unsupported AA set is removed first (aa_off)
+#   pmcp.sh features-reset      4 (first step): unsupported route guidance / Java files -> factory, then 4 installs
+#   pmcp.sh confirm             5: confirm the Java set and/or the AA set, whichever is in its trial now
+#   pmcp.sh retry               6: a new trial for whichever of them is not confirmed
+#   pmcp.sh cp-log-save         CarPlay log of this start to carplaymaps/logs (for the log card)
 #
 # Install/remove actions hash their inputs and require a known unit state. speedlimit-mode off remains available
 # independently of those checks, including during a factory fallback boot.
@@ -382,6 +389,7 @@ java_set_consistent() {
 #   VIDEO: stage A (wrapper active, factory lsd.sh, no JAR of ours)   JAVA: stage A + lsd.sh block + a consistent JAR set
 detect_state() {
     STATE=UNKNOWN; STATE_WHY=""; RGSYS=unknown; JAVA_OLD_SET=""; JAVA_STRAY=""; AASYS=unknown; AAMODE=""
+    CORE_STATE=UNKNOWN; MAPOK=no; JAVAPART=mixed
     set -- `manifest_get WRAPPER`; W_SHA=$1; W_SIZE=$2
     set -- `manifest_get LSD_JAVA`; LJ_SHA=$1; LJ_SIZE=$2
     present=`our_jars_present`
@@ -389,7 +397,7 @@ detect_state() {
         if matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" && matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" \
             && matches "$DRV" "$STOCK_DRV_SHA" "$STOCK_DRV_SIZE" && matches "$CFG" "$STOCK_CFG_SHA" "$STOCK_CFG_SIZE" \
             && matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE"; then
-            STATE=STOCK; RGSYS=off; AASYS=off; return
+            STATE=STOCK; CORE_STATE=STOCK; RGSYS=off; AASYS=off; return
         fi
         STATE_WHY="no carplaymaps, but lsd.sh, dio_manager, gal, the iAP2 driver or iap2.cfg is not the factory file"
         return
@@ -404,21 +412,30 @@ detect_state() {
     # RGSYS old (RG on with an earlier card's driver/reader) works as it is; rg-update brings this card's files
     rg_state
     aa_state
-    if [ "$RGSYS" != unknown ] && [ "$AASYS" != unknown ] && matches "$DIO" "$W_SHA" "$W_SIZE"; then
-        if [ -z "$present" ] && matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"; then
-            STATE=VIDEO; return
-        fi
-        if matches "$LSD" "$LJ_SHA" "$LJ_SIZE" && java_set_consistent; then
-            STATE=JAVA; return
-        fi
+    # the three parts, each repaired by its own main-menu button: map (2), Android Auto (3), features (4)
+    MAPOK=no; JAVAPART=mixed
+    matches "$DIO" "$W_SHA" "$W_SIZE" && MAPOK=yes
+    if [ -z "$present" ] && matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"; then
+        JAVAPART=none
+    elif matches "$LSD" "$LJ_SHA" "$LJ_SIZE" && java_set_consistent; then
+        JAVAPART=set
+    fi
+    CORE_STATE=PARTIAL
+    if [ $MAPOK = yes ] && [ "$RGSYS" != unknown ]; then
+        case $JAVAPART in none) CORE_STATE=VIDEO ;; set) CORE_STATE=JAVA ;; esac
+    fi
+    if [ "$CORE_STATE" != PARTIAL ] && [ "$AASYS" != unknown ]; then
+        STATE=$CORE_STATE; return
     fi
     STATE=PARTIAL
-    if [ "$AASYS" = unknown ] && [ "$RGSYS" != unknown ] && matches "$DIO" "$W_SHA" "$W_SIZE"; then
-        # only the Android Auto files are mixed (an interrupted AA 1, or an AA set this card does not know): AA remove
-        # brings factory Android Auto back and keeps everything else; restore would remove everything
-        STATE_WHY="Android Auto files are mixed (interrupted AA 1 or an unknown AA set): Android Auto screen, AA remove (factory Android Auto back), then AA 1 again"
+    if [ $MAPOK = no ]; then
+        STATE_WHY="pmcp factory copies are intact, the CarPlay map files are mixed (interrupted action): main menu, 2. Install CarPlay repairs it (it removes everything first), or 8. Remove everything"
+    elif [ "$CORE_STATE" = PARTIAL ]; then
+        STATE_WHY="route guidance or Java files are mixed or of a version this card does not support (interrupted action, rescue card or another card): main menu, 4. Install additional features replaces them"
+        [ "$AASYS" = unknown ] && STATE_WHY="$STATE_WHY; Android Auto files too: then 3. Install Android Auto"
     else
-        STATE_WHY="pmcp factory copies are intact, live files are mixed (interrupted action or rescue card): run restore"
+        # only the Android Auto files: an interrupted AA install, or an AA set this card does not support
+        STATE_WHY="Android Auto files are mixed or of a version this card does not support: main menu, 3. Install Android Auto replaces them (CarPlay stays as it is)"
     fi
 }
 
@@ -625,15 +642,127 @@ do_aa_on() {
         say "This set was confirmed before: it starts with every AA connection, no trial needed."
     else
         say "Connect the Android phone (cable). That first Android Auto session in this start is a TRIAL."
-        say "If AA works: open this menu again and press AA Confirm, in that same start. Otherwise restart: factory AA."
+        say "If AA works: open the main menu again and press 5. Confirm, in that same start. Otherwise restart: factory AA."
     fi
     # rg reads the hook's manoeuvres during an Android Auto connection (connection type 3) and gives the VW arrows
     _a_rg=no
     if [ "$STATE" = JAVA ]; then
         case " `current_set` " in *" rg "*) _a_rg=yes ;; esac
     fi
-    [ $_a_rg = yes ] || say "VW arrows from Google Maps need rg: main menu, 3. Install all features or update."
+    [ $_a_rg = yes ] || say "VW arrows from Google Maps need rg: main menu, 4. Install additional features."
     return 0
+}
+
+# Main menu 3: this card's (stable) Android Auto set. Android Auto files of a version this card does not support (an
+# experimental card's set, an interrupted install) are removed first with aa_off (factory gal back, only from a copy
+# with the factory hash; nothing is written otherwise), then the stable set is installed. An earlier card's whole set
+# (AA_OLD) is brought up to date in place, as aa-on does.
+do_aa_install() {
+    selftest
+    firmware_identity
+    detect_state
+    if [ "$AASYS" = on ]; then
+        say "PMCP_AA_INSTALL_OK (already installed: this card's Android Auto set `aa_set_id gamma`, nothing changed)"
+        return 0
+    fi
+    case "$CORE_STATE" in
+        VIDEO|JAVA) ;;
+        STOCK) fail "AA_INSTALL_NEEDS_CARPLAY_FIRST_PRESS_2" ;;
+        *) [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
+           [ "$MAPOK" = yes ] && fail "AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3"
+           fail "AA_INSTALL_NEEDS_A_WORKING_CARPLAY_INSTALL_PRESS_2_STATE_$STATE" ;;
+    esac
+    # this card's AA files first: nothing is removed for a set that could not be installed
+    aa_check_payload
+    if [ "$AASYS" = unknown ]; then
+        say "Android Auto files of a version this card does not support: removing them first (factory gal back)"
+        aa_off
+        flush
+        detect_state
+        [ "$AASYS" = off ] || fail "AA_INSTALL_REMOVE_LEFT_AA_$AASYS"
+        say "  removed; installing this card's Android Auto"
+    fi
+    ARG=gamma
+    do_aa_on
+}
+
+# ---- main menu 5 and 6: one Confirm / Try again for both trials -----------------------------------------------------
+# The Java set (CarPlay features: trial = the first unit start with a new set) and the Android Auto set (trial = the
+# first AA connection with a new set) have separate trials. 5. Confirm confirms whichever of them is in its trial now
+# and says why the other one is not confirmed; it fails only when nothing was confirmed.
+java_confirm_try() {
+    _k_set=`boot_set_id`
+    if [ -e "$PERSIST/DISABLED" ]; then say "  CarPlay features: switched off by the rescue card (6. Try again, then restart)"; return 1; fi
+    if [ -e "$PERSIST/ok.$_k_set" ]; then say "  CarPlay features (set $_k_set): already confirmed"; return 1; fi
+    if [ ! -e "$PERSIST/trial.$_k_set" ]; then say "  CarPlay features: no trial start yet (restart the unit first)"; return 1; fi
+    if [ "`cat "$PERSIST/last-boot" 2>/dev/null`" != "set=$_k_set use=trial" ]; then
+        say "  CarPlay features: this is not their trial start (6. Try again, then restart)"; return 1
+    fi
+    touch "$PERSIST/ok.$_k_set" && [ -e "$PERSIST/ok.$_k_set" ] || fail "CONFIRM_MARKER_FAILED"
+    echo "gem-ok set=$_k_set" >> "$PERSIST/boot.log" 2>/dev/null
+    say "PMCP_JAVA_CONFIRM_OK set=$_k_set (this set now loads on every boot)"
+}
+
+aa_confirm_try() {
+    _k_aa=`aa_set_id $AAMODE`
+    if [ -e "$PERSIST/DISABLED" ]; then say "  Android Auto: switched off by the rescue card (6. Try again, then restart)"; return 1; fi
+    if [ -e "$PERSIST/aa-ok.$_k_aa" ]; then say "  Android Auto (set $_k_aa): already confirmed"; return 1; fi
+    if [ ! -e "$PERSIST/aa-trial.$_k_aa" ]; then say "  Android Auto: no trial yet (connect the phone first, then 5 again)"; return 1; fi
+    if [ ! -e "$RAMDISK/pmcp-aa-trial.$_k_aa" ]; then
+        say "  Android Auto: this is not its trial start (6. Try again, then restart)"; return 1
+    fi
+    rm -f "$PERSIST"/aa-ok.* 2>/dev/null
+    touch "$PERSIST/aa-ok.$_k_aa" && [ -e "$PERSIST/aa-ok.$_k_aa" ] || fail "AA_CONFIRM_MARKER_FAILED"
+    say "PMCP_AA_CONFIRM_OK set=$_k_aa (Android Auto now starts with this set every time)"
+}
+
+do_confirm() {
+    selftest
+    firmware_identity
+    detect_state
+    _k_n=0; _k_any=no
+    if [ "$CORE_STATE" = JAVA ]; then _k_any=yes; java_confirm_try && _k_n=$((_k_n + 1)); fi
+    if [ "$AASYS" = on ]; then _k_any=yes; aa_confirm_try && _k_n=$((_k_n + 1)); fi
+    [ $_k_any = yes ] || fail "CONFIRM_NOTHING_INSTALLED_THAT_HAS_A_TRIAL_STATE_$STATE"
+    [ $_k_n -gt 0 ] || fail "CONFIRM_NOTHING_IN_ITS_TRIAL_NOW"
+    flush
+    say "PMCP_CONFIRM_OK confirmed=$_k_n"
+}
+
+do_retry() {
+    selftest
+    firmware_identity
+    detect_state
+    _t_n=0; _t_any=no
+    # after the rescue card (DISABLED, shared by both parts) every set gets a new trial, also a confirmed one: the rescue
+    # card was used because something did not work, so nothing comes back without a trial
+    _t_dis=no; [ -e "$PERSIST/DISABLED" ] && _t_dis=yes
+    if [ "$CORE_STATE" = JAVA ]; then
+        _t_any=yes; _t_set=`boot_set_id`
+        if [ -e "$PERSIST/ok.$_t_set" ] && [ $_t_dis = no ]; then
+            say "  CarPlay features (set $_t_set): confirmed, nothing to try again"
+        else
+            rm -f "$PERSIST/trial.$_t_set" "$PERSIST/ok.$_t_set" || fail "RETRY_MARKER_REMOVE_FAILED"
+            say "PMCP_JAVA_RETRY_OK set=$_t_set (the next boot is a new trial)"; _t_n=$((_t_n + 1))
+        fi
+    fi
+    if [ "$AASYS" = on ]; then
+        _t_any=yes; _t_aa=`aa_set_id $AAMODE`
+        if [ -e "$PERSIST/aa-ok.$_t_aa" ] && [ $_t_dis = no ]; then
+            say "  Android Auto (set $_t_aa): confirmed, nothing to try again"
+        else
+            rm -f "$PERSIST/aa-trial.$_t_aa" "$PERSIST/aa-ok.$_t_aa" || fail "AA_RETRY_MARKER_REMOVE_FAILED"
+            say "PMCP_AA_RETRY_OK set=$_t_aa (the next AA connection after a restart is a new trial)"; _t_n=$((_t_n + 1))
+        fi
+    fi
+    [ $_t_any = yes ] || fail "RETRY_NOTHING_INSTALLED_THAT_HAS_A_TRIAL_STATE_$STATE"
+    [ $_t_n -gt 0 ] || fail "RETRY_EVERYTHING_ALREADY_CONFIRMED"
+    if [ $_t_dis = yes ]; then
+        rm -f "$PERSIST/DISABLED" || fail "RETRY_MARKER_REMOVE_FAILED"
+        say "  rescue card switch-off removed: everything starts with a new trial"
+    fi
+    flush
+    say "PMCP_RETRY_OK (restart the unit: hold the volume knob ~10 s)"
 }
 
 do_aa_confirm() {
@@ -705,7 +834,7 @@ do_aa_log_clear() {
     detect_state
     [ -d "$ROOT/logs" ] || fail "AA_NO_SAVED_LOGS"
     remount_rw
-    rm -f "$ROOT"/logs/aa-log-*.txt "$ROOT"/logs/*.pmcp-new 2>/dev/null
+    rm -f "$ROOT"/logs/aa-log-*.txt "$ROOT"/logs/cp-log-*.txt "$ROOT"/logs/*.pmcp-new 2>/dev/null
     rmdir "$ROOT/logs" 2>/dev/null
     [ ! -e "$ROOT/logs" ] || fail "AA_LOG_CLEAR_FAILED"
     flush
@@ -986,10 +1115,11 @@ do_switch() {
     selftest
     firmware_identity
     detect_state
-    case "$STATE" in VIDEO|JAVA) ;; *) fail "SWITCH_NEEDS_PMCP_INSTALL_STATE_$STATE" ;; esac
+    # only core.so changes: the map part has to be ours and intact (route guidance, Java or AA files may be mixed)
+    [ "$MAPOK" = yes ] || fail "SWITCH_NEEDS_PMCP_INSTALL_STATE_$STATE"
     set -- `manifest_get "$key"`; C_SHA=$1; C_SIZE=$2; C_PATH=$3
     check "$PAYLOAD/$C_PATH" "$C_SHA" "$C_SIZE" "$key"
-    # same map already active: nothing to do (button 3 switches to the main map as its first step)
+    # same map already active: nothing to do (main menu 2 answers "already installed" itself)
     if [ "`cat "$ROOT/VARIANT" 2>/dev/null`" = "$ARG" ] && matches "$ROOT/core.so" "$C_SHA" "$C_SIZE"; then
         fail "SWITCH_ALREADY_$ARG"
     fi
@@ -1004,6 +1134,193 @@ do_switch() {
     flush
     say "PMCP_SWITCH_OK variant=$ARG"
     say "A full unit reboot is required."
+}
+
+# the map files in carplaymaps are this card's (core.so is the layout: switch replaces it)
+map_files_ok() {
+    while read _y_k _y_h _y_s _y_p; do
+        case "$_y_k" in
+            BRIDGE) _y_f=altscreen-most-bridge ;;
+            SUPERVISOR) _y_f=carplay-cluster-supervisor ;;
+            SEC) _y_f=libcarplay-security-bridge.so ;;
+            PAIR_HELPER) _y_f=security_bridge/carplay-pairing-helper ;;
+            PAIR_CORE) _y_f=security_bridge/libCarPlayPairingCore.so ;;
+            WRAPPER) _y_f=dio_manager.wrapper.sh ;;
+            *) continue ;;
+        esac
+        matches "$ROOT/$_y_f" "$_y_h" "$_y_s" || return 1
+    done <<EOF
+$MANIFEST
+EOF
+    return 0
+}
+
+# Main menu 2: the CarPlay map (layout ARG). Factory unit: install. Our install with intact map files: the layout is
+# switched to ARG when it is another one. Our install whose map files are mixed (the dio_manager wrapper is not this
+# card's): everything is removed with the verified factory copies (restore), then the map is installed.
+# Another mod or files restore cannot verify: nothing is written.
+do_map_install() {
+    key=`variant_key "$ARG"`
+    [ -n "$key" ] || fail "UNKNOWN_VARIANT_$ARG"
+    selftest
+    firmware_identity
+    detect_state
+    case "$STATE" in
+        STOCK) do_install; return 0 ;;
+        UNKNOWN) [ -n "$STATE_WHY" ] && say "  $STATE_WHY"; fail "MAP_INSTALL_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" ;;
+    esac
+    if [ "$MAPOK" = yes ] && map_files_ok; then
+        set -- `manifest_get "$key"`
+        if [ "`cat "$ROOT/VARIANT" 2>/dev/null`" = "$ARG" ] && matches "$ROOT/core.so" "$1" "$2"; then
+            say "PMCP_MAP_INSTALL_OK (already installed: variant $ARG, nothing changed)"
+            return 0
+        fi
+        do_switch
+        return 0
+    fi
+    # before any write: this card's payload, and a factory copy with the factory hash for every live file restore puts
+    # back (lsd.sh and dio_manager: pmcp_root)
+    verify_payload
+    pmcp_root || fail "MAP_INSTALL_FACTORY_COPIES_NOT_VERIFIED_NOTHING_CHANGED"
+    matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE" || matches "$ROOT/aa/gal.real" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE" \
+        || fail "MAP_INSTALL_FACTORY_GAL_COPY_NOT_VERIFIED_NOTHING_CHANGED"
+    matches "$DRV" "$STOCK_DRV_SHA" "$STOCK_DRV_SIZE" || matches "$ROOT/rollback/ipod-drvr-iap2.so" "$STOCK_DRV_SHA" "$STOCK_DRV_SIZE" \
+        || fail "MAP_INSTALL_FACTORY_IAP2_DRIVER_COPY_NOT_VERIFIED_NOTHING_CHANGED"
+    matches "$CFG" "$STOCK_CFG_SHA" "$STOCK_CFG_SIZE" || matches "$ROOT/rollback/iap2.cfg" "$STOCK_CFG_SHA" "$STOCK_CFG_SIZE" \
+        || fail "MAP_INSTALL_FACTORY_IAP2_CFG_COPY_NOT_VERIFIED_NOTHING_CHANGED"
+    say "The CarPlay map files are mixed or of a version this card does not support:"
+    say "removing everything first (verified factory files), then installing the map."
+    do_restore
+    do_install
+    say "Android Auto and the additional features were removed with it: press 3 and/or 4 now, then restart."
+}
+
+# listed_pmcp_jars "HMI_BOOT line" -> the JAR names of that set that are ours by name (pmcp-*.jar, plain file names),
+# also those of a package this card does not know; any other name (a factory or another mod's file) is never listed
+listed_pmcp_jars() {
+    set -f   # the set's words are data: no file name expansion
+    set -- $1
+    [ $# -gt 0 ] && shift
+    for _l_w in "$@"; do
+        case "$_l_w" in *[!A-Za-z0-9._-]*) ;; pmcp-*.jar) echo "$_l_w" ;; esac
+    done
+    set +f
+}
+
+# Main menu 4 runs this first: route guidance or Java files of a version this card does not support (an unknown
+# Java set, a set switched off by the rescue card with the factory lsd.sh, an unknown driver or reader) are removed
+# with the verified factory copies, so the steps after it install this card's set. Nothing to do: *_ALREADY_*.
+java_reset() {
+    _z_line=`cat "$ROOT/HMI_BOOT" 2>/dev/null`
+    clear_speedlimit_mode
+    if ! matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"; then
+        rm -f "$LSD.pmcp-rb" 2>/dev/null
+        cp "$ROOT/rollback/lsd.sh" "$LSD.pmcp-rb" || fail "LSD_RESTORE_STAGE_FAILED"
+        chmod 755 "$LSD.pmcp-rb" || fail "CHMOD_FAILED"
+        check "$LSD.pmcp-rb" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" STAGED_FACTORY_LSD
+        mv "$LSD.pmcp-rb" "$LSD" || fail "LSD_RESTORE_FAILED_RUN_RESTORE"
+    fi
+    # JAR files (the lsd.sh block is off now, nothing loads them), then the set file: until it goes, its names are known: every name this card knows (its own and earlier cards'), and the pmcp-*.jar names the old set listed
+    _z_files=`java_catalog | while read _z_n _z_f; do echo "$_z_f"; done; echo "$JAVA_OLD" | while read _z_a _z_b _z_c _z_f _z_d; do [ -n "$_z_f" ] && echo "$_z_f"; done`
+    _z_files="$_z_files `listed_pmcp_jars "$_z_line"`"
+    set -f   # names are data: no file name expansion
+    for _z_f in $_z_files; do
+        rm -f "$JARS/$_z_f" "$JARS/$_z_f.pmcp-new" || { set +f; fail "JAR_REMOVE_FAILED_RUN_RESTORE"; }
+    done
+    set +f
+    rm -f "$ROOT/HMI_BOOT" "$ROOT/HMI_BOOT.pmcp-new" "$LSD.pmcp-new" || fail "SET_REMOVE_FAILED_RUN_RESTORE"
+}
+
+do_features_reset() {
+    selftest
+    firmware_identity
+    detect_state
+    if [ "$MAPOK" != yes ]; then
+        [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
+        fail "FEATURES_NEED_THE_CARPLAY_MAP_FIRST_PRESS_2_STATE_$STATE"
+    fi
+    if [ "$CORE_STATE" != PARTIAL ]; then
+        # nothing of ours to reset; unsupported Android Auto files stop the next steps, so say it here
+        [ "$AASYS" != unknown ] || fail "FEATURES_NEED_ANDROID_AUTO_REPLACED_FIRST_PRESS_3"
+        fail "FEATURES_RESET_ALREADY_NOT_NEEDED"
+    fi
+    # the rg package without its route guidance system would run with the factory driver: reset the set with it
+    _x_java=$JAVAPART
+    if [ "$RGSYS" = unknown ] && [ "$JAVAPART" = set ]; then
+        case " `current_set` " in *" rg"*) _x_java=mixed ;; esac
+    fi
+    # before any write: every live file that goes back needs a factory copy with the factory hash (lsd.sh: pmcp_root),
+    # and lsd.sh must be the factory one or ours (another mod's lsd.sh is not replaced)
+    if [ "$_x_java" = mixed ]; then
+        set -- `manifest_get LSD_JAVA`
+        matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" || matches "$LSD" "$1" "$2" \
+            || fail "FEATURES_RESET_LSD_SH_IS_NOT_OURS_NOTHING_CHANGED"
+    fi
+    if [ "$RGSYS" = unknown ]; then
+        matches "$DRV" "$STOCK_DRV_SHA" "$STOCK_DRV_SIZE" || matches "$ROOT/rollback/ipod-drvr-iap2.so" "$STOCK_DRV_SHA" "$STOCK_DRV_SIZE" \
+            || fail "FEATURES_RESET_FACTORY_IAP2_DRIVER_COPY_NOT_VERIFIED_NOTHING_CHANGED"
+        matches "$CFG" "$STOCK_CFG_SHA" "$STOCK_CFG_SIZE" || matches "$ROOT/rollback/iap2.cfg" "$STOCK_CFG_SHA" "$STOCK_CFG_SIZE" \
+            || fail "FEATURES_RESET_FACTORY_IAP2_CFG_COPY_NOT_VERIFIED_NOTHING_CHANGED"
+    fi
+    say "Route guidance or Java files of a version this card does not support: removing them first (verified factory files)"
+    remount_rw
+    if [ "$_x_java" = mixed ]; then
+        say "  Java set -> factory lsd.sh, our JAR files removed"
+        java_reset
+    fi
+    if [ "$RGSYS" = unknown ]; then
+        say "  route guidance system -> factory iAP2 driver and iap2.cfg"
+        rg_files_off
+    fi
+    detect_state
+    case "$CORE_STATE" in VIDEO|JAVA) ;; *) fail "POST_FEATURES_RESET_STATE_${STATE}_PRESS_8_REMOVE_EVERYTHING" ;; esac
+    flush
+    say "PMCP_FEATURES_RESET_OK (state now $STATE)"
+    [ "$AASYS" = unknown ] && say "Android Auto files of a version this card does not support: 3. Install Android Auto, then 4 again."
+    return 0
+}
+
+# CarPlay log for the log card (card 3): the supervisor log and the route guidance status of this start (in /ramdisk,
+# gone at the next start) and pmcp's boot log, to carplaymaps/logs like the AA log
+CP_LOG_MAX=5
+do_cp_log_save() {
+    selftest
+    firmware_identity
+    detect_state
+    case "$STATE" in VIDEO|JAVA|PARTIAL) ;; *) fail "CP_LOG_NEEDS_PMCP_STATE_$STATE" ;; esac
+    _l_n=1
+    while [ -e "$ROOT/logs/cp-log-$_l_n.txt" ]; do
+        _l_n=$((_l_n + 1))
+        [ $_l_n -le $CP_LOG_MAX ] || fail "CP_LOGS_FULL_${CP_LOG_MAX}_USE_THE_LOG_CARD_THEN_DELETE_SAVED_LOGS"
+    done
+    remount_rw
+    mkdir -p "$ROOT/logs" || fail "CP_LOG_DIR_FAILED"
+    _l_f="$ROOT/logs/cp-log-$_l_n.txt"
+    rm -f "$_l_f.pmcp-new" 2>/dev/null
+    if ! { echo "pmcp $PMCP_VERSION cp-log-save `date 2>/dev/null`"
+           echo "--- state: $STATE (map $MAPOK, Java $JAVAPART, route guidance $RGSYS, Android Auto $AASYS)"
+           [ -n "$STATE_WHY" ] && echo "    $STATE_WHY"
+           echo "--- installed: `cat "$ROOT/PMCP_VERSION" 2>/dev/null` variant `cat "$ROOT/VARIANT" 2>/dev/null`"
+           echo "--- HMI_BOOT: `cat "$ROOT/HMI_BOOT" 2>/dev/null`"
+           echo "--- markers: `ls "$PERSIST" 2>/dev/null`"
+           echo "--- last-boot: `cat "$PERSIST/last-boot" 2>/dev/null`"
+           echo "--- boot.log"; cat "$PERSIST/boot.log" 2>/dev/null
+           echo "--- carplay-cluster-supervisor.log"; cat "$RAMDISK/carplay-cluster-supervisor.log" 2>/dev/null
+           for _l_x in adapter-status.txt guidance-evidence.txt; do
+               echo "--- carplay-route-guidance/$_l_x"; cat "$RAMDISK/carplay-route-guidance/$_l_x" 2>/dev/null
+           done
+           echo "--- pmcp-speedlimit.state"; cat "$SL_STATE" 2>/dev/null
+           echo "--- end"; } > "$_l_f.pmcp-new" 2>/dev/null; then
+        rm -f "$_l_f.pmcp-new" 2>/dev/null
+        fail "CP_LOG_WRITE_FAILED"
+    fi
+    _l_have=`size_of "$_l_f.pmcp-new"`
+    [ -n "$_l_have" ] && [ "$_l_have" -gt 0 ] || { rm -f "$_l_f.pmcp-new"; fail "CP_LOG_WRITE_FAILED"; }
+    mv "$_l_f.pmcp-new" "$_l_f" || fail "CP_LOG_RENAME_FAILED"
+    flush
+    _l_sup=no; [ -s "$RAMDISK/carplay-cluster-supervisor.log" ] && _l_sup=yes
+    say "PMCP_CP_LOG_SAVED file=logs/cp-log-$_l_n.txt bytes=$_l_have supervisor_log=$_l_sup"
+    say "To the computer: log card (card 3) in update mode. Up to $CP_LOG_MAX CarPlay logs are kept."
 }
 
 # stage_set_files "names" -> stages HMI_BOOT.pmcp-new in ROOT (ids from the manifest), checks it reads back
@@ -1069,7 +1386,7 @@ do_java_on() {
     [ "$STATE" = JAVA ] || fail "POST_JAVA_ON_STATE_${STATE}_RUN_RESTORE"
     flush
     say "PMCP_JAVA_ON_OK package=$ARG set=`boot_set_id`"
-    say "Reboot the unit. The first boot is a trial: if everything works, press 4. Confirm in GEM during that boot."
+    say "Reboot the unit. The first boot is a trial: if everything works, press 5. Confirm in GEM during that boot."
     say "Without it, or if the screen does not come back (hold the volume knob ~10 s), the next boot is factory."
 }
 
@@ -1151,10 +1468,10 @@ do_java_update() {
     selftest
     firmware_identity
     detect_state
-    # "ALREADY" answers let button 3 skip this step on units without a Java set or already current.
+    # "ALREADY" answers let button 4 skip this step on units without a Java set or already current.
     case "$STATE" in STOCK|VIDEO) fail "JAVA_UPDATE_ALREADY_NO_JAVA_SET" ;; JAVA) ;; *)
         [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
-        [ "$AASYS" = unknown ] && fail "JAVA_UPDATE_NEEDS_AA_REMOVE_FIRST_ON_THE_ANDROID_AUTO_SCREEN"
+        [ "$AASYS" = unknown ] && fail "JAVA_UPDATE_NEEDS_ANDROID_AUTO_REPLACED_FIRST_PRESS_3"
         fail "JAVA_UPDATE_NEEDS_JAVA_STATE_$STATE" ;; esac
     if [ -z "$JAVA_OLD_SET" ]; then
         [ -n "$JAVA_STRAY" ] || fail "JAVA_UPDATE_ALREADY_CURRENT"
@@ -1213,7 +1530,7 @@ do_java_update() {
     flush
     say "  was:$want (from: $cur)"
     say "PMCP_JAVA_UPDATE_OK set=`boot_set_id`"
-    say "Reboot the unit. The first boot is a trial: if everything works, press 4. Confirm in GEM during that boot."
+    say "Reboot the unit. The first boot is a trial: if everything works, press 5. Confirm in GEM during that boot."
     say "Without it, or if the screen does not come back (hold the volume knob ~10 s), the next boot is factory."
 }
 
@@ -1316,7 +1633,7 @@ do_rg_update() {
     selftest
     firmware_identity
     detect_state
-    # "ALREADY" answers let button 3 skip this step on units without RG or already current.
+    # "ALREADY" answers let button 4 skip this step on units without RG or already current.
     case "$STATE" in STOCK) fail "RG_UPDATE_ALREADY_NOT_INSTALLED" ;; VIDEO|JAVA|PARTIAL) ;; *) fail "RG_UPDATE_NEEDS_PMCP_STATE_$STATE" ;; esac
     case "$RGSYS" in old) ;; off) fail "RG_UPDATE_ALREADY_NOT_INSTALLED" ;; on) fail "RG_UPDATE_ALREADY_CURRENT" ;; *) fail "RG_UPDATE_UNKNOWN_RG_FILES" ;; esac
     _u_d=$DRV_NEW; _u_r=$RD_NEW
@@ -1417,7 +1734,9 @@ do_restore() {
         check "$DIO.pmcp-restore" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" STAGED_FACTORY_DIO
         mv "$DIO.pmcp-restore" "$DIO" || fail "DIO_RESTORE_FAILED"
     fi
-    for f in `java_catalog | while read n j; do echo $j; done` `echo "$JAVA_OLD" | while read a b c j d; do echo $j; done`; do
+    _r_set=`cat "$ROOT/HMI_BOOT" 2>/dev/null`
+    for f in `java_catalog | while read n j; do echo $j; done` `echo "$JAVA_OLD" | while read a b c j d; do echo $j; done` \
+             `listed_pmcp_jars "$_r_set"`; do
         rm -f "$JARS/$f" "$JARS/$f.pmcp-new" || fail "JAR_REMOVE_FAILED"
     done
     rm -f "$LSD.pmcp-new" "$DIO.pmcp-new" "$LSD.pmcp-rb" "$DIO.pmcp-rb" 2>/dev/null
@@ -1444,10 +1763,10 @@ do_status() {
     [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
     [ -s "$ROOT/PMCP_VERSION" ] && say "Installed: `cat "$ROOT/PMCP_VERSION"` variant `cat "$ROOT/VARIANT" 2>/dev/null`"
     [ "$STATE" = JAVA ] && say "Java set: `boot_set_id`"
-    [ -n "$JAVA_OLD_SET" ] && say "  packages of an earlier card: $JAVA_OLD_SET (button 3 or Java update replaces them)"
-    [ -n "$JAVA_STRAY" ] && say "  unused JAR files (not loaded): $JAVA_STRAY (button 3 or Java update removes them)"
+    [ -n "$JAVA_OLD_SET" ] && say "  packages of an earlier card: $JAVA_OLD_SET (4. Install additional features replaces them)"
+    [ -n "$JAVA_STRAY" ] && say "  unused JAR files (not loaded): $JAVA_STRAY (4. Install additional features removes them)"
     say "Route guidance system: $RGSYS"
-    [ "$RGSYS" = old ] && say "  driver or reader of an earlier card (button 3 or Route guidance update replaces them)"
+    [ "$RGSYS" = old ] && say "  driver or reader of an earlier card (4. Install additional features replaces them)"
     say "Android Auto: $AASYS${AAMODE:+ mode=$AAMODE}"
     if [ -d "$PERSIST" ]; then
         say "Trial markers: `ls "$PERSIST" 2>/dev/null`"
@@ -1463,11 +1782,17 @@ do_status() {
 say "pmcp $PMCP_VERSION: $ACTION $ARG"
 # Sharing this lock prevents an enable check from racing with a Java-set change or a full restore.
 case "$ACTION" in
-    speedlimit-mode|java-on|java-off|java-update) speedlimit_lock ;;
+    speedlimit-mode|java-on|java-off|java-update|features-reset) speedlimit_lock ;;
 esac
 case "$ACTION" in
     verify)     do_verify ;;
     install)    do_install ;;
+    map-install)    do_map_install ;;
+    aa-install)     do_aa_install ;;
+    features-reset) do_features_reset ;;
+    confirm)    do_confirm ;;
+    retry)      do_retry ;;
+    cp-log-save)    do_cp_log_save ;;
     switch)     do_switch ;;
     java-on)    do_java_on ;;
     java-off)   do_java_off ;;

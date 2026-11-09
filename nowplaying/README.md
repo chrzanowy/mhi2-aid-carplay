@@ -49,4 +49,4 @@ them only after checking that there are no class literals), the constants in bot
 - whether the cluster shows the second and third line for the "smartphone" source (it does for media);
 - whether `ThreadSwitchingService` is ready at the moment of the first track change (if not, the title shows at the next update).
 
-In the installer: Java package `np` (GEM → pmcp → stage B → "Wlacz: Tytul i wykonawca").
+In the installer: Java package `np` (main menu "4. Install additional features", or GEM → pmcp_stream_map_aid → pmcp_advanced → features_advanced → "On np: CarPlay song title and artist on the AID").

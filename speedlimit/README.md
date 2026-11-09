@@ -8,7 +8,7 @@ Since v1.4.1 it works together with the `rg` package. `rg` replaces the factory 
 iPhone's street name there), so `sl` no longer patches that class: `rg` asks `sl` for the prefix
 ([`rg/lanes/SpeedLimitText.java`](../rg/lanes/SpeedLimitText.java)). Two output modes:
 
-| Mode | GEM button (pmcp_advanced) | Where the limit goes |
+| Mode | GEM button (pmcp_advanced → features_advanced) | Where the limit goes |
 |---|---|---|
 | `turnto` | "Speed limit: in front of the street name (top bar and dial; needs sl and rg)" | `rg`'s TurnToInfo text: the AID top bar and the right dial show the same field |
 | `street` | "Speed limit TRIAL: in CurrentPositionInfo only (photograph where it shows)" | NavSD CurrentPositionInfo only; where (or whether) AID 791 shows it is not known yet |

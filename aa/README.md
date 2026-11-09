@@ -10,8 +10,9 @@ Status (2026-11-07, car-tested on a Passat B8, MU1161 / AID 791, Samsung Galaxy 
   phone's next key frame (feeder v10: start sync, pacing at 6 Mbit/s without bursts, no focus cycle); no VW arrow at the
   very first step of a route ("depart" is not mapped yet).
 
-Android Auto has its own GEM screen (`pmcp_android_auto`, on the main screen) and is installed separately from CarPlay:
-button 3 neither installs nor removes it. CarPlay works exactly as without it.
+Android Auto is installed with its own main-screen button in GEM, "3. Install Android Auto: Google Maps on the AID + VW
+arrows (needs 2)"; its details (AA confirm, status, logs, removal) are on the screen `pmcp_advanced` → `aa_advanced`.
+"4. Install additional features" neither installs nor removes it. CarPlay works exactly as without it.
 
 ## How it works
 
@@ -45,17 +46,19 @@ AA phone -> gal (the unit's AA receiver) + hook -> aa-most-feeder -> ring /ramdi
 | `carplaymaps/aa/feeder.conf` | `unit/feeder-gamma.conf` | MOST, 5 s wait, start sync, pacing 6 Mbit/s, 20 ms gap |
 | `carplaymaps/aa/AA_BOOT` | `pmcp.sh` | set id: `gamma-` + 8 hex of hook, feeder and hook settings |
 
-Nothing changes in `/mnt/system`. Saved logs go to `carplaymaps/logs/` (`AA save log`).
+Nothing changes in `/mnt/system`. Saved logs go to `carplaymaps/logs/` (`AA save log`; `CP save log` for
+CarPlay).
 
 ## Safety
 
-- **Trial start:** a new AA set runs with the hook during one unit start only. After a restart without `AA 2. Confirm`
-  `gal` is factory again. `DISABLED` from the rescue card also switches the hook off.
+- **Trial start:** a new AA set runs with the hook during one unit start only. After a restart without "5. Confirm"
+  (or `aa_advanced` → "AA Confirm") `gal` is factory again. `DISABLED` from the rescue card also switches the hook off.
 - **Nothing on an SD card affects `gal`:** `hook/patch_no_sd.py` removes the hook's SD card and `/tmp` paths before the build.
 - The feeder reads only its settings keys from `feeder.conf`, never paths.
-- `AA remove` and "Remove everything" put the factory `gal` back, only from a copy with the factory hash.
-- AA sets of earlier experimental cards are recognised (`AA_OLD`): status `old`, `AA 1` brings them up to date without
-  removing anything first.
+- `AA remove` and "8. Remove everything" put the factory `gal` back, only from a copy with the factory hash.
+- AA sets of earlier experimental cards are recognised (`AA_OLD`): status `old`, main menu 3 brings them up to date without removing
+  anything first. A set it does not know (status `unknown`) is removed first, only from the factory `gal` copy with the
+  factory hash, otherwise it stops and changes nothing.
 
 ## What we learned (details: audit A-AA1..A-AA30 in the project notes)
 

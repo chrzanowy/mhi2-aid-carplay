@@ -10,7 +10,7 @@ manewrów iAP2 wg luka-dev; tablica manewrów dla strzałek zastępczych: harman
 
 Od v1.4 jest **jedna** paczka Java prowadzenia, `rg`, budowana przez `rg/build.sh <lsd.jar> <katalog> lanes-uturn-asf-m`.
 Zawiera wszystko, co niżej: port MU1427, jego pasy, nasze pasy do zawracania, jego pasek odległości / nazwę ulicy /
-odzyskiwanie strumienia i strzałki zastępcze. Paczek `rg` (bez pasów) i `rglu` z v1.3 już nie ma; `java-update` (przycisk 3)
+odzyskiwanie strumienia i strzałki zastępcze. Paczek `rg` (bez pasów) i `rglu` z v1.3 już nie ma; `java-update` (przycisk 4)
 zastępuje je, a także eksperymentalne `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma`, tą paczką `rg`.
 
 Daje na AID:
@@ -50,12 +50,13 @@ bajt w bajt bazowy `717fb53c`.
 
 ## Instalacja (przyciski GEM)
 
-Wszystko to robi przycisk 3 na ekranie głównym. Pojedyncze kroki w `pmcp_advanced` → `pmcp_packages`:
+Wszystko to robi przycisk „4. Install additional features: route guidance, zoom, day/night, song title (needs 2)” na
+ekranie głównym. Pojedyncze kroki w `pmcp_advanced` → `features_advanced`:
 
 1. „Route guidance system on (iAP2 driver, iap2.cfg, reader)”: zapisuje fabryczny sterownik i cfg w `carplaymaps/rollback/`
    (hash), podmienia sterownik i cfg (remount `/mnt/app` i `/mnt/system`), instaluje czytnik, na końcu znacznik
    `rg/SYSTEM_ON`. Nie dotyka HMI; najgorszy skutek: problem z CarPlay/iPod, który cofa „Route guidance system off (factory
-   iAP2 driver and iap2.cfg)” albo „Remove everything (back to factory files)”.
+   iAP2 driver and iap2.cfg)” albo „8. Remove everything (back to factory files)”.
 2. „On rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)”: JAR przez mechanizm
    Java z próbnym startem.
 3. Aktualizacja z wcześniejszej karty: „Route guidance system update (driver and reader of this card, RG stays on)” podmienia
@@ -63,7 +64,7 @@ Wszystko to robi przycisk 3 na ekranie głównym. Pojedyncze kroki w `pmcp_advan
    wcześniej „Status” pokazuje „Route guidance system: old”). „Java update: packages of an earlier card -> this card's
    (rglu -> rg)” tworzy jeden nowy zestaw, w którym `rg`, `rglu` albo wariant eksperymentalny staje się tą paczką `rg`
    (nowa nazwa pliku JAR, więc stary zestaw zostaje nietknięty, aż przełączy się `HMI_BOOT`; jeden start próbny, potem
-   „4. Confirm”).
+   „5. Confirm”).
 4. Czytnik startuje z naszego bloku `lsd.sh` w tle, tylko gdy jest `SYSTEM_ON` i zestaw Java się ładuje
    (z argumentami Tomasza: `start-live /dev/ipod0/rgi-events /ramdisk/carplay-route-guidance`).
 

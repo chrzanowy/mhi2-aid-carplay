@@ -12,24 +12,24 @@ manifest and the `pmcp.sh` template). The install card is assembled by `installe
 |---|---|---|
 | 0 Rescue card | nothing on the unit (separate card from `installer/build_rescue.py`) | tested in the car (`RESULT=OK`; until v1.3 `WYNIK=OK`) |
 | A CarPlay video + `core.so` variants | `dio_manager` → wrapper, `/mnt/app/carplaymaps` | works |
-| B Java mechanism + NavActiveIgnore | one fixed block in `lsd.sh` + JAR | works; main-screen button "3. Install all features" (no unlock needed since v1.2.0) |
+| B Java mechanism + NavActiveIgnore | one fixed block in `lsd.sh` + JAR | works; main-screen button "4. Install additional features" (no unlock needed since v1.2.0) |
 | C iPhone map parameters in the URL | `core.so` only (variant `url-map-hybrid`, `showSpeedLimit=yes`) | in the menu; the parameter shows nothing on this unit |
 | D Track title and artist | JAR `pmcp-np.jar` (`HsmTarget` + `CurrentStationInfo`) | works ([`nowplaying/`](../../nowplaying/)) |
 | E Native guidance (port of Tomasz's work) | "Route guidance system" (iAP2 driver with log gate, `iap2.cfg`, reader `pmcp-r1`) + one JAR `pmcp-guidance.jar` (package `rg`: arrows, lanes, distance bar, street, ETA, maneuver fallbacks) | works ([`rg/`](../../rg/)) |
 | F Steering-wheel zoom | JAR `pmcp-zoom.jar` (hook in `DSIKeyPanelDispatcher`, short press only) | works ([`hmiextras/`](../../hmiextras/)) |
 | G Day/night for the AID map | JAR `pmcp-dn.jar` (hooks in `ASLHandler`) | works ([`hmiextras/`](../../hmiextras/)) |
 
-**Stage A does not touch the HMI** (Java): the worst outcome is no CarPlay/AA, while GEM and "Remove everything" still work.
+**Stage A does not touch the HMI** (Java): the worst outcome is no CarPlay/AA, while GEM and "8. Remove everything" still work.
 
 **Everything Java goes through one block in `lsd.sh`** (before J9 starts, nothing after it), with a trial boot:
 - the block reads a single file: `/mnt/app/carplaymaps/HMI_BOOT` = `SET_ID JAR JAR …` (id = `name-8 chars of sha` joined with `+`).
   `pmcp.sh` replaces it with a single `mv`, so after a power loss the boot sees either the old or the new set, never a mix;
 - a new set loads **once** as a trial (`/mnt/persist/pmcp/trial.<ID>`);
-- it becomes permanent **only when "4. Confirm" (confirm) is pressed in GEM during that trial boot**. On every boot `lsd.sh` first
-  deletes and then writes `/mnt/persist/pmcp/last-boot` (`set=<ID> use=trial|yes|no`); `java-confirm` requires `use=trial` for the
+- it becomes permanent **only when "5. Confirm" (`confirm`) is pressed in GEM during that trial boot**. On every boot `lsd.sh` first
+  deletes and then writes `/mnt/persist/pmcp/last-boot` (`set=<ID> use=trial|yes|no`); `confirm` (for the Java set; `java-confirm` alone does the same) requires `use=trial` for the
   current id, no `ok.<ID>` and no `DISABLED`. A stock boot after a failed trial therefore cannot confirm a broken set;
 - **there is no automatic confirmation**. A running J9 process does not prove a working HMI;
-- without confirmation **every following boot (e.g. a reset with the knob) is stock**; to try again: "5. Try again" (repeat
+- without confirmation **every following boot (e.g. a reset with the knob) is stock**; to try again: "6. Try again" (repeat
   trial boot);
 - **in update mode (`RUN_MODE=swdl`) the block does nothing** (the stock `lsd.sh` starts the HMI in that mode too, with a copy of
   `jars/` in `/ramdisk`). The rescue card therefore always meets a stock HMI;
@@ -58,7 +58,7 @@ The current `core.so` and JAR hashes are in the manifest that `installer/build_s
 Left out on purpose: mathsls's `libcardshim.so` (`zoomFactor` 1.5, display `properties`/`uid`). The `map-square` variant therefore
 takes only mathsls's safe-area layout, not their whole configuration.
 
-`core.so` variants (`switch` changes only this file, then restart, no "4. Confirm"), all built by `build_core.py`, all 240×144 mm.
+`core.so` variants (`switch` changes only this file, then restart, no "5. Confirm"), all built by `build_core.py`, all 240×144 mm.
 Safe area = x / y / width / height on the 800×480 stream:
 
 | Variant | URL | Safe area | Description |
@@ -92,11 +92,16 @@ Safe area = x / y / width / height on the 800×480 stream:
      "packages of an earlier card: …".
    - Route guidance system (`RGSYS`, shown by "Status"): `off`, `on`, `old` (on, but with the driver and/or reader of an
      earlier card, `RG_KNOWN`: v1.0-v1.3 driver `76926bde…`, Tomasz's reader `b683cef7…`; `rg-update` replaces them) or `unknown`.
-   - `PARTIAL`: an interrupted action, stock copies intact. Only `restore` (and `rg-system-off`) is allowed.
+   - `PARTIAL`: an interrupted action or files of a version this card does not support, stock copies intact. Allowed:
+     `restore`, `rg-system-off`, and the main-screen repairs of the part that is mixed: 2 / `map-install` (map files:
+     `restore`, then install), 3 / `aa-install` (Android Auto files: `aa_off`, then install), 4 / `features-reset` (route
+     guidance or Java files: back to the verified factory files, then 4 installs).
    - `UNKNOWN`: anything else, e.g. another mod or a modified `lsd.sh`. **Everything is refused.**
    - Android Auto (`AASYS`, since v1.5.0, shown by "Status"): `off`, `on` (this card's set), `old` (a whole set of an
-     earlier card, `AA_OLD`; "AA 1" / `aa-on` updates it) or `unknown` (a mix or an interrupted action: the unit state is
-     then `PARTIAL`). Button 3 never changes it. `aa-remove` ("AA remove", also the first step of `restore`) writes only
+     earlier experimental card, `AA_OLD`; main-screen button 3 / `aa-install` updates it in place) or `unknown` (a mix, an interrupted
+     action or an experimental card's set it does not know: the unit state is then `PARTIAL`; `aa-install` removes it first, as
+     `aa-remove` does, then installs this card's set). Button 4 never changes it (it stops with
+     `FEATURES_NEED_ANDROID_AUTO_REPLACED_FIRST_PRESS_3` while it is `unknown`). `aa-remove` ("AA remove", also the first step of `restore`) writes only
      on a pmcp install and only when `gal` is factory or `carplaymaps/aa/gal.real` has the factory hash: the factory `gal`
      is staged from that copy, verified and moved in, then the AA files and markers go. Running it again finishes an
      interrupted run.
@@ -135,31 +140,55 @@ refuses an armed autorun or rescue-card files). Hashes of all files: `PMCP_CARD_
 M.I.B. card by hand.
 
 How it works: in GEM the unit has a symlink `engdefs/z_Launcher-sda0.esd` → **the menu file on the card**
-(`/net/mmx/fs/sda0/esd/Launcher-sda0.esd`, created by M.I.B. at install time). The `pmcp_CarPlay_AID` screen is appended to that
+(`/net/mmx/fs/sda0/esd/Launcher-sda0.esd`, created by M.I.B. at install time). The `pmcp_stream_map_aid` screen is appended to that
 file on the card. Nothing changes on the unit. The base file is exactly `esd/Launcher-sda0.esd` from `MIB_V3.6.0.zip`
 (`22739f72…9121`); a test checks that the original content is untouched (only the end is appended).
 
 1. On the computer: copy the whole content of the install card directory to an empty card (card root).
    Check the version in the header of the pmcp screen in GEM: it must match the first line of `BUILD-MANIFEST.txt`.
-2. In the car: GEM → `=>M.I.B.<=` → **`pmcp_CarPlay_AID`**. Main screen (English):
+2. In the car: GEM → `=>M.I.B.<=` → **`pmcp_stream_map_aid`**. Main screen (English; stable versions only, and 2, 3 and 4
+   each repair or update their own part and replace versions this card does not support):
    - "1. Check card and unit (read-only)" → `verify`;
-   - "2. Install the CarPlay map on the AID" → `install map-square-fps40` (stage A);
-   - "3. Install all features or update: map, route guidance, zoom, day/night, song title" → menu script `all-on.sh`:
-     `rg-update`, `java-update`, `switch map-square-fps40`, `rg-system-on`, then `java-on` nai, np, rg, zoom, dn, one after
-     another (one set, one trial boot); stops at the first `PMCP_FAIL`, `*_ALREADY_*` counts as done (`switch` to the map
-     already active answers `SWITCH_ALREADY_<variant>`), so the same button brings any earlier install (v1.0-v1.3, or the
-     experimental card's rg variants after Android Auto is removed) to this card's set;
-   - "4. Confirm: everything works (only in the first start after 3)" → `java-confirm`;
-   - "5. Try again: the next start is a new trial" → `java-retry`;
-   - "Status (read-only)", "Remove everything (back to factory files)" → `restore`;
-   - submenu `pmcp_advanced`: "0. Diagnostics (read-only, photograph the screen)" (works even when `pmcp.sh` stops at its
+   - "2. Install CarPlay: the map on the AID (also repairs or updates it)" → `map-install map-square-fps40`: on a stock
+     unit `install` (stage A, `PMCP_INSTALL_OK`); on a pmcp install `switch map-square-fps40` if another layout is active
+     (`PMCP_SWITCH_OK`), otherwise `PMCP_MAP_INSTALL_OK (already installed ...)`; with mixed map files `restore`
+     (verified factory files) and then `install` (Android Auto and the features are gone with it: press 3 and/or 4 again);
+     another mod's files: nothing is changed;
+   - "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)" → `aa-install` (`PMCP_AA_ON_OK mode=gamma`):
+     an unsupported AA set is removed first (`aa_off`, only from a `gal.real` with the factory hash, otherwise it stops and
+     changes nothing), an earlier experimental card's set it knows (`AA_OLD`) is updated in place; this card's set
+     already there (also the one v1.5.0 installed) answers `PMCP_AA_INSTALL_OK (already installed: ..., nothing
+     changed)`. If unsupported Android Auto files and unsupported route guidance / Java files are present at the same
+     time, 3 stops with `AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3`: 4 then resets the Java files and
+     stops asking for 3; then 3, then 4 again;
+   - "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)" → menu script
+     `features-on.sh`: `features-reset` (route guidance / Java files this card does not support, e.g. a set with an
+     unknown package or after the rescue card, back to verified factory copies), `rg-update`, `java-update`,
+     `rg-system-on`, then `java-on` nai, np, rg, zoom, dn, one after another (one set, one trial boot; not `sl`, and the
+     map is not touched); stops at the first `PMCP_FAIL` (`PMCP_FAIL=FEATURES_STOPPED_AT_...`), `*_ALREADY_*` counts as
+     done, so the same button brings any earlier install to this card's set (`PMCP_FEATURES_ON_OK`). It needs 2 and stops
+     while Android Auto files of an unsupported version are present (press 3 first);
+   - "5. Confirm: everything works (in the first start after 3 or 4)" → `confirm` (`PMCP_CONFIRM_OK`): one confirm for
+     the Java set's trial boot and the Android Auto trial (the first AA connection in the start after `aa-install`); when
+     only one is in its trial it confirms that one and says why the other is not (e.g. "connect the phone first, then 5
+     again");
+   - "6. Try again: the next start is a new trial" → `retry` (both trials, whichever is not confirmed);
+   - "7. Status (read-only)", "8. Remove everything (back to factory files)" → `restore`;
+   - sub-screen `pmcp_advanced` ("9. Advanced" on the screen) with three sub-screens:
+     `features_advanced`: "0. Diagnostics (read-only, photograph the screen)" (works even when `pmcp.sh` stops at its
      self test), "Start timeline: …", "RG last maneuver: …" (what the iPhone sent and which VW arrow the strict mapping
-     gives; where it shows main 0 the `rg` package may still show a fallback arrow), "Navigation diagnostics: …", and the
-     submenus `pmcp_other_layouts` ("Install map layout: <variant>"), `pmcp_switch_layout` (`switch`, "Switch map layout
-     to: <variant>") and `pmcp_packages`: "Route guidance system on (iAP2 driver, iap2.cfg, reader)", "Route guidance
-     system off (factory iAP2 driver and iap2.cfg)", "Route guidance system update (driver and reader of this card, RG
-     stays on)" (`rg-update`), "Java update: packages of an earlier card -> this card's (rglu -> rg)" (`java-update`),
-     and "On …" / "Off …" for each package (nai, np, rg, zoom, dn).
+     gives; where it shows main 0 the `rg` package may still show a fallback arrow), "Navigation diagnostics: …", "CP save
+     log: copy this start's CarPlay log to the unit (for the log card)" (`cp-log-save`), "Delete saved logs, CarPlay and AA
+     (after the log card copied them)", the four "Speed limit …" buttons, "Route guidance system on (iAP2 driver,
+     iap2.cfg, reader)", "Route guidance system off (factory iAP2 driver and iap2.cfg)", "Route guidance system update
+     (driver and reader of this card, RG stays on)" (`rg-update`), "Java update: packages of an earlier card -> this
+     card's (rglu -> rg)" (`java-update`), and "On …" / "Off …" for each package (nai, np, rg, zoom, dn, and the optional
+     `sl`, which only this screen installs);
+     `carplay_advanced`: "Install map layout: <variant>" and "Switch map layout to: <variant>" (`switch`);
+     `aa_advanced`: "AA Confirm: AA works (only in the start of the AA trial; 5 does the same)", "AA Try again: the next
+     AA connection is a new trial", "AA status and stream analysis (read-only)", "AA save log: …", "AA delete saved logs,
+     AA and CarPlay …", "AA remove (factory Android Auto back)". Experimental cards (not releases) add their experimental
+     Android Auto software only on this screen.
    No action needs an unlock file (until v1.1.0 the Java and route guidance actions needed `pmcp/ODBLOKUJ_ETAP_B`).
 3. The result is on the GEM screen. The SD card is read-only in GEM (even `mount -uw` fails), so the log cannot be written to the
    card: the installer prints `PMCP_WARN=SD_LOG_NOT_WRITABLE` and carries on. **Photograph the screen.** If the card is writable,
@@ -169,16 +198,19 @@ All labels are in English (since v1.4) and plain ASCII.
 
 Order (one visit to the car):
 1. "1. Check card and unit" (`verify`): read-only. Expected `PMCP_VERIFY_OK state=STOCK`.
-2. "2. Install the CarPlay map on the AID" (stage A), then a full restart. If the AID shows no CarPlay picture: on the iPhone,
+2. "2. Install CarPlay: the map on the AID" (stage A), then a full restart. If the AID shows no CarPlay picture: on the iPhone,
    Settings → General → CarPlay → the car → "Forget This Car", and reconnect (the iPhone remembers the car's old displays).
-   For another map layout: `pmcp_advanced` → `pmcp_switch_layout` → "Switch map layout to: …".
-3. Only if the map works: "3. Install all features" → restart (trial boot) → check the HMI and the features →
-   **in the same boot** "4. Confirm" → restart. Without confirmation the next boot is stock.
-4. Rollback: "Remove everything (back to factory files)" and restart.
+   For another map layout: `pmcp_advanced` → `carplay_advanced` → "Switch map layout to: …".
+3. Only if the map works: "4. Install additional features" (and, optionally, "3. Install Android Auto") → restart (trial
+   boot) → check the HMI and the features → **in the same boot** "5. Confirm" → restart. Without confirmation the next
+   boot is stock.
+4. Rollback: "8. Remove everything (back to factory files)" and restart.
 
-Updating from v1.0-v1.3: "1. Check" (state `JAVA`; "Status" may show "Route guidance system: old" and "packages of an
-earlier card: rglu"), then "3. Install all features or update" (runs `rg-update` and `java-update`) → restart (trial
-boot) → "4. Confirm". Make a new rescue card too (see below).
+Updating from v1.5.0, v1.4.x or v1.0-v1.3: "1. Check" (state `JAVA`; "7. Status" may show "Route guidance system: old"
+and "packages of an earlier card: rglu"), then "2. Install CarPlay" (usually "already installed"), "3. Install Android
+Auto" if Android Auto is used, "4. Install additional features" (runs `rg-update` and `java-update`); only if 3 or 4
+installed something: restart (trial boot) → "5. Confirm" in that boot (from v1.5.0 all three usually answer "already
+installed" / "nothing changed": no restart, no 5). Make a new rescue card too (see below).
 The rescue card is for emergencies after Confirm; testing it first is optional.
 
 Step-by-step guide for the car: [09-in-car-guide.md](09-in-car-guide.md).
@@ -192,7 +224,7 @@ QNX) and `ksh` (ksh93). The exit status is the number of failed checks. They cov
 - `verify` writes nothing; a wrong variant, a corrupted payload byte (also with an unwritable log directory), a corrupted self test,
   a wrong `lsd.jxe` size, a modified `lsd.sh` and a foreign mod are refused with no change to the tree;
 - the full chain install → Java packages (1, 2 and 5 at once) → route guidance system → switch → restore gives a tree **byte-identical** to stock;
-- **trial boot on the real `lsd.sh` block** combined with `pmcp.sh`: trial → unconfirmed boot is stock → "4. Confirm" refused →
+- **trial boot on the real `lsd.sh` block** combined with `pmcp.sh`: trial → unconfirmed boot is stock → "5. Confirm" refused →
   retry → a boot in `swdl` mode loads nothing and deletes `last-boot` → confirmation only during the trial boot → a confirmed set
   always loads → `DISABLED` disables and blocks confirmation;
 - the patched `lsd.sh` = stock + one block (checked with `diff`);
@@ -221,7 +253,7 @@ the unit enters update mode by itself (`RUN_MODE=swdl`; our block loads nothing 
 - route guidance system: stock iAP2 driver and `iap2.cfg` from the backup copies (selected by size; our driver sizes known:
   743,196 B for v1.0-v1.3 and 743,272 B for v1.4), `SYSTEM_ON` removed.
 
-The video (stage A) stays; "Remove everything" in GEM cleans up the rest afterwards. On a healthy unit without pmcp the script changes
+The video (stage A) stays; "8. Remove everything" in GEM cleans up the rest afterwards. On a healthy unit without pmcp the script changes
 nothing and only writes the log `PMCP_RESCUE_LOG.txt` (`=== PMCP RESCUE start ===` … `RESULT=OK` or `RESULT=UNSURE` …
 `=== PMCP RESCUE end ===`). The M.I.B. autorun in P4512 update mode works without any HMI interaction (checked in the car).
 
@@ -238,4 +270,4 @@ before the Java actions; it is recommended, not enforced.
 Classes are version 46, references are checked against the unit's `java/*` classes (RefCheck), and every call from stock code is
 guarded (tools in [`buildtools/`](../../buildtools/)). The scripts use the ksh constructs of the mathsls installer (backticks,
 `while read`, heredoc, `case`, `read` with redirection). Fallback if something goes wrong: the trial boot with manual confirmation,
-then the rescue card. Black screen during a trial boot (before "4. Confirm"): hold the volume knob for 10 s; the next boot runs without our JARs.
+then the rescue card. Black screen during a trial boot (before "5. Confirm"): hold the volume knob for 10 s; the next boot runs without our JARs.

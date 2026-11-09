@@ -533,15 +533,18 @@ Cards
 On the rescue card log (PMCP_RESCUE_LOG.txt): RESULT=OK = the rescue worked
 
 In the car, one visit, card 1 only (photograph the screen after every action):
-  1. Card 1 in SD1. Hold MENU ~10 s -> =>M.I.B.<= -> pmcp_CarPlay_AID. Header = $VERSION.
+  1. Card 1 in SD1. Hold MENU ~10 s -> =>M.I.B.<= -> pmcp_stream_map_aid. Header = $VERSION.
      "1. Check card and unit (read-only)" -> expect PMCP_VERIFY_OK state=STOCK.
-  2. "2. Install the CarPlay map on the AID" -> PMCP_INSTALL_OK. Restart (volume knob ~10 s).
-     Start guidance in Apple/Google Maps, AID view = navigation map. No picture: iPhone Settings > General >
-     CarPlay > this car > Forget This Car, reconnect. No map: stop here.
-  3. "3. Install all features: arrows, ETA, zoom, song title" -> PMCP_ALL_ON_OK. Restart: trial start.
-  4. Test. Everything works: "4. Confirm: everything works" in the SAME start. Then restart once more: done.
+  2. "2. Install CarPlay: the map on the AID (also repairs or updates it)" -> PMCP_INSTALL_OK. Restart (volume
+     knob ~10 s). Start guidance in Apple/Google Maps, AID view = navigation map. No picture: iPhone Settings >
+     General > CarPlay > this car > Forget This Car, reconnect. No map: stop here.
+  3. Optional, Android phone: "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)".
+  4. "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)" -> PMCP_FEATURES_ON_OK.
+     Restart: trial start.
+  5. Test. Everything works: "5. Confirm: everything works (in the first start after 3 or 4)" in the SAME start
+     (with Android Auto: connect the phone first). Then restart once more: done.
      Without Confirm the next start is factory again (safe). Black screen: hold the volume knob ~10 s.
-  Undo everything: "Remove everything (back to factory files)".
+  Undo everything: "8. Remove everything (back to factory files)".
 Card 2 (rescue) only for an emergency after Confirm: insert it, wait, remove it when the normal screen is back.
 It disarms itself after use; re-arm it on a computer (rename _Swdlautorun.txt to Swdlautorun.txt).
 

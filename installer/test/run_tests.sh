@@ -340,15 +340,15 @@ for SH in "$@"; do
             grep -q '^/bin/ksh /net/mmx/fs/sda0/pmcp/bin/diag.sh$' "$m" && ! grep -q 'pmcp.sh' "$m" && ok "diag button runs bin/diag.sh only" || bad "diag button"
             continue
         fi
-        if [ "$(basename "$m")" = all-on.sh ]; then
+        if [ "$(basename "$m")" = features-on.sh ]; then
             acts=$(sed -n 's/^for A in \(.*\); do$/\1/p' "$m")
-            [ "$acts" = "rg-update_ java-update_ switch_map-square-fps40 rg-system-on_ java-on_nai java-on_np java-on_rg java-on_zoom java-on_dn" ] && grep -q '^PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh$' "$m" \
-                && ok "all-on button: updates, main map, RG system, then nai np rg zoom dn (Android Auto stays)" || bad "all-on actions: $acts"
+            [ "$acts" = "features-reset_ rg-update_ java-update_ rg-system-on_ java-on_nai java-on_np java-on_rg java-on_zoom java-on_dn" ] && grep -q '^PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh$' "$m" \
+                && ok "button 4: reset of unsupported files, updates, RG system, then nai np rg zoom dn (map and AA stay)" || bad "features-on actions: $acts"
             continue
         fi
         args=$(sed -n 's#^/bin/ksh /net/mmx/fs/sda0/pmcp/pmcp.sh ##p' "$m")
         case "$args" in
-            verify|status|restore|java-retry|java-confirm|java-update|aa-remove|aa-on|aa-confirm|aa-retry|aa-status|aa-log-save|aa-log-clear|rg-system-on|rg-system-off|rg-update|speedlimit-status|"speedlimit-mode turnto"|"speedlimit-mode street"|"speedlimit-mode off"|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
+            verify|status|restore|confirm|retry|aa-install|cp-log-save|"map-install map-square-fps40"|java-retry|java-confirm|java-update|aa-remove|aa-on|aa-confirm|aa-retry|aa-status|aa-log-save|aa-log-clear|rg-system-on|rg-system-off|rg-update|speedlimit-status|"speedlimit-mode turnto"|"speedlimit-mode street"|"speedlimit-mode off"|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
             *) bad "unexpected button command in $(basename "$m"): $args" ;;
         esac
         set -- $args
@@ -360,11 +360,22 @@ for SH in "$@"; do
     nmenu=$(ls "$SDB"/pmcp/menu/*.sh | wc -l | tr -d ' ')
     nref=$(grep -c '/net/mmx/fs/sda0/pmcp/menu/' "$SDB/esd/Launcher-sda0.esd")
     [ "$nmenu" -gt 20 ] && [ "$nmenu" = "$nref" ] && ok "menu scripts: $nmenu, menu entries: $nref" || bad "menu scripts $nmenu vs entries $nref"
-    grep -q "install map-square-fps40$" "$SDB/pmcp/menu/install-map-square-fps40.sh" && grep -q '"2. Install the CarPlay map on the AID"' "$SDB/esd/Launcher-sda0.esd" \
-        && ok "main install button is map-square-fps40" || bad "main install button"
-    main=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_CarPlay_AID/,/^screen pmcp_android_auto/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    [ "$main" = "menu/verify.sh menu/install-map-square-fps40.sh menu/all-on.sh menu/java-confirm.sh menu/java-retry.sh menu/status.sh menu/restore.sh " ] \
-        && ok "main screen: check, map, all features, confirm, retry, status, restore" || bad "main screen: $main"
+    grep -q "map-install map-square-fps40$" "$SDB/pmcp/menu/map-install.sh" && grep -q '"2. Install CarPlay: the map on the AID (also repairs or updates it)"' "$SDB/esd/Launcher-sda0.esd" \
+        && ok "main install button 2 is map-square-fps40" || bad "main install button"
+    [ ! -e "$SDB/pmcp/menu/install-map-square-fps40.sh" ] && ok "no second install button for the main layout" || bad "install-map-square-fps40 button left"
+    main=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+    [ "$main" = "menu/verify.sh menu/map-install.sh menu/aa-install.sh menu/features-on.sh menu/confirm.sh menu/retry.sh menu/status.sh menu/restore.sh " ] \
+        && ok "main screen: 1 check, 2 CarPlay, 3 Android Auto, 4 features, 5 confirm, 6 try again, 7 status, 8 remove" || bad "main screen: $main"
+    labels=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | awk '/^script/{s=1;next} s&&/^    label/{print substr($0,14,1);s=0}' | tr -d '\n')
+    [ "$labels" = 12345678 ] && ok "main screen buttons numbered 1-8" || bad "main numbering: $labels"
+    scr=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,$p' | grep '^screen' | tr '\n' '|')
+    [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen features_advanced pmcp_advanced|screen carplay_advanced pmcp_advanced|screen aa_advanced pmcp_advanced|" ] \
+        && ok "screens: pmcp_stream_map_aid > pmcp_advanced > features / carplay / aa_advanced" || bad "screens: $scr"
+    feat=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen carplay_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/log-clear.sh menu/speedlimit-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-off-sl.sh ") ok "features_advanced: diagnostics, CarPlay log, speed limit, RG system, packages" ;; *) bad "features_advanced: $feat" ;; esac
+    cpa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen carplay_advanced/,/^screen aa_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+    [ "$cpa" = "menu/install-map-clean.sh menu/install-card-clean.sh menu/install-url-map-hybrid.sh menu/install-map-clean-l40.sh menu/install-map-square.sh menu/switch-map-clean.sh menu/switch-card-clean.sh menu/switch-url-map-hybrid.sh menu/switch-map-clean-l40.sh menu/switch-map-square.sh menu/switch-map-square-fps40.sh " ] \
+        && ok "carplay_advanced: other layouts (install, switch)" || bad "carplay_advanced: $cpa"
     ORIG="$REPO/archives/mib-3.6.0/Launcher-sda0.esd"
     head -c "$(stat -f %z "$ORIG")" "$SDB/esd/Launcher-sda0.esd" | cmp -s - "$ORIG" && ok "M.I.B. menu content unchanged (only appended)" || bad "M.I.B. menu prefix changed"
     for ref in $(grep -o '/net/mmx/fs/sda0/pmcp/menu/[a-z0-9-]*\.sh' "$SDB/esd/Launcher-sda0.esd"); do
@@ -372,13 +383,11 @@ for SH in "$@"; do
     done
     v=$(sed -n 's/^PMCP_VERSION="\(.*\)"$/\1/p' "$SDB/pmcp/pmcp.sh")
     case "$v" in pmcp-0.5.0-mu1161-791-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;; *) bad "version $v" ;; esac
-    aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_android_auto/,/^screen pmcp_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    [ "$aa" = "menu/aa-on.sh menu/aa-confirm.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh " ] \
-        && ok "Android Auto screen: on, confirm, retry, status, log save/clear, remove" || bad "AA screen: $aa"
-    tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | grep -q '^screen pmcp_android_auto pmcp_CarPlay_AID$' && ok "Android Auto screen is on the main screen" || bad "AA screen parent"
-    tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_CarPlay_AID/,/^screen pmcp_android_auto/p' | grep -q 'label   "Android Auto has its own screen' \
-        && ok "main screen: one line about the Android Auto screen" || bad "main screen AA line"
-    grep -qi 'experimental\|rg-aa' <(sed -n '/^screen pmcp_CarPlay_AID/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says experimental or rg-aa" || ok "menu: no 'experimental', no rg-aa"
+    aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen aa_advanced/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+    [ "$aa" = "menu/aa-confirm.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh " ] \
+        && ok "aa_advanced (release card): confirm, retry, status, log save/clear, remove; no AA install there" || bad "aa_advanced: $aa"
+    grep -qi 'experimental\|rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says experimental or rg-aa" || ok "menu: no 'experimental', no rg-aa"
+    grep -q 'pmcp_CarPlay_AID\|pmcp_android_auto\|pmcp_packages\|pmcp_other_layouts\|pmcp_switch_layout' "$SDB/esd/Launcher-sda0.esd" && bad "old screen names left" || ok "no old screen names"
     grep -q '"java-on rg-aa\|java-on-rg-aa' "$SDB/esd/Launcher-sda0.esd" "$SDB"/pmcp/menu/*.sh && bad "rg-aa button left" || ok "no rg-aa package button"
     grep -q "$v" "$SDB/esd/Launcher-sda0.esd" && [ "$(head -1 "$SDB/BUILD-MANIFEST.txt")" = "$v" ] && ok "same id in GEM and BUILD-MANIFEST" || bad "version id mismatch"
 
@@ -479,16 +488,24 @@ for SH in "$@"; do
     rescue
     grep -q "RESULT=UNSURE" "$W/med/PMCP_RESCUE_LOG.txt" && ok "lsd.sh missing: RESULT=UNSURE, not OK" || bad "missing lsd.sh reported OK"
 
-    echo "[17] main screen button 3: install all features (the real menu script, one set, one trial)"
+    echo "[17] main screen 4: install additional features (the real menu script, one set, one trial)"
+    # feat: main menu 4 (the real menu script); allon: what the old button 3 did, now 2 then 4 (map, then features)
+    feat() {
+        sed -e "s#/bin/ksh \$PMCP#$SH $W/sd/pmcp.sh#" "$W/sd/menu/features-on.sh" > "$W/features-on.sh"
+        PMCP_TEST_ROOT="$W/unit" $SH "$W/features-on.sh" > "$W/out" 2>&1; echo $? > "$W/rc"
+    }
     allon() {
-        sed -e "s#/bin/ksh \$PMCP#$SH $W/sd/pmcp.sh#" "$W/sd/menu/all-on.sh" > "$W/all-on.sh"
-        PMCP_TEST_ROOT="$W/unit" $SH "$W/all-on.sh" > "$W/out" 2>&1; echo $? > "$W/rc"
+        PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" map-install map-square-fps40 > "$W/out2" 2>&1; _rc2=$?
+        feat; cat "$W/out2" "$W/out" > "$W/out3"; mv "$W/out3" "$W/out"
+        [ $_rc2 = 0 ] || echo $_rc2 > "$W/rc"
     }
     fresh_unit; factory=$(snapshot "$W/unit")
-    allon; rc_is 0; expect_out "PMCP_FAIL=ALL_ON_STOPPED_AT_switch_map-square-fps40" "without the map (stage A): stops at the first step"
-    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "without the map: unit unchanged" || bad "all-on without stage A changed the unit"
-    run install map-square-fps40; rc_is 0
-    allon; rc_is 0; expect_out "PMCP_ALL_ON_OK" "all features on"; expect_out "PMCP_RG_SYSTEM_ON_OK" "RG system on"
+    feat; rc_is 0; expect_out "PMCP_FAIL=FEATURES_STOPPED_AT_features-reset_" "4 without the map (2): stops at the first step"
+    expect_out "2. Install CarPlay first" "4 without the map: says press 2"
+    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "without the map: unit unchanged" || bad "features without stage A changed the unit"
+    run map-install map-square-fps40; rc_is 0; expect_out "PMCP_INSTALL_OK stage=A variant=map-square-fps40" "2 on a factory unit installs the map"
+    run map-install map-square-fps40; rc_is 0; expect_out "already installed: variant map-square-fps40, nothing changed" "2 again: already installed"
+    allon; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "all features on"; expect_out "PMCP_RG_SYSTEM_ON_OK" "RG system on"
     ALL="$NAI+$NP+$RG+$ZOOM+$DN"
     [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "one set with all five packages" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ -e "$U/carplaymaps/rg/SYSTEM_ON" ] && ok "RG system marker" || bad "no SYSTEM_ON"
@@ -509,7 +526,7 @@ for SH in "$@"; do
     [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$old_set" ] && ok "refusal changed nothing" || bad "HMI_BOOT changed"
     allon; rc_is 0; expect_out "PMCP_RG_UPDATE_OK" "update: RG driver and reader replaced"
     expect_out "PMCP_JAVA_UPDATE_OK" "update: Java packages replaced"; expect_out "PMCP_SWITCH_OK variant=map-square-fps40" "update: main map switched"
-    expect_out "PMCP_ALL_ON_OK" "update done"
+    expect_out "PMCP_FEATURES_ON_OK" "update done"
     [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = 519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3 ] \
         && [ "$(h "$U/carplaymaps/rg/rgi-observer")" = 3166df9b91119475f93043ac8c150e2641732e602161839a137a1907d4ef11df ] \
         && ok "update: new driver and reader" || bad "driver/reader after update"
@@ -634,7 +651,7 @@ PEOF
     run status; expect_out "Unit state: PARTIAL" "leftover gal.pmcp-restore of an interrupted AA off: PARTIAL"
     run aa-remove; rc_is 0; [ ! -e "$U/eso/bin/apps/gal.pmcp-restore" ] && ok "aa-remove cleans gal.pmcp-restore" || bad "gal.pmcp-restore left"
     run status; expect_out "Unit state: JAVA" "after AA remove: JAVA"; expect_out "Android Auto: off" "AA off"
-    allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rgluasfm -> rg"; expect_out "PMCP_ALL_ON_OK" "button 3 done"
+    allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rgluasfm -> rg"; expect_out "PMCP_FEATURES_ON_OK" "button 3 done"
     [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rgluasfm.jar" ] && ok "pmcp-rgluasfm.jar removed" || bad "old JAR left"
     run restore; rc_is 0
@@ -643,7 +660,7 @@ PEOF
     runexp install map-square-fps40; rc_is 0; runexp rg-system-on; rc_is 0; runexp java-on rgluasfma; rc_is 0
     confirm_now; runexp aa-on gamma; rc_is 0; aa_before=$(cat "$U/carplaymaps/aa/AA_BOOT")
     allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rgluasfma updated"
-    expect_out "PMCP_ALL_ON_OK" "button 3 on an AA unit done"
+    expect_out "PMCP_FEATURES_ON_OK" "button 3 on an AA unit done"
     [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rgluasfma.jar" ] \
         && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance.jar" ] && ok "pmcp-guidance4.jar only" || bad "JARs after button 3: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
@@ -815,7 +832,7 @@ PEOF
         run status; expect_out "packages of an earlier card: rg-aa" "rg-aa 4f9215bf reported as an earlier card's package"
         expect_out "Android Auto: old mode=gamma" "its AA set (feeder v9): old"
         allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rg-aa -> rg"
-        expect_out "PMCP_ALL_ON_OK" "button 3 done"; no_aa_change "f2a7ceb5"
+        expect_out "PMCP_FEATURES_ON_OK" "button 3 done"; no_aa_change "f2a7ceb5"
         [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" = "$aa_before" ] && [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$')" ] \
             && ok "AA_BOOT and every AA file unchanged by button 3" || bad "AA changed by button 3"
         [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
@@ -843,7 +860,7 @@ PEOF
         aa_before=$(cat "$U/carplaymaps/aa/AA_BOOT"); aa_files=$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-')
         run status; expect_out "packages of an earlier card: rg-aa" "rg-aa 01221496 reported as an earlier card's package"
         expect_out "Android Auto: old mode=gamma" "its AA set (2 Mbit/s): old"
-        allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rg-aa -> rg"; expect_out "PMCP_ALL_ON_OK" "button 3 done"; no_aa_change "84472aa9"
+        allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rg-aa -> rg"; expect_out "PMCP_FEATURES_ON_OK" "button 3 done"; no_aa_change "84472aa9"
         [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" = "$aa_before" ] && [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-')" ] \
             && ok "AA files, AA_BOOT and AA markers untouched" || bad "AA changed by button 3"
         [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa2.jar" ] \
@@ -865,7 +882,7 @@ PEOF
     run install map-square-fps40; rc_is 0
     run status; expect_out "Android Auto: off" "status: AA off"
     run aa-on most; rc_is 1; expect_out "AA_MODE_UNKNOWN_most" "only gamma on this card"
-    run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "aa-on: gamma"; expect_out "VW arrows from Google Maps need rg: main menu, 3. Install all features or update." "without rg: says rg (button 3) gives the arrows"
+    run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "aa-on: gamma"; expect_out "VW arrows from Google Maps need rg: main menu, 4. Install additional features." "without rg: says rg (button 3) gives the arrows"
     [ "$(h "$AAD/gal.real")" = $STOCK_GAL ] && ok "factory gal copied" || bad "gal.real"
     [ "$(h "$U/eso/bin/apps/gal")" != $STOCK_GAL ] && head -1 "$U/eso/bin/apps/gal" | grep -q '^#!/bin/sh' && ok "gal is the wrapper" || bad "gal not replaced"
     grep -q '^GAL_PMCP_RG=1$' "$AAD/gal-hook.conf" && grep -q '^GAL_DUALSCREEN_AAP_MINOR=7$' "$AAD/gal-hook.conf" && ok "hook settings: 1.7 + rg feed" || bad "gal-hook.conf"
@@ -985,11 +1002,11 @@ PEOF
     [ "$before" = "$(snapshot "$W/unit")" ] && ok "log card: unit unchanged (read-only)" || bad "log card changed the unit"
     [ "$(ls "$W/med3/PMCP_LOGS" | grep -c '^aa-log-[1-5].txt$')" = 5 ] && cmp -s "$L1" "$W/med3/PMCP_LOGS/aa-log-1.txt" \
         && ok "log card: five logs copied, identical" || bad "log card copies: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
-    tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" | head -1 | grep -q "^RESULT=OK copied=5 aa_logs=5$" && ok "log card: RESULT=OK" || bad "log card result: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
+    tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" | head -1 | grep -q "^RESULT=OK copied=5 aa_logs=5 cp_logs=0$" && ok "log card: RESULT=OK" || bad "log card result: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
     run aa-log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "logs deleted" || bad "logs left"
     run aa-log-clear; rc_is 1; expect_out "AA_NO_SAVED_LOGS" "second clear refused"
     rm -rf "$W/med3"; logcard
-    grep -q "^RESULT=NO_AA_LOGS" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card without logs: RESULT=NO_AA_LOGS" || bad "empty log card result"
+    grep -q "^RESULT=NO_LOGS" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card without logs: RESULT=NO_LOGS" || bad "empty log card result"
     navlog 1 1; run aa-log-save; rc_is 0
     run aa-remove; rc_is 0; run status; expect_out "Unit state: VIDEO" "saved logs left by aa-remove do not matter"
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "restore with saved logs: factory state"
@@ -1004,7 +1021,7 @@ PEOF
         confirm_now
         [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar")" = 7b1874847c5cf9714ed3b7e24c948b425aafc367c03a884d6309c8fda93c8661 ] && ok "v1.4.3 rg in pmcp-guidance3.jar" || bad "setup: no v1.4.3 rg"
         run status; expect_out "packages of an earlier card: rg" "v1.4.3 rg reported as an earlier card's package"; expect_out "Android Auto: off" "AA off"
-        allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: v1.4.3 rg -> rg"; expect_out "PMCP_ALL_ON_OK" "button 3 done"
+        allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: v1.4.3 rg -> rg"; expect_out "PMCP_FEATURES_ON_OK" "button 3 done"
         [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar" ] \
             && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] && ok "pmcp-guidance3.jar -> pmcp-guidance4.jar" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
         [ ! -e "$U/carplaymaps/aa" ] && [ ! -e "$U/carplaymaps/.aa-new" ] && [ "$(h "$U/eso/bin/apps/gal")" = $STOCK_GAL ] \
@@ -1041,7 +1058,8 @@ PEOF
         touch "$P/aa-trial.$S" "$P/aa-ok.$S"
         new_start; o=$(gal_start); case "$o" in "use=yes "*) ok "confirmed: hook on every start" ;; *) bad "before AA 1: $o" ;; esac
         run status; expect_out "Android Auto: old mode=gamma" "status: old (earlier card's set)"
-        run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "AA 1 updates it, same set id"
+        run aa-install; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "3 updates it in place, same set id"
+        grep -q "removing them first" "$W/out" && bad "3 removed an earlier card's set instead of updating it" || ok "earlier card's set: updated in place, not removed"
         expect_out "That first Android Auto session in this start is a TRIAL" "AA 1 announces a trial"
         grep -q "confirmed before" "$W/out" && bad "AA 1 kept the old confirmation" || ok "no 'confirmed before'"
         [ ! -e "$P/aa-ok.$S" ] && [ ! -e "$P/aa-trial.$S" ] && ok "old confirmation and trial markers removed" || bad "markers left: $(ls "$P")"
@@ -1053,12 +1071,198 @@ PEOF
         # an AA set this card does not know (here: feeder.conf changed): AA remove first, not restore
         echo "#" >> "$U/carplaymaps/aa/feeder.conf"
         run status; expect_out "Android Auto: unknown" "changed feeder.conf: unknown"
-        expect_out "Android Auto screen, AA remove (factory Android Auto back), then AA 1 again" "PARTIAL reason points at AA remove"
-        allon; expect_out "JAVA_UPDATE_NEEDS_AA_REMOVE_FIRST_ON_THE_ANDROID_AUTO_SCREEN" "button 3 stops at java-update"
-        expect_out "Android Auto screen, AA remove" "button 3 says: AA remove on the Android Auto screen"
+        expect_out "3. Install Android Auto replaces them" "PARTIAL reason points at main menu 3"
+        before=$(snapshot "$W/unit")
+        feat; expect_out "FEATURES_NEED_ANDROID_AUTO_REPLACED_FIRST_PRESS_3" "button 4 stops"
+        [ "$before" = "$(snapshot "$W/unit")" ] && ok "button 4: nothing changed" || bad "button 4 changed the unit"
+        expect_out "3. Install Android Auto" "button 4 says: 3. Install Android Auto first"
         run aa-remove; rc_is 0; run status; expect_out "Android Auto: off" "after AA remove: off"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
     fi
+    echo "[32] main menu 3: Install Android Auto (stable); an AA set this card does not support is removed first"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run aa-install; rc_is 1; expect_out "AA_INSTALL_NEEDS_CARPLAY_FIRST_PRESS_2" "3 on a factory unit: press 2 first"
+    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "3 without the map: unit unchanged" || bad "3 changed a factory unit"
+    run map-install map-square-fps40; rc_is 0
+    run aa-install; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "3 installs this card's Android Auto"
+    expect_out "need rg: main menu, 4. Install additional features" "without rg: points at 4"
+    expect_out "press 5. Confirm" "points at 5. Confirm"
+    S=$(cat "$U/carplaymaps/aa/AA_BOOT")
+    before=$(snapshot "$W/unit")
+    run aa-install; rc_is 0; expect_out "PMCP_AA_INSTALL_OK (already installed" "3 again: already installed, OK"
+    [ "$before" = "$(snapshot "$W/unit")" ] && ok "3 again: nothing changed" || bad "3 again changed the unit"
+    # another card's set (e.g. an experimental feeder): unknown, 3 replaces it, CarPlay stays
+    printf 'X' >> "$U/carplaymaps/aa/aa-most-feeder"; echo "gamma-11111111-22222222-33333333" > "$U/carplaymaps/aa/AA_BOOT"
+    mkdir -p "$W/unit/mnt/persist/pmcp"; touch "$W/unit/mnt/persist/pmcp/aa-ok.gamma-11111111-22222222-33333333"
+    cpfiles=$(snapshot "$W/unit" | grep -v '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-\|/ramdisk/')
+    run status; expect_out "Android Auto: unknown" "other set: unknown"; expect_out "3. Install Android Auto replaces them" "status points at 3"
+    run aa-install; rc_is 0; expect_out "removing them first" "3 removes the unsupported set first"
+    expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "then installs this card's set"
+    [ "$(h "$U/carplaymaps/aa/aa-most-feeder")" = "$(sed -n 's/^AA_FEEDER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")" ] && ok "this card's feeder" || bad "feeder after 3"
+    [ ! -e "$W/unit/mnt/persist/pmcp/aa-ok.gamma-11111111-22222222-33333333" ] && ok "the old set's confirmation removed" || bad "old aa-ok left"
+    expect_out "That first Android Auto session in this start is a TRIAL" "the stable set gets a trial"
+    [ "$cpfiles" = "$(snapshot "$W/unit" | grep -v '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-\|/ramdisk/')" ] && ok "CarPlay files untouched" || bad "3 changed CarPlay files"
+    run status; expect_out "Android Auto: on mode=gamma" "status: on"
+    # fail-closed: unsupported set and no factory gal copy with the factory hash -> nothing written
+    cp "$U/carplaymaps/aa/gal.real" "$W/galreal"
+    printf 'X' >> "$U/carplaymaps/aa/aa-most-feeder"; printf 'Y' >> "$U/carplaymaps/aa/gal.real"
+    before=$(snapshot "$W/unit")
+    run aa-install; rc_is 1; expect_out "AA_REMOVE_FACTORY_GAL_COPY_NOT_VERIFIED" "no verified factory gal copy: stops"
+    [ "$before" = "$(snapshot "$W/unit")" ] && ok "fail-closed: nothing changed" || bad "3 changed the unit without a factory gal copy"
+    cp "$W/galreal" "$U/carplaymaps/aa/gal.real"
+    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+
+    echo "[33] main menu 5 and 6: one Confirm and one Try again for the CarPlay features and Android Auto"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run confirm; rc_is 1; expect_out "CONFIRM_NOTHING_INSTALLED_THAT_HAS_A_TRIAL" "factory unit: nothing to confirm"
+    run retry; rc_is 1; expect_out "RETRY_NOTHING_INSTALLED_THAT_HAS_A_TRIAL" "factory unit: nothing to try again"
+    run map-install map-square-fps40; rc_is 0; feat; rc_is 0; run aa-install; rc_is 0; S=$(cat "$U/carplaymaps/aa/AA_BOOT")
+    run confirm; rc_is 1; expect_out "CarPlay features: no trial start yet" "before the restart: no Java trial"
+    expect_out "Android Auto: no trial yet" "no AA trial yet"; expect_out "CONFIRM_NOTHING_IN_ITS_TRIAL_NOW" "nothing confirmed"
+    new_start; o=$(unit_boot); case "$o" in "boot=trial set=$ALL "*) ok "restart: the Java set's trial" ;; *) bad "boot: $o" ;; esac
+    run confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$ALL" "5 confirms the Java set"
+    expect_out "Android Auto: no trial yet (connect the phone" "and says the phone comes first for AA"; expect_out "PMCP_CONFIRM_OK confirmed=1" "one confirmed"
+    o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "phone connected: the AA trial" || bad "AA trial: $o"
+    run confirm; rc_is 0; expect_out "CarPlay features (set $ALL): already confirmed" "Java: already confirmed"
+    expect_out "PMCP_AA_CONFIRM_OK set=$S" "5 now confirms Android Auto"
+    [ -e "$W/unit/mnt/persist/pmcp/aa-ok.$S" ] && [ -e "$W/unit/mnt/persist/pmcp/ok.$ALL" ] && ok "both confirmation markers" || bad "markers: $(ls "$W/unit/mnt/persist/pmcp")"
+    run confirm; rc_is 1; expect_out "CONFIRM_NOTHING_IN_ITS_TRIAL_NOW" "third press: nothing left to confirm"
+    run retry; rc_is 1; expect_out "RETRY_EVERYTHING_ALREADY_CONFIRMED" "6 with everything confirmed: nothing to do"
+    new_start; o=$(unit_boot); case "$o" in "boot=yes set=$ALL "*) ok "next start: the confirmed set" ;; *) bad "boot: $o" ;; esac
+    o=$(gal_start); case "$o" in "use=yes "*) ok "next AA connection: confirmed" ;; *) bad "AA: $o" ;; esac
+    run restore; rc_is 0
+    # both trials in the same start, confirmed with one press; a missed trial: 6, restart, 5
+    fresh_unit; run map-install map-square-fps40; feat; run aa-install; S=$(cat "$U/carplaymaps/aa/AA_BOOT")
+    new_start; unit_boot >/dev/null; gal_start >/dev/null
+    run confirm; rc_is 0; expect_out "PMCP_CONFIRM_OK confirmed=2" "one press confirms both"
+    run restore; rc_is 0
+    fresh_unit; run map-install map-square-fps40; feat; run aa-install; S=$(cat "$U/carplaymaps/aa/AA_BOOT")
+    new_start; unit_boot >/dev/null; gal_start >/dev/null
+    new_start; o=$(unit_boot); case "$o" in "boot=no "*) ok "trial missed: factory start" ;; *) bad "boot: $o" ;; esac
+    o=$(gal_start); case "$o" in "use=no "*) ok "trial missed: factory AA" ;; *) bad "AA: $o" ;; esac
+    run confirm; rc_is 1; expect_out "this is not their trial start (6. Try again" "5 outside the trial: points at 6"
+    run retry; rc_is 0; expect_out "PMCP_JAVA_RETRY_OK set=$ALL" "6: new Java trial"; expect_out "PMCP_AA_RETRY_OK set=$S" "6: new AA trial"
+    new_start; o=$(unit_boot); case "$o" in "boot=trial "*) ok "after 6: Java trial again" ;; *) bad "boot: $o" ;; esac
+    o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "after 6: AA trial again" || bad "AA: $o"
+    run confirm; rc_is 0; expect_out "PMCP_CONFIRM_OK confirmed=2" "then 5 confirms both"
+    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+
+    echo "[34] main menu 4: Java or route guidance files this card does not support are replaced"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run map-install map-square-fps40; feat; rc_is 0; confirm_now
+    # a Java set this card does not know (as a card with the optional ui package leaves it)
+    echo X > "$U/eso/hmi/lsd/jars/pmcp-ui.jar"
+    read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+ui-0479f0fa $jars pmcp-ui.jar" > "$U/carplaymaps/HMI_BOOT"
+    run status; expect_out "Unit state: PARTIAL" "unknown package: PARTIAL"; expect_out "4. Install additional features replaces them" "status points at 4"
+    run java-on sl; rc_is 1; expect_out "JAVA_NEEDS_STAGE_A_STATE_PARTIAL" "single package refused while the set is unknown"
+    feat; rc_is 0; expect_out "PMCP_FEATURES_RESET_OK" "4 resets the unknown Java set"; expect_out "PMCP_FEATURES_ON_OK" "4 installs this card's set"
+    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-ui.jar" ] && ok "the unknown pmcp-ui.jar removed" || bad "pmcp-ui.jar left"
+    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "this card's set" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
+    run status; expect_out "Unit state: JAVA" "JAVA again"
+    # a file listed by the unknown set outside the pmcp-*.jar names is never removed
+    echo X > "$U/eso/hmi/lsd/jars/other.jar"; read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+x-12345678 $jars other.jar ../lsd.sh" > "$U/carplaymaps/HMI_BOOT"
+    feat; rc_is 0; expect_out "PMCP_FEATURES_RESET_OK" "4 resets it"
+    [ -e "$U/eso/hmi/lsd/jars/other.jar" ] && [ -e "$U/eso/hmi/lsd/lsd.sh" ] && ok "only our JAR names removed (other.jar, ../lsd.sh stay)" || bad "a foreign file was removed"
+    rm -f "$U/eso/hmi/lsd/jars/other.jar"
+    # the rescue card's state, then 4
+    rescue
+    feat; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "4 after the rescue card"
+    [ ! -e "$W/unit/mnt/persist/pmcp/DISABLED" ] && ok "DISABLED removed" || bad "DISABLED left"
+    run status; expect_out "Unit state: JAVA" "after the rescue card + 4: JAVA"; expect_out "Route guidance system: on" "RG on"
+    # an unknown reader: back to factory, then this card's
+    printf 'Z' >> "$U/carplaymaps/rg/rgi-observer"
+    run status; expect_out "Route guidance system: unknown" "changed reader: RG unknown"
+    feat; rc_is 0; expect_out "PMCP_FEATURES_RESET_OK" "4 resets the route guidance system"; expect_out "PMCP_RG_SYSTEM_ON_OK" "and installs it again"
+    [ "$(h "$U/carplaymaps/rg/rgi-observer")" = "$(sed -n 's/^RG_READER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")" ] && ok "this card's reader" || bad "reader"
+    # fail-closed: unknown driver without a factory copy -> nothing changed
+    printf 'Z' >> "$U/armle/lib/dll/ipod-drvr-iap2.so"; mv "$U/carplaymaps/rollback/ipod-drvr-iap2.so" "$W/drv"
+    before=$(snapshot "$W/unit")
+    feat; expect_out "FEATURES_RESET_FACTORY_IAP2_DRIVER_COPY_NOT_VERIFIED_NOTHING_CHANGED" "no factory driver copy: stops"
+    [ "$before" = "$(snapshot "$W/unit")" ] && ok "fail-closed: nothing changed" || bad "4 changed the unit without a factory driver copy"
+    mv "$W/drv" "$U/carplaymaps/rollback/ipod-drvr-iap2.so"
+    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+
+    echo "[35] main menu 2: the main layout, and mixed map files replaced (everything removed first)"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run map-install map-square-fps40; run switch map-clean; rc_is 0
+    run map-install map-square-fps40; rc_is 0; expect_out "PMCP_SWITCH_OK variant=map-square-fps40" "2 brings the main layout back"
+    feat; run aa-install; rc_is 0
+    echo junk > "$U/eso/bin/apps/dio_manager"
+    run status; expect_out "Unit state: PARTIAL" "changed dio_manager: PARTIAL"; expect_out "2. Install CarPlay repairs it" "status points at 2"
+    feat; expect_out "PMCP_FAIL=FEATURES_STOPPED_AT_features-reset_" "4 stops"; expect_out "2. Install CarPlay first" "4 says press 2"
+    run aa-install; rc_is 0; expect_out "PMCP_AA_INSTALL_OK (already installed" "3: Android Auto itself is fine (already installed)"
+    run map-install map-square-fps40; rc_is 0; expect_out "removing everything first" "2 removes everything first"
+    expect_out "PMCP_RESTORE_OK" "restore"; expect_out "PMCP_INSTALL_OK stage=A variant=map-square-fps40" "then the map"
+    expect_out "press 3 and/or 4 now" "says 3 and 4 again"
+    run status; expect_out "Unit state: VIDEO" "VIDEO"; expect_out "Android Auto: off" "AA off"
+    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+    # another mod's carplaymaps (no pmcp version file): nothing written
+    mkdir -p "$U/carplaymaps"; echo x > "$U/carplaymaps/other"; before=$(snapshot "$W/unit")
+    run map-install map-square-fps40; rc_is 1; expect_out "MAP_INSTALL_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" "another mod: stops"
+    [ "$before" = "$(snapshot "$W/unit")" ] && ok "another mod: nothing changed" || bad "2 changed another mod's files"
+    rm -rf "$U/carplaymaps"
+
+    echo "[36] CarPlay log (features_advanced): saved for the log card, deleted with the AA logs"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run cp-log-save; rc_is 1; expect_out "CP_LOG_NEEDS_PMCP_STATE_STOCK" "factory unit: no log"
+    run map-install map-square-fps40; new_start
+    before=$(snapshot "$W/unit" | grep -v /logs/)
+    run cp-log-save; rc_is 0; expect_out "PMCP_CP_LOG_SAVED file=logs/cp-log-1.txt" "log saved"; expect_out "supervisor_log=no" "no supervisor log yet"
+    echo "supervisor line 1" > "$W/unit/ramdisk/carplay-cluster-supervisor.log"
+    run cp-log-save; rc_is 0; expect_out "cp-log-2.txt" "second log"; expect_out "supervisor_log=yes" "with the supervisor log"
+    L2="$U/carplaymaps/logs/cp-log-2.txt"
+    grep -q "^supervisor line 1$" "$L2" && grep -q "^--- state: VIDEO" "$L2" && [ "$(tail -1 "$L2")" = "--- end" ] && ok "log content: state, supervisor log, complete" || bad "cp log content"
+    [ "$before" = "$(snapshot "$W/unit" | grep -v /logs/ | grep -v /ramdisk/)" ] && ok "log save wrote only carplaymaps/logs" || bad "cp log save changed other files"
+    for n in 3 4 5; do run cp-log-save; done; run cp-log-save; rc_is 1; expect_out "CP_LOGS_FULL_5" "sixth refused"
+    rm -rf "$W/med3"; logcard
+    [ "$(ls "$W/med3/PMCP_LOGS" | grep -c '^cp-log-[1-5].txt$')" = 5 ] && cmp -s "$L2" "$W/med3/PMCP_LOGS/cp-log-2.txt" && ok "log card: CarPlay logs copied" || bad "log card: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
+    grep -q "^RESULT=OK copied=5 aa_logs=0 cp_logs=5$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: RESULT=OK with cp_logs=5" || bad "log card result"
+    run aa-log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "Delete saved logs removes the CarPlay logs" || bad "cp logs left"
+    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+    echo "[37] main menu 3 and 4 with unsupported Android Auto AND unsupported Java files at once (no dead end)"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run map-install map-square-fps40; feat; run aa-install; confirm_now; S=$(cat "$U/carplaymaps/aa/AA_BOOT")
+    printf 'X' >> "$U/carplaymaps/aa/aa-most-feeder"; echo "gamma-11111111-22222222-33333333" > "$U/carplaymaps/aa/AA_BOOT"
+    echo X > "$U/eso/hmi/lsd/jars/pmcp-ui.jar"; read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+ui-0479f0fa $jars pmcp-ui.jar" > "$U/carplaymaps/HMI_BOOT"
+    run status; expect_out "4. Install additional features replaces them; Android Auto files too: then 3" "status: 4, then 3"
+    before=$(snapshot "$W/unit")
+    run aa-install; rc_is 1; expect_out "AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3" "3 first: says 4, then 3"
+    [ "$before" = "$(snapshot "$W/unit")" ] && ok "3: nothing changed" || bad "3 changed the unit"
+    feat; expect_out "PMCP_FEATURES_RESET_OK" "4 resets the Java set although AA is unsupported"
+    expect_out "PMCP_FAIL=FEATURES_STOPPED_AT_java-update_" "then stops before installing"; expect_out "3. Install Android Auto" "and says 3"
+    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-ui.jar" ] && ok "unknown JAR removed" || bad "pmcp-ui.jar left"
+    run aa-install; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "3 now replaces Android Auto"
+    feat; expect_out "PMCP_FEATURES_ON_OK" "4 again: this card's features"; run status; expect_out "Unit state: JAVA" "JAVA"
+    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+
+    echo "[38] after the rescue card: 5 refuses, 6 gives both a new trial (also confirmed sets)"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run map-install map-square-fps40; feat; run aa-install; S=$(cat "$U/carplaymaps/aa/AA_BOOT")
+    new_start; unit_boot >/dev/null; gal_start >/dev/null; run confirm; expect_out "PMCP_CONFIRM_OK confirmed=2" "both confirmed"
+    touch "$W/unit/mnt/persist/pmcp/DISABLED"
+    run confirm; rc_is 1; expect_out "switched off by the rescue card (6. Try again" "5: switched off by the rescue card"
+    run retry; rc_is 0; expect_out "PMCP_JAVA_RETRY_OK" "6: Java"; expect_out "PMCP_AA_RETRY_OK" "6: AA"; expect_out "rescue card switch-off removed" "DISABLED removed"
+    [ ! -e "$W/unit/mnt/persist/pmcp/DISABLED" ] && [ ! -e "$W/unit/mnt/persist/pmcp/ok.$ALL" ] && [ ! -e "$W/unit/mnt/persist/pmcp/aa-ok.$S" ] \
+        && ok "no confirmation left: both start with a trial" || bad "markers: $(ls "$W/unit/mnt/persist/pmcp")"
+    new_start; o=$(unit_boot); case "$o" in "boot=trial "*) ok "next start: Java trial" ;; *) bad "boot: $o" ;; esac
+    o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "next AA connection: trial" || bad "AA: $o"
+    # outside the AA trial start only: the AA-side message
+    run confirm; expect_out "PMCP_CONFIRM_OK confirmed=2" "confirmed again"
+    rm -f "$W/unit/mnt/persist/pmcp/aa-ok.$S"; new_start
+    run confirm; rc_is 1; expect_out "Android Auto: this is not its trial start (6. Try again" "AA outside its trial start"
+    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+
+    echo "[39] PARTIAL with intact map files: layout switch allowed; CarPlay log in PARTIAL; log card with both kinds"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run map-install map-square-fps40; feat
+    echo X > "$U/eso/hmi/lsd/jars/pmcp-ui.jar"; read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+ui-0479f0fa $jars pmcp-ui.jar" > "$U/carplaymaps/HMI_BOOT"
+    run switch map-clean; rc_is 0; expect_out "PMCP_SWITCH_OK variant=map-clean" "switch in PARTIAL (map files intact)"
+    new_start; run cp-log-save; rc_is 0; grep -q "^--- state: PARTIAL" "$U/carplaymaps/logs/cp-log-1.txt" && ok "CarPlay log in PARTIAL: state recorded" || bad "cp log in PARTIAL"
+    echo "x event=aap.nav_msg msg_id=0x8006 bytes=1" > "$W/unit/ramdisk/pmcp-gal-hook.log"
+    run aa-log-save; rc_is 0
+    rm -rf "$W/med3"; logcard
+    grep -q "^RESULT=OK copied=2 aa_logs=1 cp_logs=1$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: one AA and one CarPlay log" || bad "log card: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
+    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 done
 
 rm -rf "$W"

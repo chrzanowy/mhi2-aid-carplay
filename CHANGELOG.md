@@ -3,6 +3,35 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
+## Unreleased
+
+A new GEM menu: one button per part, stable versions only.
+
+- **Main screen `pmcp_stream_map_aid`** (was `pmcp_CarPlay_AID`): "1. Check card and unit", "2. Install CarPlay",
+  "3. Install Android Auto", "4. Install additional features", "5. Confirm", "6. Try again", "7. Status",
+  "8. Remove everything", then `pmcp_advanced`.
+  - 2, 3 and 4 each update their own part and replace a version this card does not support:
+    - 3: an Android Auto set of another card (e.g. an experimental one) is removed first. This needs a factory `gal`
+      copy with the factory hash; without one nothing is written.
+    - 4: route guidance or Java files this card does not know (an unknown package, the state the rescue card leaves)
+      go back to the verified factory files first, then this card's set is installed. 4 no longer touches the map.
+    - 2: switches to the main layout; when the map files are mixed it removes everything, then installs the map.
+    - Every one checks this card's files and the factory copies it needs before it writes anything. With unsupported
+      Android Auto files and unsupported Java files at once, 3 asks for 4 first; 4 then resets the Java files and asks
+      for 3.
+  - "5. Confirm" confirms the CarPlay features and Android Auto, whichever is in its trial; "6. Try again" covers both.
+    After the rescue card, 6 gives every set a new trial, also a set that was confirmed before.
+- "8. Remove everything" also removes `pmcp-*.jar` files listed by a Java set this card does not know.
+- **`pmcp_advanced`** with `features_advanced` (diagnostics, logs, speed limit, route guidance system, single
+  packages), `carplay_advanced` (map layouts) and `aa_advanced` (Android Auto confirm, try again, status, logs,
+  remove). Android Auto is installed only from the main screen.
+- **CarPlay log:** "CP save log" keeps this start's supervisor log, route guidance status and boot log for the log
+  card (card 3), which now copies CarPlay logs too. "Delete saved logs" removes AA and CarPlay logs.
+- **Updating from v1.5.0 / v1.4.x:** 2, 3 (if you use Android Auto), 4; only if 3 or 4 installed something: restart,
+  then 5 in that start (from v1.5.0 all three usually answer "already installed" / "nothing changed": nothing to do).
+- Tests: new host tests [32]–[39] for the main menu; the power-loss chain covers 2, 3 and 4 over unsupported versions
+  and checks that pressing the same button again finishes an interrupted run.
+
 ## v1.5.0 (2026-11-07)
 
 Android Auto on the AID, as a separate feature next to CarPlay. Installer version `pmcp-0.5.0-mu1161-791-<build id>`.

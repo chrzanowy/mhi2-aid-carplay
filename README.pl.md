@@ -67,7 +67,7 @@ Więcej zdjęć i interaktywny model ramki AID (gdzie obraz trafia na panel w ka
 | [`scripts/`](scripts/) | czytniki obrazów firmware'u tylko do odczytu (QNX6, IFS, LZOZ, JXE → JAR), tester kart SD | nic |
 | [`firmware/`](firmware/) | hashe i notatki oficjalnej aktualizacji K4525 (jedyny dozwolony firmware) | nic |
 
-### Warianty układu mapy (GEM → `pmcp_advanced` → `pmcp_switch_layout`)
+### Warianty układu mapy (GEM → `pmcp_advanced` → `carplay_advanced`)
 
 Strumień ma 800×480 i leży 1:1 na panelu AID. Safe area: x / y / szerokość / wysokość.
 
@@ -92,15 +92,20 @@ Wszystkie warianty deklarują rozmiar fizyczny 240×144 mm. Zmiana wariantu podm
    kartę SD FAT32, sprawdza każdy plik i wysuwa kartę. Niczego nie formatuje ani nie usuwa. Zrób kartę 1
    (instalacyjną) i kartę 2 (ratunkową, na awarię).
 3. W aucie, jedna wizyta, tylko karta 1 (część 2 w `README-FIRST.txt`, szczegóły: [tutorial w aucie](docs/pl/09-tutorial-w-aucie.md)):
-   **1. Check → 2. Install map → restart → mapa OK? → 3. Install all features → restart (start próbny) → test →
-   4. Confirm → restart.** Od tej chwili tak już zostaje.
+   **1. Check → 2. Install CarPlay → restart → mapa OK? → 4. Install additional features → restart (start próbny) →
+   test → 5. Confirm → restart.** Od tej chwili tak już zostaje. (Android Auto, opcjonalnie: 3. Install Android Auto,
+   niżej.)
    Karta 2 jest tylko na awarię po potwierdzeniu. Po użyciu sama się rozbraja; opcja 3 pomocnika kopiowania ją uzbraja.
 
-**Aktualizacja z v1.0–v1.3:** karta 1 z tego wydania, „1. Check”, potem **3. Install all features or update** → restart
-(start próbny) → test → **4. Confirm**. Przycisk 3 zastępuje wcześniejszy sterownik, czytnik i paczki Java (`rglu` → `rg`)
-plikami z tej karty. Zrób też nową kartę 2: karty ratunkowe sprzed v1.4 nie przywracają sterownika iAP2 z v1.4.
-Z v1.4.x przycisk 3 zamienia `rg` (`pmcp-guidance4.jar`, teraz ze strzałkami Android Auto). Android Auto z karty
-eksperymentalnej przycisk 3 zostawia bez zmian (jej `rg-aa` staje się `rg`); aktualizuje je „AA 1” na ekranie Android Auto.
+**Aktualizacja z v1.5.0, v1.4.x albo v1.0–v1.3:** karta 1 z tego wydania, „1. Check”, potem **2. Install CarPlay**
+(zwykle „already installed”), **3. Install Android Auto**, jeśli używasz Android Auto, **4. Install additional
+features**. Jeśli 3 albo 4 coś zainstalowały: restart (start próbny) → test → **5. Confirm** w tym starcie. Jeśli
+wszystkie odpowiadają „already installed” / „nothing changed” (zwykle z v1.5.0), nic się nie zmieniło: bez restartu
+i bez 5. Przycisk 4 zastępuje wcześniejszy sterownik,
+czytnik i paczki Java (`rglu`, `rg`, eksperymentalne `rg-aa` → `rg` z tej karty) plikami z tej karty. Przycisk 3
+aktualizuje na miejscu znane mu Android Auto z wcześniejszej karty eksperymentalnej, a Android Auto, którego nie
+obsługuje, zastępuje zestawem z tej karty. Przy przejściu z v1.0–v1.3 zrób też nową kartę 2: karty ratunkowe sprzed
+v1.4 nie przywracają sterownika iAP2 z v1.4.
 
 Wcześniej potrzebny jest [M.I.B. w radiu i backup](docs/pl/01-mib-instalacja-backup.md). Instalator na karcie najpierw
 sprawdza każdy plik radia; przy innym firmware zatrzymuje się i niczego nie zmienia.
@@ -116,9 +121,9 @@ z karty SD. Zasady:
 - **Fail-closed.** Każdy plik w radiu i na karcie jest sprawdzany dokładnym hashem i rozmiarem, zanim cokolwiek zostanie
   zapisane. Nieznany stan oznacza brak zmian.
 - Pliki są kopiowane do katalogu przejściowego, sprawdzane i dopiero wtedy podmieniane. Wcześniej powstaje kopia plików
-  fabrycznych. „Przywróć pliki fabryczne” działa zawsze.
-- **Paczki Java mają start próbny.** Po „3. Install all features” (albo „On ...” dla jednej paczki) i restarcie zmianę
-  trzeba potwierdzić („4. Confirm”) w tym samym starcie.
+  fabrycznych. „8. Remove everything (back to factory files)” działa zawsze.
+- **Paczki Java mają start próbny.** Po „4. Install additional features” (albo „On ...” dla jednej paczki) i restarcie
+  zmianę trzeba potwierdzić („5. Confirm”) w tym samym starcie.
   Inaczej następny start jest znowu fabryczny.
 - Osobna **karta ratunkowa** (`installer/build_rescue.py`) startuje sama w trybie aktualizacji i przywraca fabryczne HMI
   bez potrzeby wchodzenia do GEM.
@@ -191,15 +196,17 @@ Znane ograniczenia:
   pomaga ponowne podłączenie telefonu;
 - brak strzałki VW na pierwszym kroku trasy; dystans i czas do celu zostają w obrazie Google Maps.
 
-Instalacja (potrzebna mapa CarPlay z „2.” albo „3.”; dla strzałek „3. Install all features or update” i „4. Confirm”):
-1. GEM → pmcp → **pmcp_android_auto** (na ekranie głównym) → „AA 1. Android Auto on: Google Maps on the AID + VW arrows
-   (also updates an earlier card's AA)”.
+Instalacja (potrzebna mapa CarPlay z „2.”; dla strzałek także „4. Install additional features”):
+1. GEM → `pmcp_stream_map_aid` → **„3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)”**. Aktualizuje
+   też Android Auto z wcześniejszej karty eksperymentalnej i zastępuje pliki Android Auto, których ta karta nie obsługuje (np.
+   z karty eksperymentalnej).
 2. Restart, telefon z Androidem na kablu, trasa w Google Maps. Ta pierwsza sesja to próba.
-3. Jeśli obraz jest na AID: „AA 2. Confirm: AA works (only in the start of the AA trial)” w tym samym starcie.
+3. Jeśli obraz jest na AID: „5. Confirm: everything works (in the first start after 3 or 4)” w tym samym starcie,
+   z podłączonym telefonem (jednocześnie potwierdza próbę funkcji CarPlay, jeśli trwa).
 
-Usuwanie: „AA remove (factory Android Auto back)” na tym samym ekranie albo „Remove everything (back to factory files)”
-na ekranie głównym. Oba przywracają fabryczny odbiornik Android Auto (`gal`), tylko z kopii o fabrycznym hashu.
-Przycisk 3 ani nie instaluje, ani nie usuwa Android Auto.
+Usuwanie: `pmcp_advanced` → `aa_advanced` → „AA remove (factory Android Auto back)” albo „8. Remove everything (back to
+factory files)” na ekranie głównym. Oba przywracają fabryczny odbiornik Android Auto (`gal`), tylko z kopii o fabrycznym
+hashu. Przycisk 4 ani nie instaluje, ani nie usuwa Android Auto.
 
 Krok po kroku i co sfotografować, gdy coś nie działa: [docs/pl/13-instrukcja-android-auto.md](docs/pl/13-instrukcja-android-auto.md).
 Jak to działa (hook `gal` od MacsInSpace, nasz feeder, start próbny): [aa/README.pl.md](aa/README.pl.md).

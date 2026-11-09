@@ -32,17 +32,18 @@ vehicle restart remains to be confirmed. Additional firmware and cluster combina
 
 ## Install and confirm the optional package
 
-Start with a working v1.4.1 install (button 3 and Confirm). The normal installation and Java recovery mechanism are
+Start with a working install (main menu "4. Install additional features" and "5. Confirm"; `sl` needs v1.4.1 or
+later). The normal installation and Java recovery mechanism are
 described in the [in-car guide](09-in-car-guide.md). GEM button texts are quoted exactly; the action is in brackets.
 
 1. "1. Check card and unit (read-only)" (`verify`).
-2. Advanced → packages: "On sl: native VW map speed limit in the AID road text (optional, output off until enabled)"
-   (`java-on sl`). Its output mode starts off. Button 3 never installs this package.
+2. `pmcp_advanced` → `features_advanced`: "On sl: native VW map speed limit in the AID road text (optional, output off
+   until enabled)" (`java-on sl`). Its output mode starts off. Main menu 4 never installs this package.
 3. Restart the unit (hold the volume knob ~10 s). This start is the Java trial for the new set.
-4. Check that menus, audio, CarPlay, map and guidance work. Advanced: "Speed limit status: mode and native VW limit data
+4. Check that menus, audio, CarPlay, map and guidance work. `features_advanced`: "Speed limit status: mode and native VW limit data
    (read-only)" (`speedlimit-status`) should show `status=valid` and a `speed_limit_raw` value while driving.
-5. In that same start: "4. Confirm: everything works (only in the first start after 3)" (`java-confirm`).
-6. Advanced: "Speed limit: in front of the street name (top bar and dial; needs sl and rg)" (`speedlimit-mode turnto`), or
+5. In that same start: "5. Confirm: everything works (in the first start after 3 or 4)" (`confirm`).
+6. `features_advanced`: "Speed limit: in front of the street name (top bar and dial; needs sl and rg)" (`speedlimit-mode turnto`), or
    the trial "Speed limit TRIAL: in CurrentPositionInfo only (photograph where it shows)" (`speedlimit-mode street`).
 7. The mode applies within about a second; it is kept across restarts. Back to the plain street name: "Speed limit: off
    (street name as before)" (`speedlimit-mode off`).

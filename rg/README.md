@@ -15,7 +15,7 @@ the maneuver fallbacks, the quiet-route hold and (v1.5.0, `rg/lanes/aa.py`) the 
 Android Auto phone is connected (connection type 3) it reads the AA hook's mailbox `/ramdisk/pmcp-aa-rg`, and a quiet
 route is held 10 s instead of 180 s (the hook repeats the route every 2.5 s while Google Maps navigates); with CarPlay
 or no phone it behaves exactly like the v1.4.3 `rg` (the same test suites with the same results, plus `TestAa`).
-The v1.3 packages `rg` (no lanes) and `rglu` are gone; `java-update` (button 3) replaces them, v1.4.x's `rg`, the
+The v1.3 packages `rg` (no lanes) and `rglu` are gone; `java-update` (main menu 4) replaces them, v1.4.x's `rg`, the
 experimental cards' `rg-aa` and `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma` by this `rg` (`pmcp-guidance4.jar`).
 
 What it gives on the AID:
@@ -55,19 +55,20 @@ the base `717fb53c` byte for byte.
 
 ## Installation (GEM buttons)
 
-Button 3 on the main screen does all of this. Single steps in `pmcp_advanced` → `pmcp_packages`:
+Button "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)" on the main screen does
+all of this. Single steps in `pmcp_advanced` → `features_advanced`:
 
 1. "Route guidance system on (iAP2 driver, iap2.cfg, reader)": saves the factory driver and cfg in `carplaymaps/rollback/`
    (hash), replaces the driver and cfg (remount `/mnt/app` and `/mnt/system`), installs the reader, and finally the marker
    `rg/SYSTEM_ON`. Does not touch the HMI; worst case: a problem with CarPlay/iPod, which "Route guidance system off
-   (factory iAP2 driver and iap2.cfg)" or "Remove everything (back to factory files)" undoes.
+   (factory iAP2 driver and iap2.cfg)" or "8. Remove everything (back to factory files)" undoes.
 2. "On rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)": the JAR through the
    Java mechanism with a trial start.
 3. Updating from an earlier card: "Route guidance system update (driver and reader of this card, RG stays on)" replaces
    only the v1.0-v1.3 driver `76926bde…` and Tomasz's reader `b683cef7…` (staged and hashed, factory copies kept;
    "Status" shows "Route guidance system: old" before). "Java update: packages of an earlier card -> this card's
    (rglu -> rg)" makes one new set in which `rg`, `rglu` or an experimental variant becomes this `rg` (new JAR file name,
-   so the old set stays intact until `HMI_BOOT` switches; one trial start, then "4. Confirm").
+   so the old set stays intact until `HMI_BOOT` switches; one trial start, then "5. Confirm").
 4. The reader starts in the background from our `lsd.sh` block, only when `SYSTEM_ON` is present and the Java set loads
    (with Tomasz's arguments: `start-live /dev/ipod0/rgi-events /ramdisk/carplay-route-guidance`).
 

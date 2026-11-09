@@ -68,7 +68,7 @@ More photos and an interactive model of the AID frame (where the video lands on 
 | [`scripts/`](scripts/) | Read-only firmware readers (QNX6, IFS, LZOZ, JXE → JAR), SD-card tester | nothing |
 | [`firmware/`](firmware/) | Hashes and notes for the official K4525 update (the only allowed firmware) | nothing |
 
-### Map layout variants (GEM → `pmcp_advanced` → `pmcp_switch_layout`)
+### Map layout variants (GEM → `pmcp_advanced` → `carplay_advanced`)
 
 The stream is 800×480 and lies 1:1 on the AID panel. Safe area values are x / y / width / height.
 
@@ -93,16 +93,17 @@ All variants declare a physical size of 240×144 mm. Switching a variant swaps o
    **empty** FAT32 SD card, checks every file and ejects the card. It never formats a card or deletes anything.
    Make card 1 (install) and card 2 (rescue, for emergencies).
 3. In the car, one visit, card 1 only (part 2 of `README-FIRST.txt`, details: [in-car guide](docs/en/09-in-car-guide.md)):
-   **1. Check → 2. Install map → restart → map OK? → 3. Install all features → restart (trial start) → test →
-   4. Confirm → restart.** It works like this from then on.
+   **1. Check → 2. Install CarPlay → restart → map OK? → 4. Install additional features → restart (trial start) → test
+   → 5. Confirm → restart.** It works like this from then on. (Android Auto, optional: 3. Install Android Auto, below.)
    Card 2 is only for an emergency after Confirm. After use it disarms itself; the copy helper's option 3 re-arms it.
 
-**Updating from v1.0-v1.3:** card 1 of this release, "1. Check", then **3. Install all features or update** → restart
-(trial start) → test → **4. Confirm**. Button 3 replaces the earlier driver, reader and Java packages (`rglu` → `rg`) by
-this card's. Make a new card 2 as well: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
-From v1.4.x button 3 replaces `rg` (`pmcp-guidance4.jar`, now with the Android Auto arrows). Android Auto of an
-experimental card stays as it is with button 3 (its `rg-aa` becomes `rg`); "AA 1" on the Android Auto screen brings it
-up to date.
+**Updating from v1.5.0, v1.4.x or v1.0-v1.3:** card 1 of this release, "1. Check", then **2. Install CarPlay** (usually
+"already installed"), **3. Install Android Auto** if you use Android Auto, **4. Install additional features**. If 3 or 4
+installed something: restart (trial start) → test → **5. Confirm** in that start. If they all answer "already
+installed" / "nothing changed" (usual from v1.5.0), nothing changed: no restart and no 5 needed. Button 4 replaces the earlier driver, reader and Java packages
+(`rglu`, `rg`, the experimental `rg-aa` → this card's `rg`) by this card's. Button 3 updates an earlier experimental
+card's Android Auto that it knows in place and replaces Android Auto it does not support by this card's. Make a new
+card 2 as well when coming from v1.0-v1.3: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
 
 Before you start you need [M.I.B. installed on the unit and a backup](docs/en/01-mib-install-backup.md). The installer
 on the card checks every file of your head unit first. On any other firmware it stops and changes nothing.
@@ -136,10 +137,10 @@ on an SD card. Design rules:
 
 - **Fail-closed.** Every file on the unit and on the card is checked by exact hash and size before anything is
   written. Unknown state means no change.
-- Files are staged, verified and swapped in, and the stock files are backed up first. "Restore factory files" is
+- Files are staged, verified and swapped in, and the stock files are backed up first. "8. Remove everything (back to factory files)" is
   always available.
-- **Java packages use a trial boot.** After "3. Install all features" (or "On ..." for one package) and a restart, the
-  change must be confirmed ("4. Confirm") in the same boot. Otherwise the next boot is stock again.
+- **Java packages use a trial boot.** After "4. Install additional features" (or "On ..." for one package) and a
+  restart, the change must be confirmed ("5. Confirm") in the same boot. Otherwise the next boot is stock again.
 - A separate **rescue card** (`installer/build_rescue.py`) autostarts in update mode and restores the stock HMI
   without needing GEM.
 - Host tests (`installer/test/run_tests.sh`, `fault_inject.sh`) run the installer against a copy of the unit's file
@@ -213,15 +214,17 @@ Known limits:
   plugging the phone in again helps;
 - no VW arrow at the very first step of a route; destination distance and arrival time stay in the Google Maps picture.
 
-Install (needs the CarPlay map from "2." or "3."; for the arrows "3. Install all features or update" and "4. Confirm"):
-1. GEM → pmcp → **pmcp_android_auto** (on the main screen) → "AA 1. Android Auto on: Google Maps on the AID + VW arrows
-   (also updates an earlier card's AA)".
+Install (needs the CarPlay map from "2."; for the arrows also "4. Install additional features"):
+1. GEM → `pmcp_stream_map_aid` → **"3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)"**. It also
+   updates an earlier experimental card's Android Auto, and replaces Android Auto files this card does not support (e.g.
+   from an experimental card).
 2. Restart, connect the Android phone (cable), start a route in Google Maps. This first session is a trial.
-3. If the picture is on the AID: "AA 2. Confirm: AA works (only in the start of the AA trial)" in that same start.
+3. If the picture is on the AID: "5. Confirm: everything works (in the first start after 3 or 4)" in that same start,
+   with the phone connected (it confirms the CarPlay features' trial at the same time, if there is one).
 
-Remove: "AA remove (factory Android Auto back)" on the same screen, or "Remove everything (back to factory files)" on
-the main screen. Both put the factory Android Auto receiver (`gal`) back, only from a copy with the factory hash.
-Button 3 neither installs nor removes Android Auto.
+Remove: `pmcp_advanced` → `aa_advanced` → "AA remove (factory Android Auto back)", or "8. Remove everything (back to
+factory files)" on the main screen. Both put the factory Android Auto receiver (`gal`) back, only from a copy with the
+factory hash. Button 4 neither installs nor removes Android Auto.
 
 Step by step, and what to photograph if something goes wrong: [docs/en/13-android-auto-guide.md](docs/en/13-android-auto-guide.md).
 How it works (MacsInSpace's `gal` hook, our feeder, the trial start): [aa/README.md](aa/README.md).

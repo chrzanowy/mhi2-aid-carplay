@@ -387,7 +387,7 @@ the pattern and the hit count).</p>
 <tr><td><span class="tag hook">dn</span></td><td><code>ASLHandler</code> (after <code>startService</code> and on entry to <code>handleDayNightMode</code>)</td>
 <td>Sends the day/night mode to the phone again after 5, 15 and 30 s, because the cluster screen appears later than the single factory send.</td></tr>
 </table></div>
-<p style="margin-top:10px"><b>Trial start:</b> a new JAR set loads once. It stays only after "4. Confirm" in GEM during that start.
+<p style="margin-top:10px"><b>Trial start:</b> a new JAR set loads once. It stays only after "5. Confirm" in GEM during that start.
 Without a confirm the next start is factory, so a broken set is gone after one restart.</p>
 </div>
 
@@ -525,10 +525,11 @@ MOST channel. Two things differ:</p>
   AA connection and works like <code>rg</code> with CarPlay. Distance and time to destination stay factory, because the AA picture
   shows them. Stale data expires after 1.5 s. In a test drive 94 of 94 maneuvers were recognised.</li>
   <li><b>AA trial start:</b> separate from the Java one. <code>AA_BOOT</code> is the set id: the mode plus hashes of the hook, the feeder and
-  the settings. A new set runs with the hook for one head unit start only, and stays after "AA Confirm". The markers
-  <code>DISABLED</code> (rescue card) and <code>AA_DISABLED</code> turn the hook off. "AA remove" and "Remove everything" put the factory
-  <code>gal</code> back, only on a pmcp install and only from a <code>gal.real</code> with the factory hash. Button 3 never
-  changes Android Auto (since v1.5.0 it has its own screen on the main screen).</li>
+  the settings. A new set runs with the hook for one head unit start only, and stays after "5. Confirm" (or "AA Confirm"). The markers
+  <code>DISABLED</code> (rescue card) and <code>AA_DISABLED</code> turn the hook off. "AA remove" and "8. Remove everything" put the factory
+  <code>gal</code> back, only on a pmcp install and only from a <code>gal.real</code> with the factory hash. Android Auto is installed
+  with main-screen button "3. Install Android Auto" (it replaces an AA set the card does not support, the same way); its details are
+  on the screen <code>aa_advanced</code>. Button 4 never changes Android Auto.</li>
   <li><b>Known limits:</b>
   <ul>
     <li>open: in about half of the connections the picture starts dark with artefacts, and it can also be lost during a
@@ -546,9 +547,9 @@ MOST channel. Two things differ:</p>
 <div class="card">
 <h3>Card 1: pmcp.sh from the GEM menu (M.I.B.)</h3>
 <div class="flow">
-  <span class="chip stock">STOCK</span><span class="arr">→ 2. Install map →</span>
-  <span class="chip added">VIDEO<small>stage A: dio_manager, carplaymaps</small></span><span class="arr">→ 3. Install all →</span>
-  <span class="chip hook">JAVA (trial)</span><span class="arr">→ 4. Confirm →</span>
+  <span class="chip stock">STOCK</span><span class="arr">→ 2. Install CarPlay →</span>
+  <span class="chip added">VIDEO<small>stage A: dio_manager, carplaymaps</small></span><span class="arr">→ 4. Install additional features →</span>
+  <span class="chip hook">JAVA (trial)</span><span class="arr">→ 5. Confirm →</span>
   <span class="chip hook">JAVA</span>
 </div>
 <ul>
@@ -557,10 +558,11 @@ MOST channel. Two things differ:</p>
   <li>It copies to a staging directory, checks the copies, and only then switches with one <code>mv</code>. After the switch it checks
   again; on an error it rolls back automatically.</li>
   <li>The factory copies of <code>lsd.sh</code>, <code>dio_manager</code>, the iAP2 driver and <code>iap2.cfg</code> are kept in
-  <code>/mnt/app/carplaymaps/rollback</code>. "Remove everything" restores all of them and checks the hashes.</li>
-  <li>Updates in place (v1.4): button 3 first replaces an earlier card's driver and reader (<code>rg-update</code>, known hashes
+  <code>/mnt/app/carplaymaps/rollback</code>. "8. Remove everything" restores all of them and checks the hashes.</li>
+  <li>Updates in place (since v1.4; now button 4, earlier button 3): it first replaces an earlier card's driver and reader (<code>rg-update</code>, known hashes
   only) and its Java packages (<code>java-update</code>: one new set, one trial start). New JARs get file names no earlier card
-  used, so a confirmed set never runs an unconfirmed file.</li>
+  used, so a confirmed set never runs an unconfirmed file. Route guidance or Java files the card does not support (e.g. a set
+  with an unknown package, or after the rescue card) are first put back to the verified factory copies (<code>features-reset</code>).</li>
   <li>On the Mac, tests run <code>pmcp.sh</code> on a copy of the head unit file tree (ksh and mksh) and simulate a power loss before
   every write.</li>
 </ul>
@@ -573,7 +575,7 @@ MOST channel. Two things differ:</p>
   <li>It restores the factory HMI and writes <code>/mnt/persist/pmcp/DISABLED</code>, which turns the whole Java block off.
   It also puts the factory iAP2 driver back (both driver sizes, v1.0-v1.3 and v1.4). Its log is
   <code>PMCP_RESCUE_LOG.txt</code> (<code>RESULT=OK</code>).</li>
-  <li>Stage A (picture) does not touch the HMI. The worst result of a failure there is no CarPlay; GEM and "Remove everything" still
+  <li>Stage A (picture) does not touch the HMI. The worst result of a failure there is no CarPlay; GEM and "8. Remove everything" still
   work.</li>
 </ul>
 <h3 style="margin-top:12px">State outside the head unit</h3>

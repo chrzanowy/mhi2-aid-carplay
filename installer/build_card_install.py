@@ -29,15 +29,18 @@ README = """CARD 1 - INSTALL: CarPlay map on the AID (VW MHI2 MU1161, AID 791) -
 This is M.I.B. 3.6.0 plus the CarPlay-on-AID installer. Nothing starts by itself
 (_Swdlautorun.txt is disarmed - do NOT rename it). Everything runs from the green menu (GEM):
 
-  Card in slot SD1. Hold MENU ~10 s -> =>M.I.B.<= -> pmcp_CarPlay_AID
+  Card in slot SD1. Hold MENU ~10 s -> =>M.I.B.<= -> pmcp_stream_map_aid
   The header must show: %(ver)s
 
   1. Check card and unit (read-only)        -> PMCP_VERIFY_OK state=STOCK
-  2. Install the CarPlay map on the AID     -> restart (volume knob ~10 s), check the map
-  3. Install all features                   -> restart: this first start is a TRIAL
-  4. Confirm: everything works              -> press it in that same start; restart; done
+  2. Install CarPlay                        -> restart (volume knob ~10 s), check the map
+  3. Install Android Auto (optional)        -> Google Maps from an Android phone on the AID
+  4. Install additional features            -> restart: this first start is a TRIAL
+  5. Confirm: everything works              -> press it in that same start; restart; done
      (no Confirm, or black screen: restart again -> factory start, nothing to fix)
-  Remove everything (back to factory files) -> undo it all
+  2, 3 and 4 also update an earlier install and replace versions this card does not support.
+  8. Remove everything (back to factory files) -> undo it all
+  More (logs, single features, map layouts, Android Auto details): pmcp_advanced
 
 Photograph each result (the card is read-only in GEM, there is no log file).
 Do not copy the rescue card (pmcp-rescue/, Swdlautorun.txt) onto this card.

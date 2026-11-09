@@ -38,4 +38,4 @@ Każde wywołanie naszego kodu z klas fabrycznych jest osłonięte (`buildtools/
   nie wystarczy (telefon ignoruje „bez zmian”), następny krok to krótkie przełączenie noc→dzień. To osobny wariant, nie zbudowany.
 - `ASLHandler` MU1161 = K4525 bajtowo, wersja 46.
 
-W instalatorze: paczki Java `zoom` i `dn` (GEM → pmcp → etap B → „Wlacz: …”), z tym samym próbnym startem co reszta.
+W instalatorze: paczki Java `zoom` i `dn` (menu główne „4. Install additional features” albo GEM → pmcp_stream_map_aid → pmcp_advanced → features_advanced → „On zoom: …” / „On dn: …”), z tym samym próbnym startem co reszta.

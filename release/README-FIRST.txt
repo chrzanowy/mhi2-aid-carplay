@@ -66,14 +66,15 @@ PART 2 - IN THE CAR
 
   Step 1. Check (changes nothing)
     Insert CARD 1. Hold the MENU button about 10 seconds -> green menu opens.
-    Go to  =>M.I.B.<=  ->  pmcp_CarPlay_AID.
+    Go to  =>M.I.B.<=  ->  pmcp_stream_map_aid.
     The top line must show:  @@VERSION@@
     Press  "1. Check card and unit (read-only)".
     Expected:  PMCP_VERIFY_OK state=STOCK
     Anything else: STOP, take a photo, ask for help. Nothing was changed.
 
   Step 2. Install the map
-    Press  "2. Install the CarPlay map on the AID".   Expected:  PMCP_INSTALL_OK ...
+    Press  "2. Install CarPlay: the map on the AID (also repairs or updates it)".
+    Expected:  PMCP_INSTALL_OK ...
     Restart (volume knob 10 s).
     Connect the iPhone, start navigation in Apple Maps or Google Maps, and switch the
     dashboard to the navigation/map view (buttons on the right side of the steering wheel).
@@ -81,41 +82,50 @@ PART 2 - IN THE CAR
     "Forget This Car", then connect again. Still nothing: do not go on to step 3.
 
   Step 3. Install the rest (only if the map works)
-    Green menu -> pmcp_CarPlay_AID -> "3. Install all features or update: map, route guidance, ...".
+    Green menu -> pmcp_stream_map_aid ->
+    "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)".
     (Already have an earlier version installed? See UPDATING below.)
-    Expected:  PMCP_ALL_ON_OK
+    Expected:  PMCP_FEATURES_ON_OK
+    Android Auto (optional, Android phone): also press
+    "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)".
+    Expected:  PMCP_AA_ON_OK mode=gamma. See docs/en/13-android-auto-guide.md.
     Restart (volume knob 10 s). This start is a TRIAL.
 
   Step 4. Test, then confirm
     Check: CarPlay connects, the map is on the dashboard, and during navigation the VW turn
     arrow, distance and arrival time appear (the arrow shows once the car moves), plus lanes,
     the distance bar before a turn and the street name.
-      - Everything works: open the green menu and press "4. Confirm: everything works"
-        IN THIS SAME START (do not switch the car off before it).
+      - With Android Auto: connect the Android phone too and check the map on the dashboard.
+      - Everything works: open the green menu and press
+        "5. Confirm: everything works (in the first start after 3 or 4)"
+        IN THIS SAME START (do not switch the car off before it). Expected: PMCP_CONFIRM_OK
       - Something is wrong, or the screen stays black: just restart (volume knob 10 s).
         Without Confirm the next start is the original factory one. Nothing to fix.
-        To try once more: "5. Try again", then restart.
+        To try once more: "6. Try again: the next start is a new trial", then restart.
 
   Step 5. Restart once more (volume knob 10 s). Done: it works like this from now on.
 
-  To remove everything: "Remove everything (back to factory files)", then restart.
-  "Status (read-only)" shows what is installed.
+  To remove everything: "8. Remove everything (back to factory files)", then restart.
+  "7. Status (read-only)" shows what is installed.
 
-  UPDATING from an earlier version (v1.0 - v1.4):
+  UPDATING from an earlier version (v1.0 - v1.5.0):
     1. Make CARD 1 from this package. In the car: "1. Check card and unit (read-only)".
-       Expected: PMCP_VERIFY_OK state=JAVA. "Status (read-only)" may show
+       Expected: PMCP_VERIFY_OK state=JAVA. "7. Status (read-only)" may show
        "Route guidance system: old" and "packages of an earlier card: rglu" - that is expected.
-    2. "3. Install all features or update: ..."  ->  PMCP_ALL_ON_OK
-    3. Restart: this start is a TRIAL. Check the arrows, lanes, street name.
-    4. "4. Confirm: everything works" in this same start, then restart.
-    5. Make a NEW CARD 2 with the copy helper (option 2): rescue cards made before v1.4
-       do not restore the new route guidance driver.
-    Used an experimental card with Android Auto? Button 3 keeps Android Auto as it is and
-    replaces its rg-aa by rg. To bring Android Auto itself up to date: Android Auto screen
-    (pmcp_android_auto), "AA 1. Android Auto on: ...". See docs/en/13-android-auto-guide.md.
-    If "Status (read-only)" shows "Android Auto: unknown" (an older experimental AA set this
-    card does not know, or an interrupted AA 1), button 3 stops: first, on the Android Auto
-    screen, "AA remove (factory Android Auto back)", then button 3 again, then "AA 1".
+    2. "2. Install CarPlay: the map on the AID ..."  ->  usually
+       PMCP_MAP_INSTALL_OK (already installed ...)
+    3. Only if you use Android Auto: "3. Install Android Auto: ..."  ->  PMCP_AA_ON_OK,
+       or PMCP_AA_INSTALL_OK (already installed: ...) (it updates an experimental card's
+       Android Auto; a version this card does not support is removed first and replaced).
+    4. "4. Install additional features: ..."  ->  PMCP_FEATURES_ON_OK
+       (it replaces the earlier route guidance files and packages, also an experimental rg-aa)
+       From v1.5.0, 2, 3 and 4 usually say "already installed" / "everything was already on,
+       nothing changed": then nothing changed - no restart and no 5 needed, you are done.
+    5. Only if 3 or 4 installed something: restart, this start is a TRIAL. Check the arrows, lanes, street name (and Android Auto,
+       if you pressed 3: connect the phone).
+    6. "5. Confirm: everything works ..." in this same start, then restart.
+    7. Coming from v1.0 - v1.3: make a NEW CARD 2 with the copy helper (option 2): rescue
+       cards made before v1.4 do not restore the new route guidance driver.
 
 ------------------------------------------------------------------------------------------
 EMERGENCY - CARD 2 (RESCUE)
@@ -126,7 +136,7 @@ EMERGENCY - CARD 2 (RESCUE)
        itself and may restart a few times. If it asks a question, choose Continue.
        Do NOT pull the card while it updates.
     2. When the normal screen is back, remove the card. The features are off again; the map
-       picture stays. In the green menu: "Remove everything (back to factory files)" if you
+       picture stays. In the green menu: "8. Remove everything (back to factory files)" if you
        want to undo the map too.
     3. The card disarms itself after use, so it cannot run again by accident. To make it ready
        for the next time: on your computer start the copy helper and choose 3 (it also shows
@@ -134,15 +144,18 @@ EMERGENCY - CARD 2 (RESCUE)
   Optional: you can test CARD 2 once on a working unit before step 1. It changes nothing on a
   unit without our files. Re-arm it afterwards with the copy helper, option 3.
 
-  Single features and other map layouts are in the submenu  pmcp_advanced
-  (explained in docs/in-car-guide.md).
+  Single features, other map layouts, Android Auto details and the log buttons are in the
+  submenu  pmcp_advanced  (screens features_advanced, carplay_advanced, aa_advanced;
+  explained in docs/in-car-guide.md).
 
 ------------------------------------------------------------------------------------------
-CARD 3 (LOGS) - only for Android Auto problem reports
+CARD 3 (LOGS) - only for problem reports (Android Auto or CarPlay)
 ------------------------------------------------------------------------------------------
-  Not in this package and not made by install.sh. It copies the Android Auto logs saved with
-  "AA save log" to the card. Build it on a computer from the repository (needs the M.I.B.
-  3.6.0 zip in mib/downloads/, as for the rescue card):
+  Not in this package and not made by install.sh. It copies the logs saved with "AA save log"
+  (aa_advanced) and "CP save log" (features_advanced) to the card. Its result file ends with
+  RESULT=OK copied=N aa_logs=A cp_logs=C (or RESULT=NO_LOGS: nothing was saved first).
+  Build it on a computer from the repository (needs the M.I.B. 3.6.0 zip in mib/downloads/,
+  as for the rescue card):
       python3 -I installer/build_logcard.py build/card3-logs
   Copy that folder's contents to a separate empty FAT32 card. To fetch the logs it runs the
   full M.I.B. 3.6.0 stuff.sh in update mode (SWDL), as when M.I.B. was installed. See

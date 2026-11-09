@@ -10,8 +10,9 @@ Stan (2026-11-07, testy w Passacie B8, MU1161 / AID 791, Samsung Galaxy A16 z An
   klatki kluczowej z telefonu (feeder v10: synchronizacja startu, dawkowanie 6 Mbit/s bez serii, bez cyklu fokusu); brak
   strzałki VW na pierwszym kroku trasy (krok „wyjazd” nie jest jeszcze mapowany).
 
-Android Auto ma własny ekran w GEM (`pmcp_android_auto`, na ekranie głównym) i instaluje się osobno od CarPlay: przycisk 3
-ani go nie instaluje, ani nie usuwa. CarPlay działa dokładnie tak jak bez niego.
+Android Auto instaluje się własnym przyciskiem na ekranie głównym GEM, „3. Install Android Auto: Google Maps on the AID +
+VW arrows (needs 2)”; szczegóły (potwierdzenie AA, status, logi, usuwanie) są na ekranie `pmcp_advanced` → `aa_advanced`.
+„4. Install additional features” ani go nie instaluje, ani nie usuwa. CarPlay działa dokładnie tak jak bez niego.
 
 ## Jak to działa
 
@@ -45,17 +46,19 @@ telefon AA -> gal (odbiornik AA radia) + hook -> aa-most-feeder -> ring /ramdisk
 | `carplaymaps/aa/feeder.conf` | `unit/feeder-gamma.conf` | MOST, 5 s czekania, synchronizacja startu, dawkowanie 6 Mbit/s, odstęp 20 ms |
 | `carplaymaps/aa/AA_BOOT` | `pmcp.sh` | id zestawu: `gamma-` + 8 znaków hasha hooka, feedera i ustawień hooka |
 
-W `/mnt/system` nic się nie zmienia. Zapisane logi trafiają do `carplaymaps/logs/` (`AA save log`).
+W `/mnt/system` nic się nie zmienia. Zapisane logi trafiają do `carplaymaps/logs/` (`AA save log`; dla
+CarPlay `CP save log`).
 
 ## Bezpieczeństwo
 
-- **Start próbny:** nowy zestaw AA działa z hookiem tylko przez jeden start radia. Po restarcie bez `AA 2. Confirm` `gal`
-  jest znowu fabryczny. `DISABLED` z karty ratunkowej też wyłącza hook.
+- **Start próbny:** nowy zestaw AA działa z hookiem tylko przez jeden start radia. Po restarcie bez „5. Confirm” (albo
+  `aa_advanced` → „AA Confirm”) `gal` jest znowu fabryczny. `DISABLED` z karty ratunkowej też wyłącza hook.
 - **Nic na karcie SD nie wpływa na `gal`:** `hook/patch_no_sd.py` usuwa przed buildem ścieżki hooka do kart SD i `/tmp`.
 - Feeder czyta z `feeder.conf` tylko swoje klucze ustawień, nigdy ścieżek.
-- `AA remove` i „Remove everything” przywracają fabryczny `gal`, tylko z kopii z fabrycznym hashem.
-- Zestawy AA z wcześniejszych kart eksperymentalnych są rozpoznawane (`AA_OLD`): status `old`, `AA 1` je aktualizuje bez
-  wcześniejszego usuwania.
+- `AA remove` i „8. Remove everything” przywracają fabryczny `gal`, tylko z kopii z fabrycznym hashem.
+- Zestawy AA z wcześniejszych kart eksperymentalnych są rozpoznawane (`AA_OLD`): status `old`, przycisk 3 ekranu głównego je aktualizuje
+  bez wcześniejszego usuwania. Nieznany zestaw (status `unknown`) najpierw jest usuwany, tylko z kopii fabrycznego `gal`
+  z fabrycznym hashem; inaczej zatrzymuje się i niczego nie zmienia.
 
 ## Czego się dowiedzieliśmy (szczegóły: audyt A-AA1..A-AA30 w notatkach projektu)
 
