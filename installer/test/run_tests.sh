@@ -998,7 +998,7 @@ PEOF
     run aa-log-save; rc_is 1; expect_out "AA_LOGS_FULL_5" "sixth refused (nothing deleted)"
     run status; expect_out "Unit state: VIDEO" "saved logs do not change the unit state"
     before=$(snapshot "$W/unit")
-    logcard
+    rm -rf "$W/med3"; logcard
     [ "$before" = "$(snapshot "$W/unit")" ] && ok "log card: unit unchanged (read-only)" || bad "log card changed the unit"
     [ "$(ls "$W/med3/PMCP_LOGS" | grep -c '^aa-log-[1-5].txt$')" = 5 ] && cmp -s "$L1" "$W/med3/PMCP_LOGS/aa-log-1.txt" \
         && ok "log card: five logs copied, identical" || bad "log card copies: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
