@@ -18,7 +18,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
-PMCP_BASE_VERSION = "pmcp-0.5.0-mu1161-791"   # release v1.5.0: CarPlay + Android Auto (aa/, installed separately)
+PMCP_BASE_VERSION = "pmcp-0.5.0-ui1-mu1161-791"   # branch ui-menu: release candidate (gem-menu) + package ui (own id, never a release card)
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)
@@ -36,7 +36,9 @@ JAVA_PACKAGES = [("nai", "nai: AID map stays while the iPhone navigates (NavActi
                  ("zoom", "zoom: CarPlay map zoom with the steering wheel arrows"),
                  ("dn", "dn: CarPlay map day/night on the AID (sent again after start)"),
                  # optional (not in button 3), output off until enabled with speedlimit-mode
-                 ("sl", "sl: native VW map speed limit in the AID road text (optional, output off until enabled)")]
+                 ("sl", "sl: native VW map speed limit in the AID road text (optional, output off until enabled)"),
+                 # optional and experimental (not in main 4): a settings page in App-Connect settings (ui/README.md)
+                 ("ui", "ui: CarPlay settings page in App-Connect settings (optional)")]
 # rg = everything for route guidance in one package: Tomasz's port + his lanes, our VW U-turn lanes, his MU1367
 # v1.4.3 distance bar / street name / feed recovery, the maneuver fallbacks, the quiet-route hold (v1.4.3) and, since
 # v1.5.0, the VW arrows from Android Auto (rg/build.sh lanes-uturn-asf-m-aa: lanes-uturn-asf-m + rg/lanes/aa.py; with
@@ -94,6 +96,10 @@ PAYLOAD = {
     # everything first; its hashes are not known here, so it is not in JAVA_OLD)
     "JAR_sl": (PROJ / "build/sl-mu1161/pmcp-sl.jar",
                "37b5d9488b818e4a4de58dc9541b6618de364e5a46d81439c1f3206762e5249f", 16527, "jars/pmcp-sl2.jar"),
+    # Optional settings page (ui/build.sh): the factory AbstractViewHandler with five guarded hooks + com.pmcp.ui. Its
+    # speed-limit row writes the same mode file as speedlimit-mode, under the same lock and rules.
+    "JAR_ui": (PROJ / "build/ui-mu1161/pmcp-ui.jar",
+               "bf1dc3e19369324f7009c0215caba62fc6acbe7cbd51d7873914fa027c28b2e8", 23447, "jars/pmcp-ui.jar"),
     # Tomasz's driver patch + our log gate: his RGI receive log only with /dev/shmem/pmcp-rgi-debug (rg/driver/)
     "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/ipod-drvr-iap2-gated.so",
                   "519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3", 743272, "rg/ipod-drvr-iap2.so"),
@@ -508,9 +514,9 @@ AA_EXP_MENU = []
 
 # main menu 4, in order: unsupported route guidance / Java files back to factory (features-reset), an earlier card's
 # RG driver/reader and Java packages replaced by this card's (rg-update, java-update), the route guidance system (rg
-# needs it), then every package except the optional sl. Steps already done answer *_ALREADY_* and are skipped, so the
+# needs it), then every package except the optional sl and ui. Steps already done answer *_ALREADY_* and are skipped, so the
 # same button brings any earlier pmcp install to this card's set. The map (2) and Android Auto (3) are not touched.
-FEATURES = ["features-reset", "rg-update", "java-update", "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
+FEATURES = ["features-reset", "rg-update", "java-update", "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n not in ("sl", "ui")]
 
 
 def menu_script(args, label):

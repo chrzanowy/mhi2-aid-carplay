@@ -67,8 +67,8 @@ runfi() { rm -f "$W/cnt"; PMCP_KILL_AT=$1 PMCP_FI_CNT=$W/cnt PMCP_FI_LOG=$W/filo
 fx() {
     case "$1" in
         aa-unknown) printf 'X' >> "$U/carplaymaps/aa/aa-most-feeder"; echo "gamma-11111111-22222222-33333333" > "$U/carplaymaps/aa/AA_BOOT" ;;
-        java-unknown) echo X > "$U/eso/hmi/lsd/jars/pmcp-ui.jar"; read _s _j < "$U/carplaymaps/HMI_BOOT"
-                      echo "$_s+ui-0479f0fa $_j pmcp-ui.jar" > "$U/carplaymaps/HMI_BOOT" ;;
+        java-unknown) echo X > "$U/eso/hmi/lsd/jars/pmcp-zz.jar"; read _s _j < "$U/carplaymaps/HMI_BOOT"
+                      echo "$_s+zz-0479f0fa $_j pmcp-zz.jar" > "$U/carplaymaps/HMI_BOOT" ;;
         rg-unknown) printf 'Z' >> "$U/carplaymaps/rg/rgi-observer" ;;
         dio-mixed) echo junk > "$U/eso/bin/apps/dio_manager" ;;
         *) echo "PMCP_FAIL=FX_$1"; return 1 ;;
@@ -112,8 +112,8 @@ galsim() {
 state() { run status; sed -n 's/^Unit state: //p' "$W/out"; }
 
 # every chain ends with restore (factory again), so a chain can be left out without changing the others
-OWN=("install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" \
-     "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-on zoom" "restore" \
+OWN=("install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" "java-on ui" \
+     "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-off ui" "java-on zoom" "restore" \
      "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore")
 # the main menu (2, 3, 4) over versions this card does not support
 MAIN=("map-install map-square-fps40" "aa-install" "fx:aa-unknown" "aa-install" "rg-system-on" "java-on rg" "java-on nai" \
@@ -122,8 +122,8 @@ OWN+=("${MAIN[@]}")
 if [ "$OLDCARDS" = yes ]; then
 CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on rglu" "rg-update" "java-update" "java-on np" \
        "switch map-clean-l40" "java-off np" "java-off rg" "rg-system-off" "java-off nai" "restore" \
-       "install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" \
-       "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-on zoom" "restore" \
+       "install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" "java-on ui" \
+       "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-off ui" "java-on zoom" "restore" \
        "exp:install map-clean" "exp:aa-on gamma" "aa-remove" "exp:aa-on most" "restore" \
        "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore" \
        "exp:install map-clean" "exp:aa-on gamma" "aa-on" "restore" \
