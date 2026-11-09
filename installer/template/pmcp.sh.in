@@ -569,7 +569,7 @@ do_aa_on() {
         # always means a trial start), then the files
         A="${AADIR:?}"
         rm -f "$A/feeder.conf.pmcp-new" "$A/aa-most-feeder.pmcp-new" "$A/gal-hook.conf.pmcp-new" \
-            "$A/libgal_hook.so.pmcp-new" "$A/AA_BOOT.pmcp-new" 2>/dev/null
+            "$A/libgal_hook.so.pmcp-new" "$A/AA_BOOT.pmcp-new" "$A/AA_BOOT.pmcp-empty" 2>/dev/null
         cp "$PAYLOAD/$M_PATH" "$A/feeder.conf.pmcp-new" && chmod 644 "$A/feeder.conf.pmcp-new" || fail "AA_MODE_STAGE_FAILED"
         cp "$PAYLOAD/$F_PATH" "$A/aa-most-feeder.pmcp-new" && chmod 755 "$A/aa-most-feeder.pmcp-new" || fail "AA_FEEDER_STAGE_FAILED"
         cp "$PAYLOAD/$C_PATH" "$A/gal-hook.conf.pmcp-new" && chmod 644 "$A/gal-hook.conf.pmcp-new" || fail "AA_HOOK_CONF_STAGE_FAILED"
@@ -578,20 +578,25 @@ do_aa_on() {
         check "$A/feeder.conf.pmcp-new" "$M_SHA" "$M_SIZE" STAGED_AA_MODE
         check "$A/aa-most-feeder.pmcp-new" "$F_SHA" "$F_SIZE" STAGED_AA_FEEDER
         check "$A/gal-hook.conf.pmcp-new" "$C_SHA" "$C_SIZE" STAGED_AA_HOOK_CONF
-        # the set id does not cover feeder.conf: an earlier set with the same id (030b7df2: same hook, feeder and hook
-        # settings, 2 Mbit/s) is still a different set, so its confirmation and trial markers go before anything changes
-        if [ "`cat "$A/AA_BOOT" 2>/dev/null`" = "$SET" ]; then
-            rm -f "$PERSIST/aa-ok.$SET" "$PERSIST/aa-trial.$SET" "$RAMDISK/pmcp-aa-trial.$SET" 2>/dev/null
-            [ ! -e "$PERSIST/aa-ok.$SET" ] && [ ! -e "$PERSIST/aa-trial.$SET" ] && [ ! -e "$RAMDISK/pmcp-aa-trial.$SET" ] \
-                || fail "AA_MARKER_REMOVE_FAILED"
-        fi
+        # Every AA confirmation and trial marker goes before anything changes: the set id does not cover feeder.conf (an
+        # earlier set with the same id, 030b7df2: same hook, feeder and hook settings, 2 Mbit/s, is still a different
+        # set), and a marker of the NEW id can exist from an earlier change (A150). The new set always gets a trial.
+        rm -f "$PERSIST"/aa-ok.* "$PERSIST"/aa-trial.* "$RAMDISK"/pmcp-aa-trial.* 2>/dev/null
+        for _o_m in "$PERSIST"/aa-ok.* "$PERSIST"/aa-trial.* "$RAMDISK"/pmcp-aa-trial.*; do
+            [ -e "$_o_m" ] && fail "AA_MARKER_REMOVE_FAILED"
+        done
         echo "$SET" > "$A/AA_BOOT.pmcp-new" || fail "AA_SET_STAGE_FAILED"
         [ "`cat "$A/AA_BOOT.pmcp-new" 2>/dev/null`" = "$SET" ] || fail "AA_SET_STAGE_READBACK_FAILED"
-        mv "$A/AA_BOOT.pmcp-new" "$A/AA_BOOT" || fail "AA_SET_ACTIVATION_FAILED_RUN_AA_REMOVE"
+        # AA_BOOT empty while the files change (the gal wrapper runs the factory gal for an empty AA_BOOT, and a mix of
+        # files is no known set for status), the new id only after the last file (A150)
+        : > "$A/AA_BOOT.pmcp-empty" || fail "AA_SET_STAGE_FAILED"
+        mv "$A/AA_BOOT.pmcp-empty" "$A/AA_BOOT" || fail "AA_SET_DEACTIVATION_FAILED_RUN_AA_REMOVE"
+        [ -s "$A/AA_BOOT" ] && fail "AA_SET_DEACTIVATION_FAILED_RUN_AA_REMOVE"
         mv "$A/libgal_hook.so.pmcp-new" "$A/libgal_hook.so" || fail "AA_HOOK_ACTIVATION_FAILED_RUN_AA_REMOVE"
         mv "$A/aa-most-feeder.pmcp-new" "$A/aa-most-feeder" || fail "AA_FEEDER_ACTIVATION_FAILED_RUN_AA_REMOVE"
         mv "$A/gal-hook.conf.pmcp-new" "$A/gal-hook.conf" || fail "AA_HOOK_CONF_ACTIVATION_FAILED_RUN_AA_REMOVE"
         mv "$A/feeder.conf.pmcp-new" "$A/feeder.conf" || fail "AA_MODE_ACTIVATION_FAILED_RUN_AA_REMOVE"
+        mv "$A/AA_BOOT.pmcp-new" "$A/AA_BOOT" || fail "AA_SET_ACTIVATION_FAILED_RUN_AA_REMOVE"
     else
         # off: (an unknown AA state never gets here: the unit state is PARTIAL then)
         NEWA="${ROOT:?}/.aa-new"

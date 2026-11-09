@@ -79,6 +79,7 @@ fx() {
 confirm_set() {
     if [ -s "$U/carplaymaps/aa/AA_BOOT" ]; then   # likewise for the AA set
         mkdir -p "$W/unit/mnt/persist/pmcp"; read s < "$U/carplaymaps/aa/AA_BOOT"
+        rm -f "$W/unit/mnt/persist/pmcp"/aa-ok.*   # like pmcp.sh aa-confirm: one confirmed AA set
         touch "$W/unit/mnt/persist/pmcp/aa-trial.$s" "$W/unit/mnt/persist/pmcp/aa-ok.$s"
     fi
     [ -s "$U/carplaymaps/HMI_BOOT" ] || return 0
@@ -184,6 +185,22 @@ for ((t=0; t<${#CHAIN[@]}; t++)); do
         now_aa=$(cat "$U/carplaymaps/aa/AA_BOOT" 2>/dev/null)
         if [ "$gs" = "gal=use=yes" ] && [ "$now_aa" != "$before_aa" ] && [ ! -e "$W/tpl/mnt/persist/pmcp/aa-ok.$now_aa" ]; then
             bad "[$target] kill@$n ($killed): untested AA set runs the hook without a trial: '$now_aa' (was '$before_aa')"
+        fi
+        # use=yes after a change: the hook, feeder and hook settings are the ones the AA_BOOT id names
+        # (id = mode-hook8-feeder8-conf8), and with the id unchanged feeder.conf is the one from before the action.
+        # A state left exactly as it was before the action (fx:aa-unknown: its files under its own confirmed id) is not
+        # this action's doing.
+        _ad="$U/carplaymaps/aa"; _same=yes
+        for _f in AA_BOOT libgal_hook.so aa-most-feeder gal-hook.conf feeder.conf; do
+            cmp -s "$_ad/$_f" "$W/tpl/mnt/app/carplaymaps/aa/$_f" || _same=no
+        done
+        if [ "$gs" = "gal=use=yes" ] && [ $_same = no ]; then
+            _want=$(echo "$now_aa" | cut -d- -f2-4)
+            _have="$(shasum -a 256 "$_ad/libgal_hook.so" | cut -c1-8)-$(shasum -a 256 "$_ad/aa-most-feeder" | cut -c1-8)-$(shasum -a 256 "$_ad/gal-hook.conf" | cut -c1-8)"
+            [ "$_want" = "$_have" ] || bad "[$target] kill@$n ($killed): hook runs with files of another set: AA_BOOT '$now_aa', files $_have"
+            if [ "$now_aa" = "$before_aa" ] && ! cmp -s "$_ad/feeder.conf" "$W/tpl/mnt/app/carplaymaps/aa/feeder.conf"; then
+                bad "[$target] kill@$n ($killed): confirmed set '$now_aa' runs with another feeder.conf"
+            fi
         fi
         case "$gs" in "gal=pmcp-aa: "*) bad "[$target] kill@$n ($killed): gal wrapper without the factory gal copy (AA dead)" ;; esac
         if [ "$target" = rg-update ]; then
