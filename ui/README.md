@@ -8,6 +8,7 @@ touch input and a back button. Main menu *4. Install additional features* instal
 |---|---|---|
 | Changes | Save: everything works | During a trial start (the first start after a change from the card), the same as GEM *5. Confirm*: the Java set (`ok.SET`) and/or the Android Auto set (`aa-ok.SET`) now load on every start. Without it, the next restart loads none of our JARs (lsd.sh; not the previously saved set). No SD card needed. |
 | Speed limit | Off / Before street name / Street name (trial) | `/mnt/persist/pmcp/native-speedlimit-mode`, the same file and bytes as the GEM buttons (`pmcp.sh speedlimit-mode off\|turnto\|street`). Package `sl` reads it within about a second. |
+| Android Auto output | pmcp MOST writer (default) / CarPlay bridge (fallback) | `PMCP_AA_OUTPUT=direct\|ring` in `/mnt/persist/pmcp/aa-extra.conf`, the same line as `pmcp.sh aa-output`. Applies at the next phone connection, no trial, no confirmation change. Only with Android Auto from pmcp in the Google Maps on the AID mode (`AA_BOOT` "gamma-…"), not after the rescue card or with `AA_DISABLED`. A saved value other than exactly `direct` or `ring` counts as the default, as in the feeder. |
 
 The page applies the same rules as GEM. *Off* is always allowed. The other two need package `sl` in a confirmed Java
 set that is running in this boot, and *Before street name* also needs `rg`. A choice that is not allowed shows the

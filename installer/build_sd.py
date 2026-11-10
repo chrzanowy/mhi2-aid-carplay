@@ -103,7 +103,7 @@ PAYLOAD = {
     # Optional settings page (ui/build.sh): the factory AbstractViewHandler with five guarded hooks + com.pmcp.ui. Its
     # speed-limit row writes the same mode file as speedlimit-mode, under the same lock and rules.
     "JAR_ui": (PROJ / "build/ui-mu1161/pmcp-ui.jar",
-               "e11bd8d3e93a7f2671d9ae8b5e354a428c5c8f17d66f0f8b97b9a88cc14a17b1", 26657, "jars/pmcp-ui.jar"),
+               "5e6d6b056a9b884254709eca7e6b629be3f18e1b130a3b0f5ef345fd3ba8ce1a", 29444, "jars/pmcp-ui.jar"),
     # Tomasz's driver patch + our log gate: his RGI receive log only with /dev/shmem/pmcp-rgi-debug (rg/driver/)
     "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/ipod-drvr-iap2-gated.so",
                   "519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3", 743272, "rg/ipod-drvr-iap2.so"),
