@@ -18,6 +18,8 @@ pmcp's own MOST writer instead of the CarPlay bridge; the bridge stays as a fall
 - **Output switch on the settings page:** App-Connect > Settings > AID navigation configuration > "Android Auto
   output": "pmcp MOST writer (default)" or "CarPlay bridge (fallback)". Active when this card's Android Auto set is on;
   it writes the same line as GEM and applies at the next phone connection.
+- **Settings page in a new file (`pmcp-ui2.jar`).** From v1.5.1, main menu 4 replaces the v1.5.1 page in place and
+  keeps `sl` and its speed-limit mode (an update test from a v1.5.1 unit is in the host tests).
 - **Output switch without a trial.** GEM `aa_advanced`: "AA output: pmcp MOST writer (default, from the next
   connection)" and "AA output: CarPlay bridge (fallback, from the next connection)". The switch is one line in
   `/mnt/persist/pmcp/aa-extra.conf` (`PMCP_AA_OUTPUT=direct|ring`); it changes no file of the set and no confirmation,

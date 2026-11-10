@@ -103,7 +103,7 @@ PAYLOAD = {
     # Optional settings page (ui/build.sh): the factory AbstractViewHandler with five guarded hooks + com.pmcp.ui. Its
     # speed-limit row writes the same mode file as speedlimit-mode, under the same lock and rules.
     "JAR_ui": (PROJ / "build/ui-mu1161/pmcp-ui.jar",
-               "5fea8d94bdb45b6556e3a7eec660326a88aa485b4539408f75796e4d814bc395", 29485, "jars/pmcp-ui.jar"),
+               "5fea8d94bdb45b6556e3a7eec660326a88aa485b4539408f75796e4d814bc395", 29485, "jars/pmcp-ui2.jar"),
     # Tomasz's driver patch + our log gate: his RGI receive log only with /dev/shmem/pmcp-rgi-debug (rg/driver/)
     "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/ipod-drvr-iap2-gated.so",
                   "519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3", 743272, "rg/ipod-drvr-iap2.so"),
@@ -285,6 +285,10 @@ JAVA_OLD = [
     # AA hold). 01221496 never went to a unit as pmcp-guidance4.jar (the 1.5.0 candidate card 5b099f03 was not written to
     # an SD card), so no row for that file name is needed.
     ("rg-aa", "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", "9af25147b2bad492cde17451966f689a37cd077f", 53309, "pmcp-guidance-aa2.jar", "rg"),
+    # v1.5.1 ui (settings page without the Android Auto output row): this card's ui is pmcp-ui2.jar, so java-update
+    # (main menu 4) replaces it in place and keeps sl and its mode (without this row the v1.5.1 set is unknown and 4
+    # resets the whole Java set, dropping sl)
+    ("ui", "e11bd8d3e93a7f2671d9ae8b5e354a428c5c8f17d66f0f8b97b9a88cc14a17b1", "93b1347fac382331e0900c73ac331a22259b7681", 26657, "pmcp-ui.jar", "ui"),
 ]
 for name in VARIANTS:
     PAYLOAD["CORE_" + name] = (TUNING / name / "core.so", None, 75099, "core/%s/core.so" % name)

@@ -550,7 +550,7 @@ for SH in "$@"; do
     ALL="$NAI+$NP+$RG+$ZOOM+$DN+$UI"
     [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "one set with all six packages (with ui)" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ -e "$U/carplaymaps/rg/SYSTEM_ON" ] && ok "RG system marker" || bad "no SYSTEM_ON"
-    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance4.jar*pmcp-dn.jar:/X/lsd/jars/pmcp-ui.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
+    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance4.jar*pmcp-dn.jar:/X/lsd/jars/pmcp-ui2.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$ALL" "one confirm for everything"
     allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "remove everything: factory state"
@@ -1359,9 +1359,9 @@ PEOF
     run install map-square-fps40; rc_is 0; run java-on nai; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     jars_before=$(cd "$U/eso/hmi/lsd/jars" && ls); boot_before=$(cat "$U/carplaymaps/HMI_BOOT")
     run java-on ui; rc_is 0; expect_out "PMCP_JAVA_ON_OK package=ui set=$NAI+$UI" "ui on, set nai+ui"
-    [ "$(h "$U/eso/hmi/lsd/jars/pmcp-ui.jar")" = "$(jsha ui)" ] && ok "pmcp-ui.jar in place" || bad "pmcp-ui.jar"
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$UI jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-ui.jar" ] \
-        && ok "next start: one trial loading pmcp-ui.jar" || bad "boot: $o"
+    [ "$(h "$U/eso/hmi/lsd/jars/pmcp-ui2.jar")" = "$(jsha ui)" ] && ok "pmcp-ui2.jar in place" || bad "pmcp-ui2.jar"
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$UI jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-ui2.jar" ] \
+        && ok "next start: one trial loading pmcp-ui2.jar" || bad "boot: $o"
     o=$(unit_boot); [ "$o" = "boot=no set=$NAI+$UI jars=" ] && ok "without Confirm: the next start is factory" || bad "boot: $o"
     run java-retry; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run java-off ui; rc_is 0; expect_out "PMCP_JAVA_OFF_OK package=ui" "ui off"
@@ -1375,7 +1375,7 @@ PEOF
     fresh_unit; factory=$(snapshot "$W/unit")
     run map-install map-square-fps40; rc_is 0; run java-on ui; rc_is 0
     feat; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "main 4 with ui on"
-    [ "$(h "$U/eso/hmi/lsd/jars/pmcp-ui.jar")" = "$(jsha ui)" ] && case "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" in *"+$UI"|*"+$UI+"*) true ;; *) false ;; esac \
+    [ "$(h "$U/eso/hmi/lsd/jars/pmcp-ui2.jar")" = "$(jsha ui)" ] && case "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" in *"+$UI"|*"+$UI+"*) true ;; *) false ;; esac \
         && ok "main 4 keeps ui in the set" || bad "after main 4: $(cat "$U/carplaymaps/HMI_BOOT")"
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
@@ -1404,7 +1404,7 @@ PEOF
     fresh_unit; factory=$(snapshot "$W/unit")
     run install map-square-fps40; rc_is 0; run rg-system-on; rc_is 0; run java-on rg; rc_is 0; run java-on sl; rc_is 0
     run java-on ui; rc_is 0
-    o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance4.jar:/X/lsd/jars/pmcp-sl2.jar:/X/lsd/jars/pmcp-ui.jar) ok "rg, sl and ui load together" ;; *) bad "boot: $o" ;; esac
+    o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance4.jar:/X/lsd/jars/pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "rg, sl and ui load together" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0
     run speedlimit-mode turnto; rc_is 0
     run java-off ui; rc_is 0
@@ -1522,6 +1522,28 @@ PEOF
         run aa-install; rc_is 1; expect_out "AA_INSTALL_NEEDS" "$bad_case: 3 refuses"
         [ "$before" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "$bad_case: nothing changed" || bad "$bad_case: 3 changed the unit"
     done
+
+    echo "[48] v1.5.1 card (ui e11bd8d3 in pmcp-ui.jar, sl in turnto mode) -> main menu 4: ui replaced in place, sl and its mode stay"
+    V151P="${PMCP_V151_SD:-$SDB/../sd-754c9d82}/pmcp/pmcp.sh"
+    run151() { PMCP_TEST_ROOT="$W/unit" $SH "$V151P" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
+    if card_ok "$V151P" 754c9d82; then
+        fresh_unit; factory=$(snapshot "$W/unit")
+        run151 map-install map-square-fps40; rc_is 0; run151 rg-system-on; rc_is 0
+        for p in nai np rg zoom dn sl ui; do run151 java-on $p; rc_is 0; done
+        new_start; unit_boot > /dev/null; run151 java-confirm; rc_is 0
+        run151 speedlimit-mode turnto; rc_is 0
+        run status; expect_out "packages of an earlier card: ui" "v1.5.1 ui reported as an earlier card's package"
+        feat; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "4: java-update replaces the v1.5.1 ui"; expect_out "PMCP_FEATURES_ON_OK" "4 done"
+        grep -q "PMCP_FEATURES_RESET_OK" "$W/out" && bad "4 reset the Java set (sl would be lost)" || ok "4 did not reset the Java set"
+        [ ! -e "$U/eso/hmi/lsd/jars/pmcp-ui.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-ui2.jar")" = "$(jsha ui)" ] \
+            && ok "pmcp-ui.jar gone, pmcp-ui2.jar in place" || bad "ui JARs after 4: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
+        case "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" in *"+$(jid sl)+"*"$UI") ok "set keeps sl, new ui" ;; *) bad "set: $(cat "$U/carplaymaps/HMI_BOOT")" ;; esac
+        new_start; o=$(unit_boot); case "$o" in "boot=trial "*pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "one trial start with sl and the new ui" ;; *) bad "boot: $o" ;; esac
+        run java-confirm; rc_is 0
+        [ "$(cat "$W/unit/mnt/persist/pmcp/native-speedlimit-mode" 2>/dev/null)" = turnto ] && ok "speed-limit mode kept" || bad "speed-limit mode lost"
+        run status; expect_out "Unit state: JAVA" "state JAVA"; grep -q "earlier card" "$W/out" && bad "earlier package left" || ok "no earlier package left"
+        run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: exact factory tree" || bad "restore after v1.5.1 -> this card left changes"
+    fi
 
 done
 
