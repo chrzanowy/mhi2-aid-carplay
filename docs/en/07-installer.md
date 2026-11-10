@@ -2,7 +2,7 @@
 
 Status: **tested in the car (October 2026; v1.4 route guidance November 2026).** Code: [`installer/`](../../installer/).
 The SD build is made by `installer/build_sd.py` (the output directory holds `BUILD-MANIFEST.txt` with the hash of every file;
-the version shown in GEM is `pmcp-0.5.0-mu1161-791-<build id>`, where the id is the first 8 hex digits of the SHA-256 of the
+the version shown in GEM is `pmcp-0.5.1-mu1161-791-<build id>`, where the id is the first 8 hex digits of the SHA-256 of the
 manifest and the `pmcp.sh` template). The install card is assembled by `installer/build_card_install.py`, the rescue card by
 `installer/build_rescue.py`.
 
@@ -209,8 +209,9 @@ Order (one visit to the car):
 Updating from v1.5.0, v1.4.x or v1.0-v1.3: "1. Check" (state `JAVA`; "7. Status" may show "Route guidance system: old"
 and "packages of an earlier card: rglu"), then "2. Install CarPlay" (usually "already installed"), "3. Install Android
 Auto" if Android Auto is used, "4. Install additional features" (runs `rg-update` and `java-update`); only if 3 or 4
-installed something: restart (trial boot) → "5. Confirm" in that boot (from v1.5.0 all three usually answer "already
-installed" / "nothing changed": no restart, no 5). Make a new rescue card too (see below).
+installed something: restart (trial boot) → "5. Confirm" in that boot or "Save: everything works" on the settings page (from v1.5.0,
+4 adds `ui`, so a restart and 5 are needed; when all three answer "already installed" / "nothing changed": no restart,
+no 5). Make a new rescue card too (see below).
 The rescue card is for emergencies after Confirm; testing it first is optional.
 
 Step-by-step guide for the car: [09-in-car-guide.md](09-in-car-guide.md).

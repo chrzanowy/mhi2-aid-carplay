@@ -119,11 +119,14 @@ PART 2 - IN THE CAR
        Android Auto; a version this card does not support is removed first and replaced).
     4. "4. Install additional features: ..."  ->  PMCP_FEATURES_ON_OK
        (it replaces the earlier route guidance files and packages, also an experimental rg-aa)
-       From v1.5.0, 2, 3 and 4 usually say "already installed" / "everything was already on,
-       nothing changed": then nothing changed - no restart and no 5 needed, you are done.
+       From v1.5.0, 4 adds the settings page (ui), so steps 5 and 6 are needed. Only if 2, 3 and 4
+       all say "already installed" / "everything was already on, nothing changed" (an update
+       to a card with the same features), nothing changed - no restart and no 5 needed.
     5. Only if 3 or 4 installed something: restart, this start is a TRIAL. Check the arrows, lanes, street name (and Android Auto,
        if you pressed 3: connect the phone).
-    6. "5. Confirm: everything works ..." in this same start, then restart.
+    6. "5. Confirm: everything works ..." in this same start, then restart. Or, without the
+       card: App-Connect > Settings > AID navigation configuration > Changes >
+       "Save: everything works".
     7. Coming from v1.0 - v1.3: make a NEW CARD 2 with the copy helper (option 2): rescue
        cards made before v1.4 do not restore the new route guidance driver.
 

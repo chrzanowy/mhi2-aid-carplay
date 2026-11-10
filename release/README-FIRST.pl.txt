@@ -123,11 +123,14 @@ CZĘŚĆ 2 - W AUCIE
        eksperymentalnej; wersję, której ta karta nie obsługuje, najpierw usuwa i zastępuje).
     4. "4. Install additional features: ..."  ->  PMCP_FEATURES_ON_OK
        (zastępuje wcześniejsze pliki prowadzenia i paczki, także eksperymentalne rg-aa)
-       Z v1.5.0 zwykle 2, 3 i 4 piszą "already installed" / "everything was already on,
-       nothing changed": wtedy nic się nie zmieniło - bez restartu i bez 5, gotowe.
+       Z v1.5.0 przycisk 4 dodaje stronę ustawień (ui), więc kroki 5 i 6 są potrzebne. Tylko
+       gdy 2, 3 i 4 wszystkie piszą "already installed" / "everything was already on, nothing
+       changed" (karta z tymi samymi funkcjami), nic się nie zmieniło - bez restartu i bez 5.
     5. Tylko jeśli 3 albo 4 coś zainstalowały: restart, ten start jest PRÓBNY. Sprawdź strzałki, pasy, nazwę ulicy (i Android Auto,
        jeśli naciśnięto 3: podłącz telefon).
-    6. "5. Confirm: everything works ..." w tym samym starcie, potem restart.
+    6. "5. Confirm: everything works ..." w tym samym starcie, potem restart. Albo bez karty:
+       App-Connect > Settings > AID navigation configuration > Changes >
+       "Save: everything works".
     7. Przy przejściu z v1.0 - v1.3: zrób NOWĄ KARTĘ 2 pomocnikiem kopiowania (opcja 2):
        karty ratunkowe sprzed v1.4 nie przywracają nowego sterownika prowadzenia.
 

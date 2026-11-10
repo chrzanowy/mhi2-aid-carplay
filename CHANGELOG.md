@@ -3,9 +3,43 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
-## Unreleased
+## v1.5.1 (2026-11-10)
 
-A new GEM menu: one button per part, stable versions only.
+A new GEM menu (one button per part, stable versions only) and a settings page on the unit. Installer version
+`pmcp-0.5.1-mu1161-791-<build id>`. Android Auto stays 0.1, as in v1.5.0.
+
+- **Settings page on the unit: App-Connect > Settings > "AID navigation configuration"** (package `ui`,
+  `pmcp-ui.jar`). It uses the factory look (native rows, drop-down list, touch, back button) and has two rows:
+  - **Changes**: shows whether this start is a trial ("Not saved (trial start)", "Saved", "Android Auto not saved",
+    "Android Auto: connect the phone", "Off (rescue card)").
+  - **Speed limit**: Off / Before street name / Street name (trial). It writes the same file as
+    `pmcp.sh speedlimit-mode` (`/mnt/persist/pmcp/native-speedlimit-mode`), under the same lock and rules: `sl` in a
+    confirmed, running Java set; "Before street name" also needs `rg`. The change applies within about a second, no
+    restart.
+- **"Save: everything works" on the unit, no SD card needed.** It does the same as GEM "5. Confirm", during a trial
+  start only:
+  - CarPlay features: the set's trial marker exists and this start is its trial (`last-boot` "set=SET use=trial").
+  - Android Auto: its trial marker and this start's RAM marker exist.
+  - Never after the rescue card.
+  - Without Save (or 5), the next start loads none of our JARs, as before.
+- **Speed-limit mode moved from GEM to the page.** The three GEM mode buttons are gone. "Speed limit status: mode and
+  native VW limit data (read-only)" stays in `features_advanced`; `pmcp.sh speedlimit-mode` stays for the command line.
+- **"4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)" now also
+  installs `ui`.** "On ui" / "Off ui" are in `features_advanced`. `sl` stays optional.
+- **Known limits of `ui`:**
+  - MU1161 with the 1280x640 VW skin only; on any other view size the page stays factory and logs why.
+  - If a trial start is not saved, the next start is factory HMI (no JARs), so the page is not there. Use GEM
+    "6. Try again: the next start is a new trial".
+  - Save cannot check the card, the firmware or the installed files (GEM 5 can). It relies on the trial running in
+    this start.
+  - The marker file is synced, its directory is not: a power cut right after Save can lose it. The next start is then
+    factory, which is the safe side.
+  - Cards v1.5.0 and older see a Java set with `ui` as PARTIAL and change nothing. Press "Off ui" first, or use a card
+    of v1.5.1 or later.
+  - Off switch for one start: `/ramdisk/pmcp-ui-off`. Log: `/ramdisk/pmcp-ui.log`. A lifecycle error in the
+    App-Connect settings view turns the page off until the next start.
+
+### New GEM menu
 
 - **Main screen `pmcp_stream_map_aid`** (was `pmcp_CarPlay_AID`): "1. Check card and unit", "2. Install CarPlay",
   "3. Install Android Auto", "4. Install additional features", "5. Confirm", "6. Try again", "7. Status",
@@ -27,10 +61,22 @@ A new GEM menu: one button per part, stable versions only.
   remove). Android Auto is installed only from the main screen.
 - **CarPlay log:** "CP save log" keeps this start's supervisor log, route guidance status and boot log for the log
   card (card 3), which now copies CarPlay logs too. "Delete saved logs" removes AA and CarPlay logs.
-- **Updating from v1.5.0 / v1.4.x:** 2, 3 (if you use Android Auto), 4; only if 3 or 4 installed something: restart,
-  then 5 in that start (from v1.5.0 all three usually answer "already installed" / "nothing changed": nothing to do).
+- **Updating from v1.5.0:**
+  1. On the new card, press "2. Install CarPlay …" (usually "already installed"), "3. Install Android Auto …" if you
+     use it, then "4. Install additional features …" (it adds `ui` and keeps what is current).
+  2. Restart the unit (volume knob ~10 s).
+  3. In that trial start, GEM "5. Confirm: everything works (in the first start after 3 or 4)", or on the unit
+     App-Connect > Settings > AID navigation configuration > Changes > "Save: everything works".
+  - Speed-limit users: the saved mode stays; change it on the page from now on.
+  - From v1.4.x: the same three buttons, restart, then 5 or Save.
 - Tests: new host tests [32]–[39] for the main menu; the power-loss chain covers 2, 3 and 4 over unsupported versions
   and checks that pressing the same button again finishes an interrupted run.
+- **Installer tests run about twice as fast:** the full pre-release set takes ~15 min instead of 30–40, with the same
+  checks.
+  - The shells (ksh, mksh) run in parallel in one run, each in its own work dir.
+  - The power-loss test runs the chain once and keeps the tree before each action, then runs the kill cases in
+    parallel workers; in full mode it cross-checks the kept trees against a replay.
+  - One `shasum` per tree snapshot. `PMCP_FAULT_QUICK=1` gives a short daily run.
 
 ## v1.5.0 (2026-11-07)
 

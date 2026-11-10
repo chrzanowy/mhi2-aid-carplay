@@ -32,7 +32,8 @@ This repository holds only what is specific to this head unit. It builds on the 
 | Day/night switching of the cluster map | works |
 | Speed limit from the phone (`showSpeedLimit=yes`) | shows nothing on this unit |
 | Android Auto 0.1 (open alpha, v1.5.0): Google Maps picture on the AID, VW arrows from Google Maps | works, with known limits: [Android Auto](#android-auto-on-the-aid-android-auto-01-open-alpha) |
-| Optional (v1.4.1, package `sl`; mode buttons fixed in v1.4.2 by amjad-alarori): the car's own VW map speed limit in front of the street name, or a trial in CurrentPositionInfo | 50 → 70 km/h confirmed on an e-Golf (AID 795A); not yet tried on AID 791. [Details](docs/en/16-native-speed-limits.md) |
+| Settings page on the unit (v1.5.1, package `ui`): App-Connect > Settings > AID navigation configuration; "Save: everything works" confirms a trial start without the SD card | new in v1.5.1, [details](ui/README.md) |
+| Optional (v1.4.1, package `sl`; mode buttons fixed in v1.4.2 by amjad-alarori, mode set on the settings page since v1.5.1): the car's own VW map speed limit in front of the street name, or a trial in CurrentPositionInfo | 50 → 70 km/h confirmed on an e-Golf (AID 795A); not yet tried on AID 791. [Details](docs/en/16-native-speed-limits.md) |
 
 iAP2 route guidance carries no numeric speed limit (research by
 [maxim-smirnov/mhi2-carplay-cluster](https://github.com/maxim-smirnov/mhi2-carplay-cluster) on iOS 26.6/27);
@@ -63,10 +64,20 @@ More photos and an interactive model of the AID frame (where the video lands on 
 | [`hmiextras/`](hmiextras/) | Steering-wheel zoom and day/night resend for the cluster map | Java (HMI) |
 | [`aa/`](aa/) | Android Auto on the AID: `gal` wrapper, MacsInSpace's hook (pinned, no SD-card paths), our MOST feeder | `gal` wrapper, files in `carplaymaps/aa/` |
 | [`speedlimit/`](speedlimit/) | Optional native VW map speed limit in the cluster's navigation text | Java (HMI), saved opt-in setting |
+| [`ui/`](ui/) | Settings page in the factory App-Connect settings: trial start Save, speed-limit mode | Java (HMI) |
 | [`installer/`](installer/) | SD-card installer run from the M.I.B. GEM menu, the rescue card, host tests | nothing by itself |
 | [`buildtools/`](buildtools/) | Host checks: try/catch guard around every hook call, J9 CDC API check | nothing |
 | [`scripts/`](scripts/) | Read-only firmware readers (QNX6, IFS, LZOZ, JXE → JAR), SD-card tester | nothing |
 | [`firmware/`](firmware/) | Hashes and notes for the official K4525 update (the only allowed firmware) | nothing |
+
+### Settings page on the unit (`ui`)
+
+App-Connect > Settings > **AID navigation configuration** (installed by main menu 4). Two rows:
+- **Changes**: "Save: everything works" confirms a trial start like GEM "5. Confirm", without the SD card.
+- **Speed limit**: Off / Before street name / Street name (trial), applies within a second (needs `sl`; "Before street
+  name" also `rg`).
+
+Details and limits: [ui/README.md](ui/README.md).
 
 ### Map layout variants (GEM → `pmcp_advanced` → `carplay_advanced`)
 
@@ -99,8 +110,9 @@ All variants declare a physical size of 240×144 mm. Switching a variant swaps o
 
 **Updating from v1.5.0, v1.4.x or v1.0-v1.3:** card 1 of this release, "1. Check", then **2. Install CarPlay** (usually
 "already installed"), **3. Install Android Auto** if you use Android Auto, **4. Install additional features**. If 3 or 4
-installed something: restart (trial start) → test → **5. Confirm** in that start. If they all answer "already
-installed" / "nothing changed" (usual from v1.5.0), nothing changed: no restart and no 5 needed. Button 4 replaces the earlier driver, reader and Java packages
+installed something: restart (trial start) → test → **5. Confirm** in that start (or "Save: everything works" on the settings page). From
+v1.5.0, 4 adds the settings page, so the restart and 5 are needed. If they all answer "already installed" / "nothing
+changed", nothing changed: no restart and no 5 needed. Button 4 replaces the earlier driver, reader and Java packages
 (`rglu`, `rg`, the experimental `rg-aa` → this card's `rg`) by this card's. Button 3 updates an earlier experimental
 card's Android Auto that it knows in place and replaces Android Auto it does not support by this card's. Make a new
 card 2 as well when coming from v1.0-v1.3: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.

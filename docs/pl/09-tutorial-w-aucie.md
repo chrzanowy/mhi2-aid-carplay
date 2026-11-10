@@ -1,6 +1,6 @@
 # Tutorial w aucie: instalacja krok po kroku (Passat B8, MHI2 MU1161, AID 791)
 
-Wersja instalatora: **`pmcp-0.5.0-mu1161-791-…`** (końcówka to identyfikator buildu; jest w pierwszej linii
+Wersja instalatora: **`pmcp-0.5.1-mu1161-791-…`** (końcówka to identyfikator buildu; jest w pierwszej linii
 `BUILD-MANIFEST.txt`, w `PMCP_INSTRUKCJA.txt` na karcie 1 i na górze ekranu zielonego menu).
 Wszystkie napisy zielonego menu są po angielsku (od v1.4); niżej cytowane dokładnie tak, jak na ekranie.
 
@@ -31,7 +31,7 @@ zawsze slot **SD1**.
 - Karta SD w zielonym menu jest tylko do odczytu, więc instalator nie zapisze na niej logu (pokazuje
   `PMCP_WARN=SD_LOG_NOT_WRITABLE` i działa dalej). **Fotografuj wynik każdej akcji.**
 - Wejście do zielonego menu: przytrzymaj **MENU ~10 s** → `=>M.I.B.<=` → **`pmcp_stream_map_aid`**. Nagłówek musi pokazać
-  wersję twojego buildu (`pmcp-0.5.0-mu1161-791-…`); inna wersja = stop.
+  wersję twojego buildu (`pmcp-0.5.1-mu1161-791-…`); inna wersja = stop.
 - „Restart” = **przytrzymaj pokrętło głośności ~10 s** (radio się wyłącza i startuje). Wyłączenie i włączenie auta od razu
   to nie restart (radio jeszcze nie zasnęło).
 
@@ -139,8 +139,10 @@ zestaw i `This boot: set=... use=yes`.
 
 ## Aktualizacja z wcześniejszej wersji
 
-Te same kroki dla v1.5.0, v1.4.x i v1.0-v1.3. Z v1.5.0 zwykle 2, 3 i 4 odpowiadają „already installed” / „everything
-was already on, nothing changed”: wtedy nic się nie zmieniło i nie trzeba ani restartu, ani 5. Restart i 5 (kroki 5 i 6)
+Te same kroki dla v1.5.0, v1.4.x i v1.0-v1.3. Z v1.5.0 przycisk 4 dodaje stronę ustawień (`ui`), więc restart i 5
+(albo „Save: everything works” na stronie) są potrzebne. Tylko gdy 2, 3 i 4 wszystkie odpowiadają „already installed” /
+„everything was already on, nothing changed” (karta z tymi samymi funkcjami), nic się nie zmieniło i nie trzeba ani
+restartu, ani 5. Restart i 5 (kroki 5 i 6)
 są potrzebne tylko wtedy, gdy 3 albo 4 faktycznie coś zainstalowały.
 
 1. Zrób **kartę 1 z tego wydania** i włóż ją. **„1. Check card and unit (read-only)”** → `PMCP_VERIFY_OK state=JAVA`.

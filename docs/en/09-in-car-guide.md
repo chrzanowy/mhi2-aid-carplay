@@ -1,6 +1,6 @@
 # In-car guide: step-by-step installation (Passat B8, MHI2 MU1161, AID 791)
 
-Installer version: **`pmcp-0.5.0-mu1161-791-…`** (the suffix identifies the build; it is the first line of
+Installer version: **`pmcp-0.5.1-mu1161-791-…`** (the suffix identifies the build; it is the first line of
 `BUILD-MANIFEST.txt` and is shown in `PMCP_INSTRUKCJA.txt` on card 1 and at the top of the green menu screen).
 All green menu labels are in English (since v1.4), quoted below exactly as on the screen.
 
@@ -31,7 +31,7 @@ always slot **SD1**.
 - The SD card is read-only in the green menu, so the installer cannot write its log to the card (it prints
   `PMCP_WARN=SD_LOG_NOT_WRITABLE` and continues). **Photograph the result of every action.**
 - Entering the green menu: hold **MENU for ~10 s** → `=>M.I.B.<=` → **`pmcp_stream_map_aid`**. The header must show the version
-  of your build (`pmcp-0.5.0-mu1161-791-…`); a different version = stop.
+  of your build (`pmcp-0.5.1-mu1161-791-…`); a different version = stop.
 - "Restart" = **hold the volume knob for ~10 s** (the unit switches off and boots again). Switching the car off and on
   again right away is not a restart (the unit has not gone to sleep yet).
 
@@ -142,8 +142,10 @@ Restart once more. From now on the set loads at every start. **"7. Status (read-
 
 ## Updating from an earlier version
 
-The same steps for v1.5.0, v1.4.x and v1.0-v1.3. From v1.5.0, 2, 3 and 4 usually all answer "already installed" /
-"everything was already on, nothing changed": then nothing changed and no restart and no 5 are needed. Restart and 5
+The same steps for v1.5.0, v1.4.x and v1.0-v1.3. From v1.5.0, 4 adds the settings page (`ui`), so the restart and 5
+(or "Save: everything works" on the page) are needed. Only when 2, 3 and 4 all answer "already installed" /
+"everything was already on, nothing changed" (a card with the same features), nothing changed and no restart and no 5
+are needed. Restart and 5
 (steps 5 and 6) are needed only if 3 or 4 actually installed something.
 
 1. Make **card 1 from this release** and insert it. **"1. Check card and unit (read-only)"** → `PMCP_VERIFY_OK state=JAVA`.

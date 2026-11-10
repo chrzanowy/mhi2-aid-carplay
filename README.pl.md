@@ -32,7 +32,8 @@ W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy proj
 | Przełączanie dzień/noc mapy na liczniku | działa |
 | Ograniczenie prędkości z telefonu (`showSpeedLimit=yes`) | na tym radiu nic nie pokazuje |
 | Android Auto 0.1 (otwarta alfa, v1.5.0): obraz Google Maps na AID, strzałki VW z Google Maps | działa, ze znanymi ograniczeniami: [Android Auto](#android-auto-na-aid-android-auto-01-otwarta-alfa) |
-| Opcjonalnie (v1.4.1, paczka `sl`; przyciski trybu poprawione w v1.4.2 od amjad-alarori): limit z map samego auta VW przed nazwą ulicy albo próbnie w CurrentPositionInfo | 50 → 70 km/h potwierdzone w e-Golfie (AID 795A); na AID 791 jeszcze nie sprawdzone. [Opis po angielsku](docs/en/16-native-speed-limits.md) |
+| Strona ustawień w radiu (v1.5.1, paczka `ui`): App-Connect → Settings → AID navigation configuration; „Save: everything works” zatwierdza start próbny bez karty SD | nowe w v1.5.1, [opis po angielsku](ui/README.md) |
+| Opcjonalnie (v1.4.1, paczka `sl`; przyciski trybu poprawione w v1.4.2 od amjad-alarori, od v1.5.1 tryb ustawiany na stronie ustawień): limit z map samego auta VW przed nazwą ulicy albo próbnie w CurrentPositionInfo | 50 → 70 km/h potwierdzone w e-Golfie (AID 795A); na AID 791 jeszcze nie sprawdzone. [Opis po angielsku](docs/en/16-native-speed-limits.md) |
 
 Prowadzenie iAP2 nie przenosi liczbowego ograniczenia prędkości (badania
 [maxim-smirnov/mhi2-carplay-cluster](https://github.com/maxim-smirnov/mhi2-carplay-cluster) na iOS 26.6/27);
@@ -62,10 +63,20 @@ Więcej zdjęć i interaktywny model ramki AID (gdzie obraz trafia na panel w ka
 | [`hmiextras/`](hmiextras/README.pl.md) | zoom z kierownicy i ponowne wysłanie dzień/noc do mapy na liczniku | Java (HMI) |
 | [`aa/`](aa/) | Android Auto na AID: wrapper `gal`, hook MacsInSpace (przypięty, bez ścieżek do karty SD), nasz feeder MOST | wrapper `gal`, pliki w `carplaymaps/aa/` |
 | [`speedlimit/`](speedlimit/) | opcjonalny limit prędkości z map VW w tekście nawigacji licznika | Java (HMI), zapisywane ustawienie. [Opis po angielsku](docs/en/16-native-speed-limits.md) |
+| [`ui/`](ui/) | strona ustawień w fabrycznych ustawieniach App-Connect: zapis startu próbnego, tryb limitu prędkości | Java (HMI) |
 | [`installer/`](installer/) | instalator na kartę SD uruchamiany z menu GEM w M.I.B., karta ratunkowa, testy na Macu | nic sam z siebie |
 | [`buildtools/`](buildtools/) | kontrole przy budowaniu: osłona try/catch każdego wywołania haka, zgodność z API J9 CDC | nic |
 | [`scripts/`](scripts/) | czytniki obrazów firmware'u tylko do odczytu (QNX6, IFS, LZOZ, JXE → JAR), tester kart SD | nic |
 | [`firmware/`](firmware/) | hashe i notatki oficjalnej aktualizacji K4525 (jedyny dozwolony firmware) | nic |
+
+### Strona ustawień w radiu (`ui`)
+
+App-Connect → Settings → **AID navigation configuration** (instaluje ją przycisk 4). Dwa wiersze:
+- **Changes**: „Save: everything works” zatwierdza start próbny tak jak GEM „5. Confirm”, bez karty SD.
+- **Speed limit**: Off / Before street name / Street name (trial), działa w ciągu sekundy (wymaga `sl`; „Before street
+  name” także `rg`).
+
+Szczegóły i ograniczenia: [ui/README.md](ui/README.md).
 
 ### Warianty układu mapy (GEM → `pmcp_advanced` → `carplay_advanced`)
 
@@ -99,9 +110,9 @@ Wszystkie warianty deklarują rozmiar fizyczny 240×144 mm. Zmiana wariantu podm
 
 **Aktualizacja z v1.5.0, v1.4.x albo v1.0–v1.3:** karta 1 z tego wydania, „1. Check”, potem **2. Install CarPlay**
 (zwykle „already installed”), **3. Install Android Auto**, jeśli używasz Android Auto, **4. Install additional
-features**. Jeśli 3 albo 4 coś zainstalowały: restart (start próbny) → test → **5. Confirm** w tym starcie. Jeśli
-wszystkie odpowiadają „already installed” / „nothing changed” (zwykle z v1.5.0), nic się nie zmieniło: bez restartu
-i bez 5. Przycisk 4 zastępuje wcześniejszy sterownik,
+features**. Jeśli 3 albo 4 coś zainstalowały: restart (start próbny) → test → **5. Confirm** w tym starcie (albo „Save: everything works” na stronie ustawień).
+Z v1.5.0 przycisk 4 dodaje stronę ustawień, więc restart i 5 są potrzebne. Jeśli wszystkie odpowiadają
+„already installed” / „nothing changed”, nic się nie zmieniło: bez restartu i bez 5. Przycisk 4 zastępuje wcześniejszy sterownik,
 czytnik i paczki Java (`rglu`, `rg`, eksperymentalne `rg-aa` → `rg` z tej karty) plikami z tej karty. Przycisk 3
 aktualizuje na miejscu znane mu Android Auto z wcześniejszej karty eksperymentalnej, a Android Auto, którego nie
 obsługuje, zastępuje zestawem z tej karty. Przy przejściu z v1.0–v1.3 zrób też nową kartę 2: karty ratunkowe sprzed
