@@ -18,7 +18,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
-PMCP_BASE_VERSION = "pmcp-0.5.0-ui1-mu1161-791"   # branch ui-menu: release candidate (gem-menu) + package ui (own id, never a release card)
+PMCP_BASE_VERSION = "pmcp-0.5.0-mu1161-791"   # release v1.5.0: CarPlay + Android Auto (aa/, installed separately)
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)
