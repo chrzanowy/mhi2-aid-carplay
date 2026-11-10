@@ -42,6 +42,7 @@ public final class TestUi {
         otherViewsUntouched();
         offSwitchAndFailure();
         trialSave();
+        aaOutput();
         System.out.println("UI_HOST_PASS " + checks);
     }
 
@@ -557,6 +558,49 @@ public final class TestUi {
         // a set id that is not a plain name is never used as a file name
         Files.write(root.resolve("mnt/app/carplaymaps/HMI_BOOT"), "../x x.jar\n".getBytes(StandardCharsets.US_ASCII));
         check(t.javaPending() == null, "path-like set id ignored");
+    }
+
+    // ---------------------------------------------------------------- Android Auto output (aa-extra.conf)
+
+    static void aaOutput() throws Exception {
+        Path root = unit("aaout");
+        Path p = root.resolve("mnt/persist/pmcp");
+        Path conf = p.resolve("aa-extra.conf");
+        AaOutputSetting a = new AaOutputSetting(root.toString());
+        check(a.blocked(0) != null && "Android Auto off".equals(a.valueText()), "no AA set: row off, " + a.valueText());
+        check(error(a) != null && !Files.exists(conf), "no AA set: nothing written");
+        Path aa = root.resolve("mnt/app/carplaymaps/aa");
+        Files.createDirectories(aa);
+        Files.write(aa.resolve("AA_BOOT"), "most-11111111-22222222-33333333\n".getBytes(StandardCharsets.US_ASCII));
+        check(a.blocked(0) != null, "not the gamma mode: row off");
+        Files.write(aa.resolve("AA_BOOT"), "gamma-11111111-22222222-33333333\n".getBytes(StandardCharsets.US_ASCII));
+        check(a.blocked(0) == null && a.current() == 0 && a.valueText().startsWith("pmcp MOST writer"), "gamma, no file: default direct");
+        // markers and set files are never touched; other keys are kept, unknown lines dropped like pmcp.sh
+        Files.write(p.resolve("aa-ok.gamma-11111111-22222222-33333333"), new byte[0]);
+        Files.write(conf, "# old\nPMCP_AA_CAPTURE_S=60\nPMCP_AA_FOO=1\n".getBytes(StandardCharsets.US_ASCII));
+        check(a.select(1).startsWith("Saved") && a.current() == 1, "ring saved");
+        check("# pmcp: AA switches (settings page)\nPMCP_AA_OUTPUT=ring\nPMCP_AA_CAPTURE_S=60\n".equals(bytes(conf)), "file: " + bytes(conf));
+        check(Files.exists(p.resolve("aa-ok.gamma-11111111-22222222-33333333")) && !Files.exists(p.resolve("aa-extra.conf.pmcp-new")),
+                "AA confirmation kept, no staged file left");
+        check("gamma-11111111-22222222-33333333\n".equals(bytes(aa.resolve("AA_BOOT"))), "AA_BOOT unchanged");
+        a.select(0);
+        check("# pmcp: AA switches (settings page)\nPMCP_AA_OUTPUT=direct\nPMCP_AA_CAPTURE_S=60\n".equals(bytes(conf)), "direct saved");
+        // the feeder v14 rule: only an exact direct|ring counts (trailing blanks/CR ignored), else the default
+        Files.write(conf, "PMCP_AA_OUTPUT=ring \r\n".getBytes(StandardCharsets.US_ASCII));
+        check(a.current() == 1, "ring with trailing blank/CR counts");
+        Files.write(conf, "PMCP_AA_OUTPUT=RING\n".getBytes(StandardCharsets.US_ASCII));
+        check(a.current() == 0 && a.savedOutput() == null, "unknown value: default direct");
+        Files.write(conf, "PMCP_AA_OUTPUT=bogus\nPMCP_AA_OUTPUT=ring\n".getBytes(StandardCharsets.US_ASCII));
+        check(a.current() == 1, "first valid line counts, as the feeder");
+        // AA not active in this start: shown, still switchable
+        Files.write(root.resolve("ramdisk/pmcp-aa-last"), "set=gamma-11111111-22222222-33333333 use=no capture=no\n".getBytes(StandardCharsets.US_ASCII));
+        check(a.valueText().indexOf("not active") >= 0 && a.blocked(1) == null, "use=no: note, switch allowed");
+        // rescue card / AA switched off
+        Files.write(p.resolve("AA_DISABLED"), new byte[0]);
+        check(a.blocked(0) != null && "Android Auto off".equals(a.valueText()), "AA_DISABLED: row off");
+        Files.delete(p.resolve("AA_DISABLED"));
+        Files.write(p.resolve("DISABLED"), new byte[0]);
+        check(a.blocked(0) != null, "rescue card: row off");
     }
 
     static String error(Setting s) {
