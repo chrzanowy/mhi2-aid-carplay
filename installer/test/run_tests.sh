@@ -885,7 +885,7 @@ PEOF
         # AA 1 then brings the AA set itself up to date (a newer set: new AA_BOOT, a new AA trial)
         run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "AA 1: the earlier card's AA set brought up to date"
         grep -q "need rg" "$W/out" && bad "aa-on asks for rg although rg is on" || ok "rg on: aa-on does not ask for an arrows package"
-        [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" != "$aa_before" ] && [ "$(h "$U/carplaymaps/aa/feeder.conf")" = ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d ] \
+        [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" != "$aa_before" ] && [ "$(h "$U/carplaymaps/aa/feeder.conf")" = "$(sed -n 's/^AA_MODE \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")" ] \
             && ok "AA_BOOT changed only by AA 1 (newer AA set)" || bad "AA after AA 1: $(cat "$U/carplaymaps/aa/AA_BOOT")"
         run status; expect_out "Android Auto: on mode=gamma" "AA on"
         run restore; rc_is 0
@@ -988,9 +988,9 @@ PEOF
     cp "$OLD9/aa-most-feeder" "$AAD/aa-most-feeder"; cp "$OLD9/feeder.conf" "$AAD/feeder.conf"; cp "$OLD9/libgal_hook.so" "$AAD/libgal_hook.so"; cp "$OLD9/gal-hook.conf" "$AAD/gal-hook.conf"
     echo "gamma-bdd76a85-5d2a0a02-716516eb" > "$AAD/AA_BOOT"
     run status; expect_out "Android Auto: old mode=gamma" "card f2a7ceb5's gamma set (feeder v9): old"
-    run aa-on; rc_is 0; [ "$(h "$AAD/aa-most-feeder")" = c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7 ] && grep -q '^PMCP_AA_PACE_GAP_MS=20$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_KF_BRIDGE=0$' "$AAD/feeder.conf" && ok "feeder v9 -> v10, gap + no focus cycle" || bad "v9 not updated"
-    # card 030b7df2 (feeder v10, 2 Mbit/s pacing) -> 6 Mbit/s settings (A-AA34): same AA_BOOT, only feeder.conf differs
-    cp "$OLD10/feeder.conf" "$AAD/feeder.conf"
+    run aa-on; rc_is 0; [ "$(h "$AAD/aa-most-feeder")" = "$(sed -n 's/^AA_FEEDER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")" ] && grep -q '^PMCP_AA_PACE_GAP_MS=20$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_KF_BRIDGE=0$' "$AAD/feeder.conf" && ok "feeder v9 -> this card's, gap + no focus cycle" || bad "v9 not updated"
+    # card 030b7df2 (feeder v10, 2 Mbit/s pacing) -> this card's settings (A-AA34; since AA 1.0 also another feeder)
+    cp "$OLD10/feeder.conf" "$AAD/feeder.conf"; cp "$OLD10/aa-most-feeder" "$AAD/aa-most-feeder"; echo "gamma-bdd76a85-c5f8b0ef-716516eb" > "$AAD/AA_BOOT"
     run status; expect_out "Android Auto: old mode=gamma" "card 030b7df2's set (2 Mbit/s): old"
     run aa-on; rc_is 0; grep -q '^PMCP_AA_PACE_KBPS=6000$' "$AAD/feeder.conf" && ok "030b7df2 -> 6 Mbit/s pacing" || bad "030b7df2 settings not updated"
     cp "$OLDG1/libgal_hook-gamma.so" "$AAD/libgal_hook.so"
@@ -1099,19 +1099,19 @@ PEOF
 
     fi
 
-    echo "[30] unit with card b2bcbbe3's AA set (feeder c5f8b0ef, feeder.conf ac7157da): this card's own set, nothing to update"
+    echo "[30] unit with card b2bcbbe3's AA set (feeder c5f8b0ef, feeder.conf ac7157da = v1.5.x): old since AA 1.0; 4 leaves it, AA 1 updates it"
     if card_ok "$EXPB2" b2bcbbe3; then
         fresh_unit; factory=$(snapshot "$W/unit")
         runexpb2 install map-square-fps40; rc_is 0; runexpb2 rg-system-on; rc_is 0; runexpb2 java-on nai; rc_is 0; runexpb2 java-on rg-aa; rc_is 0
         confirm_now; runexpb2 aa-on; rc_is 0
         S=$(cat "$U/carplaymaps/aa/AA_BOOT"); touch "$W/unit/mnt/persist/pmcp/aa-trial.$S" "$W/unit/mnt/persist/pmcp/aa-ok.$S"
         aa_files=$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-')
-        run status; expect_out "Android Auto: on mode=gamma" "b2bcbbe3's AA set: on (this card's set)"
-        run aa-status; rc_is 0; expect_out "set $S: confirmed" "its confirmation is kept"
-        run aa-on; rc_is 1; expect_out "AA_ALREADY_ON" "AA 1: nothing to update"
-        allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: its rg-aa -> rg"; no_aa_change "b2bcbbe3"
-        [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-')" ] && ok "AA untouched" || bad "AA changed"
+        run status; expect_out "Android Auto: old mode=gamma" "b2bcbbe3's AA set (v1.5.x): old on this card"
+        allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 4: its rg-aa -> rg"; no_aa_change "b2bcbbe3"
+        [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-')" ] && ok "AA untouched by 4" || bad "AA changed"
         [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa.jar" ] && ok "pmcp-guidance-aa.jar -> pmcp-guidance4.jar" || bad "JARs after button 3"
+        run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "AA 1 brings AA 1.0"
+        [ ! -e "$W/unit/mnt/persist/pmcp/aa-ok.$S" ] && [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" != "$S" ] && ok "new set id, old confirmation gone" || bad "after AA 1: $(cat "$U/carplaymaps/aa/AA_BOOT")"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
     fi
 
@@ -1125,7 +1125,8 @@ PEOF
         touch "$P/aa-trial.$S" "$P/aa-ok.$S"
         new_start; o=$(gal_start); case "$o" in "use=yes "*) ok "confirmed: hook on every start" ;; *) bad "before AA 1: $o" ;; esac
         run status; expect_out "Android Auto: old mode=gamma" "status: old (earlier card's set)"
-        run aa-install; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "3 updates it in place, same set id"
+        run aa-install; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma set=" "3 updates it in place"
+        [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" != "$S" ] && ok "AA 1.0: a new set id (another feeder)" || bad "set id still $S"
         grep -q "removing them first" "$W/out" && bad "3 removed an earlier card's set instead of updating it" || ok "earlier card's set: updated in place, not removed"
         expect_out "That first Android Auto session in this start is a TRIAL" "AA 1 announces a trial"
         grep -q "confirmed before" "$W/out" && bad "AA 1 kept the old confirmation" || ok "no 'confirmed before'"
@@ -1433,6 +1434,7 @@ PEOF
     [ "$before" = "$(aaf)" ] && [ "$tree0" = "$(snapshot "$W/unit" | grep -v '/ramdisk/\|/mnt/persist/pmcp/aa-extra.conf\|/mnt/persist/pmcp/gem.log')" ] \
         && ok "(a) ring: only aa-extra.conf changed (set files, AA_BOOT, markers, everything else as before)" || bad "(a) the switch changed: $(aaf)"
     new_start; o=$(gal_start); [ "$o" = "$HOOKEDY" ] && ok "after the switch: still confirmed, hooked without a trial" || bad "AA: $o"
+    before=$(aaf)   # new_start cleared this start's RAM trial marker
     run aa-output direct; rc_is 0; [ "$before" = "$(aaf)" ] && grep -qx 'PMCP_AA_OUTPUT=direct' "$P/aa-extra.conf" \
         && ok "(a) direct again: only aa-extra.conf" || bad "(a) direct: $(aaf)"
     run aa-output bogus; rc_is 1; expect_out "AA_OUTPUT_MUST_BE_direct_OR_ring" "aa-output: unknown value refused"
@@ -1469,7 +1471,7 @@ PEOF
             "aa-on-exp ring") runc "$od" aa-install; rc_is 0; runc "$od" aa-on-exp; rc_is 0; runc "$od" aa-output ring; rc_is 0
                               runc "$od" aa-capture 60; rc_is 0; echo x > "$P/aa-stream.h264" ;;
         esac
-        O=$(cat "$U/carplaymaps/aa/AA_BOOT"); new_start; o=$(gal_start); runc "$od" confirm; rc_is 0
+        O=$(cat "$U/carplaymaps/aa/AA_BOOT"); new_start; o=$(gal_start); runc "$od" aa-confirm; rc_is 0
         [ -e "$P/aa-ok.$O" ] && ok "$oid: its set $O confirmed" || bad "$oid: confirm $(cat "$W/out" | tail -3)"
         run status; expect_out "Android Auto: old mode=gamma" "$oid: its set is old on this card"
         galw=$(h "$U/eso/bin/apps/gal"); real=$(h "$U/carplaymaps/aa/gal.real")
