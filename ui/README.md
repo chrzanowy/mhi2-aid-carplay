@@ -1,18 +1,21 @@
-# CarPlay settings page in the head unit menu (package `ui`, experimental)
+# CarPlay settings page in the head unit menu (package `ui`)
 
-This optional Java package adds an entry **CarPlay (pmcp)** to App-Connect > Settings on the head unit
+This Java package adds an entry **AID navigation configuration** to App-Connect > Settings on the head unit
 (MU1161, the 1280x640 VW skin). The entry opens a page that uses the factory look, with native rows, drop-down lists,
-touch input and a back button.
-
-First version: one row.
+touch input and a back button. Main menu *4. Install additional features* installs it.
 
 | Row | Choices | What it changes |
 |---|---|---|
+| Changes | Save: everything works | During a trial start (the first start after a change from the card), the same as GEM *5. Confirm*: the Java set (`ok.SET`) and/or the Android Auto set (`aa-ok.SET`) now load on every start. Without it, the next restart loads none of our JARs (lsd.sh; not the previously saved set). No SD card needed. |
 | Speed limit | Off / Before street name / Street name (trial) | `/mnt/persist/pmcp/native-speedlimit-mode`, the same file and bytes as the GEM buttons (`pmcp.sh speedlimit-mode off\|turnto\|street`). Package `sl` reads it within about a second. |
 
 The page applies the same rules as GEM. *Off* is always allowed. The other two need package `sl` in a confirmed Java
 set that is running in this boot, and *Before street name* also needs `rg`. A choice that is not allowed shows the
 reason under the row. While a GEM action holds the lock `/ramdisk/pmcp-speedlimit.lock`, the page writes nothing.
+
+*Save* follows `pmcp.sh` (`java_confirm_try`, `aa_confirm_try`): only in the start that is the trial (lsd.sh wrote
+`last-boot` "set=SET use=trial" in this start; for Android Auto the RAM marker of this start), never after the rescue
+card. Unlike GEM it cannot check the card, the firmware or the installed files; it relies on the trial that is running.
 
 Planned rows (later, they need changes in `core.so`): map layout, fps, IDR.
 

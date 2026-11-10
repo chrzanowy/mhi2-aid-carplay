@@ -420,7 +420,7 @@ run_long "pmcp-zoom.jar and pmcp-dn.jar (zoom, day/night)" bash "$PROJ/hmiextras
 run_long "route guidance (pmcp-rg.jar with lanes, distance bar, street, maneuver fallbacks, Android Auto arrows; iAP2 driver, iap2.cfg, reader)" \
     bash "$PROJ/rg/build.sh" "$LSD_JAR" "$BUILD/rg-mu1161-lanes-uturn-asf-m-aa-150" lanes-uturn-asf-m-aa
 run_long "optional native-map speed-limit reader (pmcp-sl.jar)" bash "$PROJ/speedlimit/build.sh" "$LSD_JAR" "$BUILD/sl-mu1161"
-run_long "optional CarPlay settings page in App-Connect (pmcp-ui.jar)" bash "$PROJ/ui/build.sh" "$LSD_JAR" "$BUILD/ui-mu1161"
+run_long "CarPlay settings page in App-Connect (pmcp-ui.jar)" bash "$PROJ/ui/build.sh" "$LSD_JAR" "$BUILD/ui-mu1161"
 run "rg finds the speed-limit helper in pmcp-sl.jar (rg/lanes/TestSpeedLimitText real)" java -Xverify:all \
     -cp "$BUILD/rg-mu1161-lanes-uturn-asf-m-aa-150/tests:$BUILD/rg-mu1161-lanes-uturn-asf-m-aa-150/pmcp-rg.jar:$BUILD/sl-mu1161/pmcp-sl.jar:$LSD_JAR" \
     com.cpmap.rgi.TestSpeedLimitText real
@@ -541,7 +541,7 @@ In the car, one visit, card 1 only (photograph the screen after every action):
      knob ~10 s). Start guidance in Apple/Google Maps, AID view = navigation map. No picture: iPhone Settings >
      General > CarPlay > this car > Forget This Car, reconnect. No map: stop here.
   3. Optional, Android phone: "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)".
-  4. "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)" -> PMCP_FEATURES_ON_OK.
+  4. "4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)" -> PMCP_FEATURES_ON_OK.
      Restart: trial start.
   5. Test. Everything works: "5. Confirm: everything works (in the first start after 3 or 4)" in the SAME start
      (with Android Auto: connect the phone first). Then restart once more: done.

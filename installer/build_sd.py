@@ -37,8 +37,8 @@ JAVA_PACKAGES = [("nai", "nai: AID map stays while the iPhone navigates (NavActi
                  ("dn", "dn: CarPlay map day/night on the AID (sent again after start)"),
                  # optional (not in button 3), output off until enabled with speedlimit-mode
                  ("sl", "sl: native VW map speed limit in the AID road text (optional, output off until enabled)"),
-                 # optional and experimental (not in main 4): a settings page in App-Connect settings (ui/README.md)
-                 ("ui", "ui: CarPlay settings page in App-Connect settings (optional)")]
+                 # in main 4: the settings page in App-Connect settings, also "Save" for a trial start (ui/README.md)
+                 ("ui", "ui: AID navigation configuration in App-Connect settings, saves trial starts without the card")]
 # rg = everything for route guidance in one package: Tomasz's port + his lanes, our VW U-turn lanes, his MU1367
 # v1.4.3 distance bar / street name / feed recovery, the maneuver fallbacks, the quiet-route hold (v1.4.3) and, since
 # v1.5.0, the VW arrows from Android Auto (rg/build.sh lanes-uturn-asf-m-aa: lanes-uturn-asf-m + rg/lanes/aa.py; with
@@ -99,7 +99,7 @@ PAYLOAD = {
     # Optional settings page (ui/build.sh): the factory AbstractViewHandler with five guarded hooks + com.pmcp.ui. Its
     # speed-limit row writes the same mode file as speedlimit-mode, under the same lock and rules.
     "JAR_ui": (PROJ / "build/ui-mu1161/pmcp-ui.jar",
-               "918c52511adb710b2c47a3bf3d39527c499b4ae08ccb8d5bac76e3a3c4f4a561", 24021, "jars/pmcp-ui.jar"),
+               "e11bd8d3e93a7f2671d9ae8b5e354a428c5c8f17d66f0f8b97b9a88cc14a17b1", 26657, "jars/pmcp-ui.jar"),
     # Tomasz's driver patch + our log gate: his RGI receive log only with /dev/shmem/pmcp-rgi-debug (rg/driver/)
     "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/ipod-drvr-iap2-gated.so",
                   "519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3", 743272, "rg/ipod-drvr-iap2.so"),
@@ -473,7 +473,7 @@ def menu_entries():
     top = [("verify", "verify", "1. Check card and unit (read-only)"),
            ("map-install", "map-install " + START_VARIANT, "2. Install CarPlay: the map on the AID (also repairs or updates it)"),
            ("aa-install", "aa-install", "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)"),
-           ("features-on", FEATURES, "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)"),
+           ("features-on", FEATURES, "4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)"),
            ("confirm", "confirm", "5. Confirm: everything works (in the first start after 3 or 4)"),
            ("retry", "retry", "6. Try again: the next start is a new trial"),
            ("status", "status", "7. Status (read-only)"),
@@ -485,9 +485,8 @@ def menu_entries():
             ("cp-log-save", "cp-log-save", "CP save log: copy this start's CarPlay log to the unit (for the log card)"),
             ("log-clear", "aa-log-clear", "Delete saved logs, CarPlay and AA (after the log card copied them)"),
             # package sl (On sl, then 5. Confirm), then one of these; the mode is kept across starts
-            ("speedlimit-on", "speedlimit-mode turnto", "Speed limit: in front of the street name (top bar and dial; needs sl and rg)"),
-            ("speedlimit-cpi", "speedlimit-mode street", "Speed limit TRIAL: in CurrentPositionInfo only (photograph where it shows)"),
-            ("speedlimit-off", "speedlimit-mode off", "Speed limit: off (street name as before)"),
+            # the speed-limit mode is set on the unit: App-Connect > Settings > AID navigation configuration (package ui); pmcp.sh
+            # speedlimit-mode stays for the tests and the command line
             ("speedlimit-status", "speedlimit-status", "Speed limit status: mode and native VW limit data (read-only)"),
             ("rg-system-on", "rg-system-on", "Route guidance system on (iAP2 driver, iap2.cfg, reader)"),
             ("rg-system-off", "rg-system-off", "Route guidance system off (factory iAP2 driver and iap2.cfg)"),
@@ -514,9 +513,9 @@ AA_EXP_MENU = []
 
 # main menu 4, in order: unsupported route guidance / Java files back to factory (features-reset), an earlier card's
 # RG driver/reader and Java packages replaced by this card's (rg-update, java-update), the route guidance system (rg
-# needs it), then every package except the optional sl and ui. Steps already done answer *_ALREADY_* and are skipped, so the
+# needs it), then every package except the optional sl (ui included: its page saves trial starts on the unit). Steps already done answer *_ALREADY_* and are skipped, so the
 # same button brings any earlier pmcp install to this card's set. The map (2) and Android Auto (3) are not touched.
-FEATURES = ["features-reset", "rg-update", "java-update", "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n not in ("sl", "ui")]
+FEATURES = ["features-reset", "rg-update", "java-update", "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
 
 
 def menu_script(args, label):

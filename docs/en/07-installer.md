@@ -161,7 +161,7 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
      changed)`. If unsupported Android Auto files and unsupported route guidance / Java files are present at the same
      time, 3 stops with `AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3`: 4 then resets the Java files and
      stops asking for 3; then 3, then 4 again;
-   - "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)" → menu script
+   - "4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)" → menu script
      `features-on.sh`: `features-reset` (route guidance / Java files this card does not support, e.g. a set with an
      unknown package or after the rescue card, back to verified factory copies), `rg-update`, `java-update`,
      `rg-system-on`, then `java-on` nai, np, rg, zoom, dn, one after another (one set, one trial boot; not `sl`, and the

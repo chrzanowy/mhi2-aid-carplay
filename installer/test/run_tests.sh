@@ -18,7 +18,7 @@ LSD_JAVA=$(sed -n 's/^LSD_JAVA \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")
 jsha() { sed -n "s/^JAR_$1 \([0-9a-f]*\) .*/\1/p" "$SDB/pmcp/pmcp.sh"; }
 jid() { echo "$1-$(jsha "$1" | cut -c1-8)"; }
 NAI_SHA=$(jsha nai); NP_SHA=$(jsha np)
-NAI=$(jid nai); NP=$(jid np); RG=$(jid rg); ZOOM=$(jid zoom); DN=$(jid dn)
+NAI=$(jid nai); NP=$(jid np); RG=$(jid rg); ZOOM=$(jid zoom); DN=$(jid dn); UI=$(jid ui)
 [ -n "$NAI_SHA" ] && [ -n "$NP_SHA" ] || { echo "no JAR hashes in the manifest"; exit 99; }
 # simulate the lsd.sh block of the unit tree for one normal boot (or RUN_MODE=$1); prints "boot=USE set=ID jars=LIST"
 unit_boot() {
@@ -342,8 +342,8 @@ for SH in "$@"; do
         fi
         if [ "$(basename "$m")" = features-on.sh ]; then
             acts=$(sed -n 's/^for A in \(.*\); do$/\1/p' "$m")
-            [ "$acts" = "features-reset_ rg-update_ java-update_ rg-system-on_ java-on_nai java-on_np java-on_rg java-on_zoom java-on_dn" ] && grep -q '^PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh$' "$m" \
-                && ok "button 4: reset of unsupported files, updates, RG system, then nai np rg zoom dn (map and AA stay)" || bad "features-on actions: $acts"
+            [ "$acts" = "features-reset_ rg-update_ java-update_ rg-system-on_ java-on_nai java-on_np java-on_rg java-on_zoom java-on_dn java-on_ui" ] && grep -q '^PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh$' "$m" \
+                && ok "button 4: reset of unsupported files, updates, RG system, then nai np rg zoom dn ui (map and AA stay)" || bad "features-on actions: $acts"
             continue
         fi
         args=$(sed -n 's#^/bin/ksh /net/mmx/fs/sda0/pmcp/pmcp.sh ##p' "$m")
@@ -372,7 +372,7 @@ for SH in "$@"; do
     [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen features_advanced pmcp_advanced|screen carplay_advanced pmcp_advanced|screen aa_advanced pmcp_advanced|" ] \
         && ok "screens: pmcp_stream_map_aid > pmcp_advanced > features / carplay / aa_advanced" || bad "screens: $scr"
     feat=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen carplay_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/log-clear.sh menu/speedlimit-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh ") ok "features_advanced: diagnostics, CarPlay log, speed limit, RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
+    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/log-clear.sh menu/speedlimit-status.sh menu/rg-system-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh ") ok "features_advanced: diagnostics, CarPlay log, speed-limit status only (mode on the page), RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
     cpa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen carplay_advanced/,/^screen aa_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
     [ "$cpa" = "menu/install-map-clean.sh menu/install-card-clean.sh menu/install-url-map-hybrid.sh menu/install-map-clean-l40.sh menu/install-map-square.sh menu/switch-map-clean.sh menu/switch-card-clean.sh menu/switch-url-map-hybrid.sh menu/switch-map-clean-l40.sh menu/switch-map-square.sh menu/switch-map-square-fps40.sh " ] \
         && ok "carplay_advanced: other layouts (install, switch)" || bad "carplay_advanced: $cpa"
@@ -506,10 +506,10 @@ for SH in "$@"; do
     run map-install map-square-fps40; rc_is 0; expect_out "PMCP_INSTALL_OK stage=A variant=map-square-fps40" "2 on a factory unit installs the map"
     run map-install map-square-fps40; rc_is 0; expect_out "already installed: variant map-square-fps40, nothing changed" "2 again: already installed"
     allon; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "all features on"; expect_out "PMCP_RG_SYSTEM_ON_OK" "RG system on"
-    ALL="$NAI+$NP+$RG+$ZOOM+$DN"
-    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "one set with all five packages" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
+    ALL="$NAI+$NP+$RG+$ZOOM+$DN+$UI"
+    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "one set with all six packages (with ui)" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ -e "$U/carplaymaps/rg/SYSTEM_ON" ] && ok "RG system marker" || bad "no SYSTEM_ON"
-    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance4.jar*pmcp-dn.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
+    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance4.jar*pmcp-dn.jar:/X/lsd/jars/pmcp-ui.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$ALL" "one confirm for everything"
     allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "remove everything: factory state"
@@ -530,7 +530,7 @@ for SH in "$@"; do
     [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = 519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3 ] \
         && [ "$(h "$U/carplaymaps/rg/rgi-observer")" = 3166df9b91119475f93043ac8c150e2641732e602161839a137a1907d4ef11df ] \
         && ok "update: new driver and reader" || bad "driver/reader after update"
-    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "update: set nai np rg zoom dn" || bad "update set: $(cat "$U/carplaymaps/HMI_BOOT")"
+    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "update: set nai np rg zoom dn ui" || bad "update set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rglu.jar" ] && ok "update: pmcp-rglu.jar removed" || bad "old JAR left"
     o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*) ok "update: next start is a trial" ;; *) bad "update boot: $o" ;; esac
     run java-confirm; rc_is 0
@@ -652,7 +652,7 @@ PEOF
     run aa-remove; rc_is 0; [ ! -e "$U/eso/bin/apps/gal.pmcp-restore" ] && ok "aa-remove cleans gal.pmcp-restore" || bad "gal.pmcp-restore left"
     run status; expect_out "Unit state: JAVA" "after AA remove: JAVA"; expect_out "Android Auto: off" "AA off"
     allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rgluasfm -> rg"; expect_out "PMCP_FEATURES_ON_OK" "button 3 done"
-    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
+    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn ui" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rgluasfm.jar" ] && ok "pmcp-rgluasfm.jar removed" || bad "old JAR left"
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore after the experimental card: exact factory tree" || bad "tree after restore"
@@ -661,7 +661,7 @@ PEOF
     confirm_now; runexp aa-on gamma; rc_is 0; aa_before=$(cat "$U/carplaymaps/aa/AA_BOOT")
     allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rgluasfma updated"
     expect_out "PMCP_FEATURES_ON_OK" "button 3 on an AA unit done"
-    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
+    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn ui" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rgluasfma.jar" ] \
         && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance.jar" ] && ok "pmcp-guidance4.jar only" || bad "JARs after button 3: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
     [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" = "$aa_before" ] && ok "button 3 leaves Android Auto alone" || bad "AA changed by button 3"
@@ -821,7 +821,7 @@ PEOF
     fi
 
     echo "[25] experimental card f2a7ceb5 (AA on, rg-aa) -> button 3 of this card: AA stays, rg-aa -> rg (pmcp-guidance4.jar)"
-    ALL="$NAI+$NP+$RG+$ZOOM+$DN"
+    ALL="$NAI+$NP+$RG+$ZOOM+$DN+$UI"
     no_aa_change() { grep -q "PMCP_AA_\(ON\|REMOVE\)_OK" "$W/out" && bad "$1: button 3 changed Android Auto" || ok "$1: button 3 ran no AA action"; }
     if card_ok "$EXP141" f2a7ceb5; then
         fresh_unit; factory=$(snapshot "$W/unit")
@@ -835,7 +835,7 @@ PEOF
         expect_out "PMCP_FEATURES_ON_OK" "button 3 done"; no_aa_change "f2a7ceb5"
         [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" = "$aa_before" ] && [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$')" ] \
             && ok "AA_BOOT and every AA file unchanged by button 3" || bad "AA changed by button 3"
-        [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
+        [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn ui" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
         [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] \
             && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa2.jar" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar" ] \
             && ok "pmcp-guidance-aa.jar gone, pmcp-guidance4.jar (rg) in place" || bad "JARs after button 3 from f2a7ceb5: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
@@ -1264,12 +1264,12 @@ PEOF
     grep -q "^RESULT=OK copied=2 aa_logs=1 cp_logs=1$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: one AA and one CarPlay log" || bad "log card: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
-    echo "[40] optional package ui (settings page): own JAR, not in main 4, java-off and restore exact, shares the mode file"
+    echo "[40] package ui (AID navigation configuration page, Save of trial starts): own JAR, in main 4, java-off and restore exact, shares the mode file"
     UI=$(jid ui)
-    grep -q "java-on_ui" "$SDB/pmcp/menu/features-on.sh" && bad "main 4 installs ui" || ok "main 4 leaves ui out (like sl)"
+    grep -q "java-on_ui" "$SDB/pmcp/menu/features-on.sh" && ok "main 4 installs ui (Save on the page)" || bad "main 4 leaves ui out"
     tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen carplay_advanced/p' > "$W/feat.esd"
-    grep -q '"On ui: CarPlay settings page in App-Connect settings (optional)"' "$W/feat.esd" \
-        && grep -q '"Off ui: CarPlay settings page in App-Connect settings (optional)"' "$W/feat.esd" \
+    grep -q '"On ui: AID navigation configuration in App-Connect settings, saves trial starts without the card"' "$W/feat.esd" \
+        && grep -q '"Off ui: AID navigation configuration in App-Connect settings, saves trial starts without the card"' "$W/feat.esd" \
         && ok "features_advanced: On ui / Off ui" || bad "GEM ui buttons missing in features_advanced"
     fresh_unit; factory=$(snapshot "$W/unit")
     run install map-square-fps40; rc_is 0; run java-on nai; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0

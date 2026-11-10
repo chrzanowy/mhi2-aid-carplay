@@ -38,7 +38,7 @@ public final class MenuHook {
     }
 
     static Setting[] settings() {
-        return new Setting[] {new SpeedLimitSetting(root)};
+        return new Setting[] {new TrialSetting(root), new SpeedLimitSetting(root)};
     }
 
     public static void attach(AbstractViewHandler handler) {

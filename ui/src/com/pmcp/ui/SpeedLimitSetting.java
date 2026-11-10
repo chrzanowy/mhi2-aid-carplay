@@ -100,7 +100,7 @@ final class SpeedLimitSetting extends Setting {
                 return "Needs the Java packages (package sl), none are on.";
             }
             if (!hasPackage(set, "sl")) {
-                return "Needs package sl: GEM features_advanced, On sl, then 5. Confirm.";
+                return "Needs package sl: GEM features_advanced, On sl.";
             }
             if (i == 1 && !hasPackage(set, "rg")) {
                 return "Before street name needs package rg as well.";
@@ -109,7 +109,7 @@ final class SpeedLimitSetting extends Setting {
                 return "Java packages are disabled by the rescue card.";
             }
             if (!new File(persistPath, new StringBuffer("ok.").append(set).toString()).exists()) {
-                return "Confirm the Java set first: GEM 5. Confirm.";
+                return "Save the trial start first: Changes, Save.";
             }
             String last = firstLine(new StringBuffer(persistPath).append("/last-boot").toString());
             String yes = new StringBuffer("set=").append(set).append(" use=yes").toString();

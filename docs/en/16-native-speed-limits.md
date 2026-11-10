@@ -42,11 +42,12 @@ described in the [in-car guide](09-in-car-guide.md). GEM button texts are quoted
 3. Restart the unit (hold the volume knob ~10 s). This start is the Java trial for the new set.
 4. Check that menus, audio, CarPlay, map and guidance work. `features_advanced`: "Speed limit status: mode and native VW limit data
    (read-only)" (`speedlimit-status`) should show `status=valid` and a `speed_limit_raw` value while driving.
-5. In that same start: "5. Confirm: everything works (in the first start after 3 or 4)" (`confirm`).
-6. `features_advanced`: "Speed limit: in front of the street name (top bar and dial; needs sl and rg)" (`speedlimit-mode turnto`), or
-   the trial "Speed limit TRIAL: in CurrentPositionInfo only (photograph where it shows)" (`speedlimit-mode street`).
-7. The mode applies within about a second; it is kept across restarts. Back to the plain street name: "Speed limit: off
-   (street name as before)" (`speedlimit-mode off`).
+5. In that same start: "5. Confirm: everything works (in the first start after 3 or 4)" (`confirm`), or on the unit
+   App-Connect > Settings > AID navigation configuration > Changes > "Save: everything works".
+6. On the unit: App-Connect > Settings > AID navigation configuration > Speed limit > "Before street name" (`turnto`), or the trial
+   "Street name (trial)" (`street`).
+7. The mode applies within about a second; it is kept across restarts. Back to the plain street name: Speed limit >
+   "Off".
 
 For the route test, connect CarPlay, start Google Maps guidance and end any VW route guidance. Keep the AID navigation
 view selected. The native limit should appear in the turn-to text while the CarPlay maneuver and distance remain visible.

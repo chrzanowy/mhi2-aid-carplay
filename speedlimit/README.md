@@ -8,10 +8,13 @@ Since v1.4.1 it works together with the `rg` package. `rg` replaces the factory 
 iPhone's street name there), so `sl` no longer patches that class: `rg` asks `sl` for the prefix
 ([`rg/lanes/SpeedLimitText.java`](../rg/lanes/SpeedLimitText.java)). Two output modes:
 
-| Mode | GEM button (pmcp_advanced → features_advanced) | Where the limit goes |
+| Mode | Choice on the unit (App-Connect > Settings > AID navigation configuration > Speed limit) | Where the limit goes |
 |---|---|---|
-| `turnto` | "Speed limit: in front of the street name (top bar and dial; needs sl and rg)" | `rg`'s TurnToInfo text: the AID top bar and the right dial show the same field |
-| `street` | "Speed limit TRIAL: in CurrentPositionInfo only (photograph where it shows)" | NavSD CurrentPositionInfo only; where (or whether) AID 791 shows it is not known yet |
+| `turnto` | "Before street name" | `rg`'s TurnToInfo text: the AID top bar and the right dial show the same field |
+| `street` | "Street name (trial)" | NavSD CurrentPositionInfo only; where (or whether) AID 791 shows it is not known yet |
+
+The mode is set on the unit (package `ui`, [ui/README.md](../ui/README.md)); GEM has only "Speed limit status: mode and
+native VW limit data (read-only)". `pmcp.sh speedlimit-mode off|turnto|street` writes the same file.
 
 The in-car procedure is in [Native speed limits](../docs/en/16-native-speed-limits.md).
 

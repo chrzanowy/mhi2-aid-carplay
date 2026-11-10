@@ -55,7 +55,7 @@ the base `717fb53c` byte for byte.
 
 ## Installation (GEM buttons)
 
-Button "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)" on the main screen does
+Button "4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)" on the main screen does
 all of this. Single steps in `pmcp_advanced` → `features_advanced`:
 
 1. "Route guidance system on (iAP2 driver, iap2.cfg, reader)": saves the factory driver and cfg in `carplaymaps/rollback/`

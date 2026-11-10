@@ -158,7 +158,7 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
      installed: ..., nothing changed)`. Gdy jednocześnie są nieobsługiwane pliki Android Auto i nieobsługiwane pliki
      prowadzenia / Javy, 3 zatrzymuje się z `AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3`: wtedy 4
      przywraca pliki Javy i zatrzymuje się, prosząc o 3; potem 3, potem znowu 4;
-   - „4. Install additional features: route guidance, zoom, day/night, song title (needs 2)” → skrypt menu
+   - „4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)” → skrypt menu
      `features-on.sh`: `features-reset` (pliki prowadzenia / Javy, których ta karta nie obsługuje, np. zestaw z nieznaną
      paczką albo po karcie ratunkowej, wracają do zweryfikowanych kopii fabrycznych), `rg-update`, `java-update`,
      `rg-system-on`, potem `java-on` nai, np, rg, zoom, dn po kolei (jeden zestaw, jeden start próbny; bez `sl`, mapy nie

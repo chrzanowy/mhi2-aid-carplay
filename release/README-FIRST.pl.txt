@@ -86,7 +86,7 @@ CZĘŚĆ 2 - W AUCIE
 
   Krok 3. Instalacja reszty (tylko jeśli mapa działa)
     Zielone menu -> pmcp_stream_map_aid ->
-    "4. Install additional features: route guidance, zoom, day/night, song title (needs 2)".
+    "4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)".
     (Masz już zainstalowaną wcześniejszą wersję? Zobacz AKTUALIZACJA niżej.)
     Oczekiwane:  PMCP_FEATURES_ON_OK
     Android Auto (opcjonalnie, telefon z Androidem): naciśnij też

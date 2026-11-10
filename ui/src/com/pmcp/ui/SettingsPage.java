@@ -59,7 +59,7 @@ final class SettingsPage {
     static final int ID_BACKGROUND = 69892873;     // view background image
     static final int ID_HEADLINE = 19482720;       // headline with title and back button
     static final int ID_FRAME = 96892073;          // line under the headline
-    static final String ENTRY_TEXT = "CarPlay (pmcp)";
+    static final String ENTRY_TEXT = "AID navigation configuration";
     static final int MAX_CHOICES = 6;
     static final int VIEW_WIDTH = 1280;
     static final int VIEW_HEIGHT = 640;
@@ -479,8 +479,18 @@ final class SettingsPage {
     }
 
     private static String valueText(Setting setting) {
-        int current = setting.current();
-        return current < 0 || current >= setting.count() ? setting.invalidText() : setting.choice(current);
+        return setting.valueText();
+    }
+
+    /** The first non-null row hint (the trial row speaks only during a trial start). */
+    private String openHint() {
+        for (int i = 0; i < settings.length; i++) {
+            String hint = settings[i].hint();
+            if (hint != null) {
+                return hint;
+            }
+        }
+        return "";
     }
 
     private void setNote(String text) {
@@ -566,7 +576,7 @@ final class SettingsPage {
             if (action == ACTION_OPEN) {
                 noteText = "";
                 fill();
-                setNote(settings[0].hint());
+                setNote(openHint());
                 page.set_visible(true);
                 page.repaint();
                 UiLog.log("PAGE_OPEN");

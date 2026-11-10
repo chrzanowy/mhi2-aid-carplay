@@ -80,7 +80,7 @@ a zielone menu z „8. Remove everything (back to factory files)” działa zaws
 
 ## Krok 3. Instalacja dodatkowych funkcji (albo aktualizacja)
 
-**„4. Install additional features: route guidance, zoom, day/night, song title (needs 2)”** → oczekiwane
+**„4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)”** → oczekiwane
 **`PMCP_FEATURES_ON_OK`**. (Przycisk 3 to Android Auto, opcjonalnie: [13-instrukcja-android-auto.md](13-instrukcja-android-auto.md).)
 
 Uruchamia po kolei: przywrócenie fabrycznych plików prowadzenia i Javy w wersji, której ta karta nie obsługuje
@@ -126,6 +126,8 @@ Java zmienia start ekranu radia, więc nowy zestaw przechodzi **start próbny**:
    Tylko w starcie próbnym (instalator to sprawdza): nie wyłączaj auta między restartem a potwierdzeniem.
    Ten sam przycisk potwierdza też Android Auto, gdy jest w próbie (najpierw podłącz telefon); gdy w próbie jest tylko
    jedno z dwóch, potwierdza to jedno i pisze, dlaczego nie drugie.
+   Bez karty to samo robi radio: App-Connect → Settings → **AID navigation configuration** → wiersz **Changes** → „Save: everything
+   works” (paczka `ui`, instaluje ją przycisk 4).
 4. Coś nie działa albo ekran zostaje czarny → restart (pokrętło ~10 s): następny start jest fabryczny. Żeby spróbować
    ponownie: **„6. Try again: the next start is a new trial”**, restart. Żeby znaleźć funkcję, która sprawia kłopot, włączaj je
    po jednej ([zaawansowane](#zaawansowane-funkcje-po-jednej)).
@@ -151,7 +153,7 @@ są potrzebne tylko wtedy, gdy 3 albo 4 faktycznie coś zainstalowały.
    (np. z v1.5.0) już jest. Znany tej karcie zestaw z wcześniejszej karty eksperymentalnej jest aktualizowany na miejscu;
    zestaw, którego ta karta nie obsługuje, najpierw jest usuwany (wraca fabryczny `gal`), potem instaluje się zestaw
    z tej karty.
-4. **„4. Install additional features: route guidance, zoom, day/night, song title (needs 2)”** → `PMCP_FEATURES_ON_OK`
+4. **„4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)”** → `PMCP_FEATURES_ON_OK`
    (albo `PMCP_FEATURES_ON_OK (everything was already on, nothing changed)`). Zastępuje wcześniejszy sterownik iAP2 i czytnik plikami z tej karty (kopie fabryczne zostają) i tworzy jeden nowy
    zestaw Java, w którym `rglu` (albo `rg`, albo eksperymentalne `rg-aa`) staje się nowym `rg`.
 5. Tylko jeśli 3 albo 4 coś zainstalowały: restart, ten start jest **próbny**. Sprawdź, czy CarPlay się łączy, potem strzałki (także od razu na starcie trasy),

@@ -83,7 +83,7 @@ outcome is no CarPlay picture, and the green menu with "8. Remove everything (ba
 
 ## Step 3. Install the additional features (or update)
 
-**"4. Install additional features: route guidance, zoom, day/night, song title (needs 2)"** → expect
+**"4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)"** → expect
 **`PMCP_FEATURES_ON_OK`**. (Button 3 is Android Auto, optional: [13-android-auto-guide.md](13-android-auto-guide.md).)
 
 It runs, one after another: route guidance and Java files of a version this card does not support back to factory
@@ -129,6 +129,8 @@ Java changes how the head unit screen starts, so the new set goes through a **tr
    Only in the trial start (the installer checks this): do not switch the car off between the restart and Confirm.
    The same button also confirms Android Auto when it is in its trial (connect the phone first); if only one of the two
    is in its trial, it confirms that one and says why the other is not.
+   Without the card the unit does the same: App-Connect > Settings > **AID navigation configuration** > row **Changes** > "Save:
+   everything works" (package `ui`, installed by button 4).
 4. Something is wrong or the screen stays black → restart (knob ~10 s): the next start is factory. To try again:
    **"6. Try again: the next start is a new trial"**, restart. To find out which feature is the problem, enable them one at a
    time ([advanced](#advanced-one-feature-at-a-time)).
@@ -153,7 +155,7 @@ The same steps for v1.5.0, v1.4.x and v1.0-v1.3. From v1.5.0, 2, 3 and 4 usually
    `PMCP_AA_ON_OK mode=gamma`, or `PMCP_AA_INSTALL_OK (already installed: ..., nothing changed)` when this card's set
    (e.g. from v1.5.0) is already there. A set of an earlier experimental card that this card knows is updated in place;
    a set this card does not support is removed first (factory `gal` back), then this card's set is installed.
-4. **"4. Install additional features: route guidance, zoom, day/night, song title (needs 2)"** → `PMCP_FEATURES_ON_OK`
+4. **"4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)"** → `PMCP_FEATURES_ON_OK`
    (or `PMCP_FEATURES_ON_OK (everything was already on, nothing changed)`). It replaces the earlier iAP2 driver and reader by this card's (the factory copies stay) and makes one new Java set in
    which `rglu` (or `rg`, or the experimental `rg-aa`) becomes the new `rg`.
 5. Only if 3 or 4 installed something: restart, this start is the **trial**. Check that CarPlay connects, then the arrows (also right at the start of a route),

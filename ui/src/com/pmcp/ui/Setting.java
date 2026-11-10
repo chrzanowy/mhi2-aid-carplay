@@ -29,6 +29,12 @@ abstract class Setting {
     /** Saves choice i. Returns the line shown under the row; throws with a short reason when nothing was saved. */
     abstract String select(int i) throws Exception;
 
-    /** Line shown under the row when the page opens. */
+    /** Line shown under the rows when the page opens; the first row with a non-null hint wins. */
     abstract String hint();
+
+    /** Row value text: the saved choice, or invalidText() when there is none. */
+    String valueText() {
+        int current = current();
+        return current < 0 || current >= count() ? invalidText() : choice(current);
+    }
 }

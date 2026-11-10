@@ -41,6 +41,7 @@ public final class TestUi {
         missingDonorKeepsFactory();
         otherViewsUntouched();
         offSwitchAndFailure();
+        trialSave();
         System.out.println("UI_HOST_PASS " + checks);
     }
 
@@ -145,7 +146,7 @@ public final class TestUi {
         javaSet(root, "rg-7b187484+sl-37b5d948+ui-12345678", "trial", true);
         check(s.blocked(1) == null && s.blocked(2) == null, "confirmed set in its trial boot");
         javaSet(root, "rg-7b187484+sl-37b5d948", "yes", false);
-        check(s.blocked(2).indexOf("Confirm") >= 0, "unconfirmed set: " + s.blocked(2));
+        check(s.blocked(2).indexOf("Save") >= 0, "unconfirmed set: " + s.blocked(2));
         javaSet(root, "rg-7b187484+sl-37b5d948", "no", true);
         check(s.blocked(2).indexOf("restart") >= 0, "set not running this boot: " + s.blocked(2));
         javaSet(root, "rg-7b187484+sl-37b5d948", "yes", true);
@@ -313,29 +314,29 @@ public final class TestUi {
         check(page.listenerCount() == listenersBefore, "destroyed clone drops its listener");
         HostRuntime.call(handler, "activate");
         check(!page.isPageVisible() && !page.isPopupVisible(), "activate: factory list shown");
-        check("Before street name".equals(page.rowValue(0)) || "Off".equals(page.rowValue(0)), "row value " + page.rowValue(0));
-        check("Off".equals(page.rowValue(0)), "no file shows Off");
+        check("Before street name".equals(page.rowValue(1)) || "Off".equals(page.rowValue(1)), "row value " + page.rowValue(1));
+        check("Off".equals(page.rowValue(1)), "no file shows Off");
 
         page.action(SettingsPage.ACTION_OPEN);
         check(page.isPageVisible() && page.noteText().startsWith("Applies"), "page open, hint: " + page.noteText());
-        page.action(SettingsPage.ACTION_ROW);
+        page.action(SettingsPage.ACTION_ROW + 1);
         check(page.isPopupVisible(), "row opens the choices");
         page.action(SettingsPage.ACTION_CHOICE + 1);
         check(!page.isPopupVisible(), "choice closes the popup");
         Path root = Path.of(MenuHook.root);
         check("turnto\n".equals(bytes(mode(root))), "turnto saved from the page");
-        check("Before street name".equals(page.rowValue(0)), "row shows the new value");
+        check("Before street name".equals(page.rowValue(1)), "row shows the new value");
         check(page.noteText().startsWith("Saved"), "note after save: " + page.noteText());
         // blocked choice: rg missing
         javaSet(root, "sl-37b5d948+ui-12345678", "trial", true);
-        page.action(SettingsPage.ACTION_ROW);
+        page.action(SettingsPage.ACTION_ROW + 1);
         page.action(SettingsPage.ACTION_CHOICE + 1);
         check(!page.isPopupVisible() && page.noteText().indexOf("rg") >= 0, "blocked choice: reason " + page.noteText());
-        page.action(SettingsPage.ACTION_ROW);
+        page.action(SettingsPage.ACTION_ROW + 1);
         page.action(SettingsPage.ACTION_CHOICE + 2);
         check("street\n".equals(bytes(mode(root))), "street saved");
         // a choice index beyond the setting, a stray code and dismiss do nothing
-        page.action(SettingsPage.ACTION_ROW);
+        page.action(SettingsPage.ACTION_ROW + 1);
         page.action(SettingsPage.ACTION_CHOICE + 5);
         check(page.isPopupVisible() && "street\n".equals(bytes(mode(root))), "unused option slot ignored");
         page.action(SettingsPage.ACTION_DISMISS);
@@ -346,7 +347,7 @@ public final class TestUi {
         // a broken setting must not escape action()
         Files.createDirectories(root.resolve("ramdisk/pmcp-speedlimit.lock"));
         page.action(SettingsPage.ACTION_OPEN);
-        page.action(SettingsPage.ACTION_ROW);
+        page.action(SettingsPage.ACTION_ROW + 1);
         page.action(SettingsPage.ACTION_CHOICE);
         check(page.noteText().startsWith("Busy") && "street\n".equals(bytes(mode(root))), "busy shown, nothing written");
         Files.delete(root.resolve("ramdisk/pmcp-speedlimit.lock"));
@@ -488,6 +489,83 @@ public final class TestUi {
         start(HostRuntime.createdHandler(d.view));
         check(MenuHook.attachedCount() == 0, "no page after a clone failure");
         MenuHook.resetForTest();
+    }
+
+    // ---------------------------------------------------------------- Changes: Save (= GEM 5. Confirm)
+
+    static void trialSave() throws Exception {
+        Path root = unit("trial");
+        Path p = root.resolve("mnt/persist/pmcp");
+        TrialSetting t = new TrialSetting(root.toString());
+        check(t.blocked(0) != null && "Saved".equals(t.valueText()) && t.hint() == null, "nothing installed: nothing to save");
+        // Java set in its trial start (lsd.sh: trial marker + last-boot use=trial)
+        javaSet(root, "rg-7b187484+ui-12345678", "trial", false);
+        Files.write(p.resolve("trial.rg-7b187484+ui-12345678"), new byte[0]);
+        check(t.blocked(0) == null && t.valueText().startsWith("Not saved") && t.hint() != null, "trial start: save offered");
+        SpeedLimitSetting sl = new SpeedLimitSetting(root.toString());
+        javaSet(root, "rg-7b187484+sl-37b5d948+ui-12345678", "trial", false);
+        Files.write(p.resolve("trial.rg-7b187484+sl-37b5d948+ui-12345678"), new byte[0]);
+        check(sl.blocked(1).indexOf("Changes") >= 0, "speed limit points at Changes: " + sl.blocked(1));
+        check(t.select(0).startsWith("Saved") && Files.exists(p.resolve("ok.rg-7b187484+sl-37b5d948+ui-12345678")), "save writes ok.SET");
+        check(bytes(p.resolve("boot.log")).indexOf("page-ok set=rg-7b187484+sl-37b5d948+ui-12345678") >= 0, "boot.log records the page save");
+        check(sl.blocked(1) == null, "speed limit allowed after the save");
+        check(t.blocked(0) != null && "Saved".equals(t.valueText()), "saved: nothing more to save");
+        check(error(t) != null, "second save refused");
+        // a factory start after a failed trial (use=no) can never be saved
+        javaSet(root, "nai-11111111+ui-12345678", "no", false);
+        Files.write(p.resolve("trial.nai-11111111+ui-12345678"), new byte[0]);
+        check(t.blocked(0) != null, "use=no: no save");
+        // the trial marker without this start's last-boot (set changed after the boot): no save
+        javaSet(root, "nai-11111111+ui-12345678", "trial", false);
+        Files.write(root.resolve("mnt/app/carplaymaps/HMI_BOOT"), "nai-22222222+ui-12345678 x.jar\n".getBytes(StandardCharsets.US_ASCII));
+        check(t.blocked(0) != null, "HMI_BOOT changed after the boot: no save");
+        // rescue card: never saved from the page
+        javaSet(root, "nai-11111111+ui-12345678", "trial", false);
+        Files.write(p.resolve("DISABLED"), new byte[0]);
+        check(t.blocked(0).indexOf("rescue") >= 0 && "Off (rescue card)".equals(t.valueText()), "rescue card: no save");
+        Files.delete(p.resolve("DISABLED"));
+        // Android Auto trial (persist marker + this start's RAM marker), Java already saved
+        Files.write(p.resolve("ok.nai-11111111+ui-12345678"), new byte[0]);
+        Files.createDirectories(root.resolve("mnt/app/carplaymaps/aa"));
+        Files.write(root.resolve("mnt/app/carplaymaps/aa/AA_BOOT"), "gamma-aaaaaaaa-bbbbbbbb-cccccccc\n".getBytes(StandardCharsets.US_ASCII));
+        Files.write(p.resolve("aa-trial.gamma-aaaaaaaa-bbbbbbbb-cccccccc"), new byte[0]);
+        Files.write(p.resolve("aa-ok.gamma-old"), new byte[0]);
+        check(t.blocked(0) != null, "AA trial used in an earlier start (no RAM marker): no save");
+        Files.write(root.resolve("ramdisk/pmcp-aa-trial.gamma-aaaaaaaa-bbbbbbbb-cccccccc"), new byte[0]);
+        check(t.blocked(0) == null, "AA trial start: save offered");
+        t.select(0);
+        check(Files.exists(p.resolve("aa-ok.gamma-aaaaaaaa-bbbbbbbb-cccccccc")) && !Files.exists(p.resolve("aa-ok.gamma-old")),
+                "AA save: aa-ok of this set only");
+        // AA installed, phone not connected yet: no AA trial, the row does not claim "Saved"
+        Path q = root.resolve("mnt/persist/pmcp");
+        Files.write(root.resolve("mnt/app/carplaymaps/aa/AA_BOOT"), "gamma-dddddddd-eeeeeeee-ffffffff\n".getBytes(StandardCharsets.US_ASCII));
+        check(t.valueText().startsWith("Android Auto: connect") && t.blocked(0).indexOf("phone") >= 0, "AA waiting for the phone: " + t.valueText());
+        Files.write(q.resolve("aa-trial.gamma-dddddddd-eeeeeeee-ffffffff"), new byte[0]);
+        check("Android Auto not saved".equals(t.valueText()), "AA trial used in an earlier start: not saved");
+        // both trials in one start: one Save confirms both
+        javaSet(root, "np-33333333+ui-12345678", "trial", false);
+        Files.write(q.resolve("trial.np-33333333+ui-12345678"), new byte[0]);
+        Files.write(root.resolve("ramdisk/pmcp-aa-trial.gamma-dddddddd-eeeeeeee-ffffffff"), new byte[0]);
+        t.select(0);
+        check(Files.exists(q.resolve("ok.np-33333333+ui-12345678")) && Files.exists(q.resolve("aa-ok.gamma-dddddddd-eeeeeeee-ffffffff"))
+                && "Saved".equals(t.valueText()), "both trials saved at once");
+        // CarPlay-only save leaves the AA confirmation alone
+        javaSet(root, "zoom-44444444+ui-12345678", "trial", false);
+        Files.write(q.resolve("trial.zoom-44444444+ui-12345678"), new byte[0]);
+        t.select(0);
+        check(Files.exists(q.resolve("aa-ok.gamma-dddddddd-eeeeeeee-ffffffff")), "CarPlay-only save keeps aa-ok");
+        // a set id that is not a plain name is never used as a file name
+        Files.write(root.resolve("mnt/app/carplaymaps/HMI_BOOT"), "../x x.jar\n".getBytes(StandardCharsets.US_ASCII));
+        check(t.javaPending() == null, "path-like set id ignored");
+    }
+
+    static String error(Setting s) {
+        try {
+            s.select(0);
+            return null;
+        } catch (Exception e) {
+            return e.getMessage();
+        }
     }
 
     static String readLog() throws Exception {

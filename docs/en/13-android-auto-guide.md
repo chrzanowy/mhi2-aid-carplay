@@ -14,7 +14,7 @@ only; the main screen installs the stable version.
 - The CarPlay map is installed (main screen **"2. Install CarPlay: the map on the AID (also repairs or updates it)"**).
   Android Auto uses the CarPlay map's video path.
 - For the VW arrows from Google Maps: main screen **"4. Install additional features: route guidance, zoom, day/night,
-  song title (needs 2)"**. Its route guidance package `rg` shows the arrows for CarPlay and for Android Auto. Without it
+  song title, settings page (needs 2)"**. Its route guidance package `rg` shows the arrows for CarPlay and for Android Auto. Without it
   you get the picture only. 3 and 4 can be pressed one after the other: one restart, then one "5. Confirm" in that
   start confirms both trials.
 
