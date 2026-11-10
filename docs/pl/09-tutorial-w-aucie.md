@@ -29,7 +29,7 @@ zawsze slot **SD1**.
 - Każda akcja kończy się linią `PMCP_..._OK` (dobrze) albo `PMCP_FAIL ...` (nic nie zmieniono albo wycofano). Przy `FAIL`
   nic więcej nie naciskaj, zrób zdjęcie ekranu.
 - Karta SD w zielonym menu jest tylko do odczytu, więc instalator zapisuje wynik każdego przycisku w radiu
-  (`/mnt/persist/pmcp/gem.log`, ok. 64 KB; kopiuje go karta logów). **Fotografuj wynik każdej akcji.**
+  (`/mnt/persist/pmcp/gem.log`, ok. 64 KB; kopiuje go karta logów; przyciski tylko do odczytu jedynie dopisują tam wynik). **Fotografuj wynik każdej akcji.**
 - Wejście do zielonego menu: przytrzymaj **MENU ~10 s** → `=>M.I.B.<=` → **`pmcp_stream_map_aid`**. Nagłówek musi pokazać
   wersję twojego buildu (`pmcp-0.5.1-mu1161-791-…`); inna wersja = stop.
 - „Restart” = **przytrzymaj pokrętło głośności ~10 s** (radio się wyłącza i startuje). Wyłączenie i włączenie auta od razu

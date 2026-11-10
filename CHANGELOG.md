@@ -19,11 +19,14 @@ pmcp's own MOST writer instead of the CarPlay bridge; the bridge stays as a fall
   and the set's default (direct) applies.
 - **Main menu 3 updates every earlier Android Auto in place**: the v1.5.0/v1.5.1 set (feeder v10), and the experimental
   sets of earlier cards (feeders v11, v12, v13). The first connection afterwards is a trial (5 or "Save" on the page).
+  The output the user chose (direct or bridge) is kept across such an update; a recording switch is not.
 - **3 no longer waits for 4** when only the Java part is of a version this card does not support and is plainly ours
   (lsd.sh ours or factory, every JAR of the set present, ours by name or known to this card). Android Auto never touches
   the Java part; 4 replaces it as before. Anything else still stops with "press 4, then 3".
 - **GEM button log on the unit.** The SD card is read-only in GEM, so every pmcp button's output now also goes to
-  `/mnt/persist/pmcp/gem.log` (at most ~2 x 32 KB). The log card copies it.
+  `/mnt/persist/pmcp/gem.log` (at most ~2 x 32 KB). The log card copies it. Read-only buttons ("1. Check", "7. Status",
+  AA status) still change nothing installed; their output is appended to gem.log too (only once pmcp made
+  `/mnt/persist/pmcp`).
 - **"AA delete saved logs"** deletes everything pmcp saved for the log card (AA and CarPlay logs, the recorded phone
   video, the boot log, the button log); with nothing to delete it answers OK instead of a FAIL.
 - **"AA save log"** also saves the feeder's full status of the last 3 sessions of that start, so a lost picture can be

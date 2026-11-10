@@ -1457,7 +1457,7 @@ PEOF
     V151SD="${PMCP_V151_SD:-$SDB/../sd-754c9d82}"; OLD11SD="${PMCP_AA_OLD11:-$SDB/../sd-a55867ab}"
     NEW12SD="${PMCP_AA_V12:-$SDB/../sd-15d19b43}"; V13SD="${PMCP_AA_V13:-$SDB/../sd-d82f8c73}"
     runc() { _c=$1; shift; PMCP_TEST_ROOT="$W/unit" $SH "$_c/pmcp/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
-    for oc in "$V151SD:754c9d82:aa-install" "$OLD11SD:a55867ab:aa-on" "$NEW12SD:15d19b43:aa-on direct" "$V13SD:d82f8c73:aa-on-exp direct"; do
+    for oc in "$V151SD:754c9d82:aa-install" "$OLD11SD:a55867ab:aa-on" "$NEW12SD:15d19b43:aa-on direct" "$V13SD:d82f8c73:aa-on-exp ring"; do
         od=${oc%%:*}; rest=${oc#*:}; oid=${rest%%:*}; how=${rest#*:}
         card_ok "$od/pmcp/pmcp.sh" "$oid" || continue
         fresh_unit; factory=$(snapshot "$W/unit")
@@ -1466,8 +1466,8 @@ PEOF
             aa-install) runc "$od" aa-install; rc_is 0 ;;
             aa-on) runc "$od" aa-on; rc_is 0 ;;
             "aa-on direct") runc "$od" aa-on; rc_is 0; runc "$od" aa-output direct; rc_is 0 ;;
-            "aa-on-exp direct") runc "$od" aa-install; rc_is 0; runc "$od" aa-on-exp; rc_is 0; runc "$od" aa-output direct; rc_is 0
-                                runc "$od" aa-capture 60; rc_is 0 ;;
+            "aa-on-exp ring") runc "$od" aa-install; rc_is 0; runc "$od" aa-on-exp; rc_is 0; runc "$od" aa-output ring; rc_is 0
+                              runc "$od" aa-capture 60; rc_is 0; echo x > "$P/aa-stream.h264" ;;
         esac
         O=$(cat "$U/carplaymaps/aa/AA_BOOT"); new_start; o=$(gal_start); runc "$od" confirm; rc_is 0
         [ -e "$P/aa-ok.$O" ] && ok "$oid: its set $O confirmed" || bad "$oid: confirm $(cat "$W/out" | tail -3)"
@@ -1476,7 +1476,15 @@ PEOF
         run aa-install; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "$oid: 3 brings this card's set"
         [ "$(h "$U/carplaymaps/aa/aa-most-feeder")" = "$SF" ] && [ "$(h "$U/eso/bin/apps/gal")" = "$galw" ] && [ "$(h "$U/carplaymaps/aa/gal.real")" = "$real" ] \
             && ok "$oid: in place (AA 1.0 feeder, wrapper and factory gal copy untouched)" || bad "$oid: files after 3"
-        [ ! -e "$P/aa-ok.$O" ] && [ ! -e "$P/aa-extra.conf" ] && [ ! -e "$P/aa-stream.h264" ] && ok "$oid: old confirmation, switches, recording gone" || bad "$oid: left $(ls "$P")"
+        case "$how" in *direct) want=direct ;; *ring) want=ring ;; *) want= ;; esac
+        if [ -n "$want" ]; then
+            expect_out "AA output kept: $want" "$oid: 3 says the output is kept"
+            [ "$(grep '^PMCP_AA_' "$P/aa-extra.conf")" = "PMCP_AA_OUTPUT=$want" ] \
+                && ok "$oid: the chosen output ($want) kept, recording switch gone" || bad "$oid: aa-extra.conf $(cat "$P/aa-extra.conf" 2>&1)"
+        else
+            [ ! -e "$P/aa-extra.conf" ] && ok "$oid: no switch file" || bad "$oid: aa-extra.conf $(cat "$P/aa-extra.conf")"
+        fi
+        [ ! -e "$P/aa-ok.$O" ] && [ ! -e "$P/aa-stream.h264" ] && ok "$oid: old confirmation and recording gone" || bad "$oid: left $(ls "$P")"
         new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "$oid: first connection with AA 1.0 is a trial" || bad "$oid: AA $o"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "$oid: restore exact" || bad "$oid: tree after restore"
     done

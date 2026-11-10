@@ -715,8 +715,23 @@ do_aa_on() {
     if [ -e "$PERSIST/aa-ok.$SET" ]; then _o_kept=yes
     else _o_kept=no; rm -f "$PERSIST/aa-trial.$SET" 2>/dev/null; fi
     rm -f "$PERSIST/aa-capture" 2>/dev/null
-    # the experimental switches belong to the experimental feeder: gone with the stable set
-    [ "$ARG" = gamma ] && rm -f "$PERSIST/aa-extra.conf" "$PERSIST"/aa-extra.conf.pmcp-new "$PERSIST"/aa-stream.h264* 2>/dev/null
+    # the stable set: the recording (experimental) goes; the output the user chose (AA 1.0: GEM or the settings page) stays,
+    # only as a valid line (the feeder's first valid one), so an update by 3 never moves a user from the bridge to direct
+    if [ "$ARG" = gamma ]; then
+        _o_out=""
+        if [ -f "$PERSIST/aa-extra.conf" ]; then
+            while read _o_l; do
+                case "$_o_l" in PMCP_AA_OUTPUT=direct|PMCP_AA_OUTPUT=ring) [ -n "$_o_out" ] || _o_out=$_o_l ;; esac
+            done < "$PERSIST/aa-extra.conf"
+        fi
+        rm -f "$PERSIST"/aa-extra.conf.pmcp-new "$PERSIST"/aa-stream.h264* 2>/dev/null
+        if [ -n "$_o_out" ] && { echo "# pmcp $PMCP_VERSION: AA switches (kept by 3)"; echo "$_o_out"; } > "$PERSIST/aa-extra.conf.pmcp-new" 2>/dev/null \
+            && mv "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/aa-extra.conf"; then
+            say "  AA output kept: ${_o_out#PMCP_AA_OUTPUT=}"
+        else
+            rm -f "$PERSIST/aa-extra.conf" "$PERSIST"/aa-extra.conf.pmcp-new 2>/dev/null   # the set's default (direct)
+        fi
+    fi
     detect_state
     if [ "$AASYS" != on ] || [ "$AAMODE" != "$ARG" ]; then
         aa_off

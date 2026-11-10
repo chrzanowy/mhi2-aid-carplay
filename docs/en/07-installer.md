@@ -193,7 +193,8 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
 3. The result is on the GEM screen. The SD card is read-only in GEM (even `mount -uw` fails), so the log cannot be written to the
    card. Every button's output therefore goes to the unit: `/mnt/persist/pmcp/gem.log` (at most ~2 x 32 KB, the older half in
    `gem.log.1`; only once pmcp has made `/mnt/persist/pmcp`); the log card copies it, "AA delete saved logs" empties it,
-   "Remove everything" removes it. When nothing is writable: `PMCP_WARN=NO_LOG_WRITABLE`, the action carries on.
+   "Remove everything" removes it. Read-only buttons change nothing installed; their output is appended to gem.log too. When
+   nothing is writable: `PMCP_WARN=NO_LOG_WRITABLE`, the action carries on.
    **Photograph the screen.** If the card is writable, the log also goes to `/pmcp/log/pmcp-<action>-<pid>.log`.
 
 All labels are in English (since v1.4) and plain ASCII.

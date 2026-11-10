@@ -29,7 +29,7 @@ always slot **SD1**.
 - Every action ends with a `PMCP_..._OK` line (good) or `PMCP_FAIL ...` (nothing was changed, or it was rolled back). On `FAIL`
   do not press anything else; take a photo of the screen.
 - The SD card is read-only in the green menu, so the installer keeps each button's result on the unit
-  (`/mnt/persist/pmcp/gem.log`, about 64 KB; the log card copies it). **Photograph the result of every action.**
+  (`/mnt/persist/pmcp/gem.log`, about 64 KB; the log card copies it; read-only buttons only add their output to it). **Photograph the result of every action.**
 - Entering the green menu: hold **MENU for ~10 s** → `=>M.I.B.<=` → **`pmcp_stream_map_aid`**. The header must show the version
   of your build (`pmcp-0.5.1-mu1161-791-…`); a different version = stop.
 - "Restart" = **hold the volume knob for ~10 s** (the unit switches off and boots again). Switching the car off and on

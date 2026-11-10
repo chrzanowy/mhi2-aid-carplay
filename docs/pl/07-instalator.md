@@ -190,8 +190,8 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
 3. Wynik jest na ekranie GEM. Karta SD jest w GEM tylko do odczytu (nawet `mount -uw` się nie udaje), więc logu nie da się
    zapisać na kartę. Wynik każdego przycisku trafia więc do radia: `/mnt/persist/pmcp/gem.log` (najwyżej ~2 x 32 KB,
    starsza połowa w `gem.log.1`; tylko gdy pmcp już utworzył `/mnt/persist/pmcp`), kopiuje go karta logów, „AA delete saved
-   logs” go czyści, „Remove everything” usuwa. Gdy nie da się zapisać nigdzie: `PMCP_WARN=NO_LOG_WRITABLE`, akcja działa
-   dalej. **Rób zdjęcia ekranu.** Jeśli karta jest zapisywalna, log trafia też do `/pmcp/log/pmcp-<akcja>-<pid>.log`.
+   logs” go czyści, „Remove everything” usuwa. Przyciski tylko do odczytu nie zmieniają niczego zainstalowanego; ich wynik
+   też jest dopisywany do gem.log. Gdy nie da się zapisać nigdzie: `PMCP_WARN=NO_LOG_WRITABLE`, akcja działa dalej. **Rób zdjęcia ekranu.** Jeśli karta jest zapisywalna, log trafia też do `/pmcp/log/pmcp-<akcja>-<pid>.log`.
 
 Wszystkie etykiety są po angielsku (od v1.4) i w czystym ASCII.
 
