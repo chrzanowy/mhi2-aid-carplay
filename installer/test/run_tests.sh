@@ -1056,6 +1056,10 @@ PEOF
     run aa-log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "logs deleted (also unknown files and a subdirectory)" || bad "logs left"
     [ ! -e "$P/boot.log" ] && [ ! -e "$P/aa-stream.h264" ] && [ ! -e "$P/aa-stream.h264.idx" ] && ok "boot log and phone video deleted" || bad "left: $(ls "$P")"
     run aa-log-clear; rc_is 0; expect_out "PMCP_AA_LOG_CLEAR_OK (nothing saved, nothing to delete)" "second press: OK, nothing to delete"
+    mv "$U/carplaymaps/PMCP_VERSION" "$W/pv.keep"; mkdir -p "$U/carplaymaps/logs"; echo other > "$U/carplaymaps/logs/other-mod.log"
+    run aa-log-clear; rc_is 1; expect_out "AA_LOG_CLEAR_CARPLAYMAPS_IS_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" "carplaymaps not ours: refused"
+    [ -e "$U/carplaymaps/logs/other-mod.log" ] && ok "another mod's logs/ left alone" || bad "another mod's logs deleted"
+    rm -rf "$U/carplaymaps/logs"; mv "$W/pv.keep" "$U/carplaymaps/PMCP_VERSION"
     # A152: the GEM button log on the unit ($PERSIST/gem.log; the SD card is read-only in GEM)
     rung() { PMCP_TEST_GEMLOG= PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
     mkdir -p "$P"; rm -f "$P"/gem.log*; rung aa-status; rc_is 0
@@ -1469,7 +1473,9 @@ PEOF
             aa-on) runc "$od" aa-on; rc_is 0 ;;
             "aa-on direct") runc "$od" aa-on; rc_is 0; runc "$od" aa-output direct; rc_is 0 ;;
             "aa-on-exp ring") runc "$od" aa-install; rc_is 0; runc "$od" aa-on-exp; rc_is 0; runc "$od" aa-output ring; rc_is 0
-                              runc "$od" aa-capture 60; rc_is 0; echo x > "$P/aa-stream.h264" ;;
+                              runc "$od" aa-capture 60; rc_is 0; echo x > "$P/aa-stream.h264"
+                              # as the feeder reads it: a leading blank is not the key, CRLF/trailing blanks are fine
+                              printf '# x\r\n PMCP_AA_OUTPUT=direct\r\nPMCP_AA_OUTPUT=ring \r\nPMCP_AA_CAPTURE_S=60\r\n' > "$P/aa-extra.conf" ;;
         esac
         O=$(cat "$U/carplaymaps/aa/AA_BOOT"); new_start; o=$(gal_start); runc "$od" aa-confirm; rc_is 0
         [ -e "$P/aa-ok.$O" ] && ok "$oid: its set $O confirmed" || bad "$oid: confirm $(cat "$W/out" | tail -3)"
@@ -1501,7 +1507,7 @@ PEOF
     expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "3 installs AA over it"; [ "$j0" = "$(jtree)" ] && ok "Java part untouched (lsd.sh, JARs, HMI_BOOT)" || bad "3 changed the Java part"
     new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "AA trial as usual" || bad "AA: $o"
     feat; expect_out "PMCP_FEATURES_RESET_OK" "4 then replaces the Java part"; run status; expect_out "Android Auto: on" "AA stays on"
-    for bad_case in foreign-lsd missing-jar odd-name count other-jar; do
+    for bad_case in foreign-lsd missing-jar odd-name count other-jar dup-jar symlink-jar; do
         jbase
         case $bad_case in
             foreign-lsd) echo "# another mod" >> "$U/eso/hmi/lsd/lsd.sh" ;;
@@ -1509,6 +1515,8 @@ PEOF
             odd-name) read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s ${jars% *} ../pmcp-zz.jar" > "$U/carplaymaps/HMI_BOOT" ;;
             count) read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+yy-11111111 $jars" > "$U/carplaymaps/HMI_BOOT" ;;
             other-jar) echo X > "$U/eso/hmi/lsd/jars/Other.jar"; read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s ${jars% *} Other.jar" > "$U/carplaymaps/HMI_BOOT" ;;
+            dup-jar) read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+yy-11111111 $jars pmcp-zz.jar" > "$U/carplaymaps/HMI_BOOT" ;;
+            symlink-jar) rm -f "$U/eso/hmi/lsd/jars/pmcp-zz.jar"; ln -s ../lsd.sh "$U/eso/hmi/lsd/jars/pmcp-zz.jar" ;;
         esac
         before=$(snapshot "$W/unit" | grep -v '/ramdisk/')
         run aa-install; rc_is 1; expect_out "AA_INSTALL_NEEDS" "$bad_case: 3 refuses"

@@ -151,7 +151,9 @@ LOG="$LOGDIR/pmcp-$ACTION-$$.log"
 # untouched); restore removes $PERSIST and with it this log; the log card copies it, aa-log-clear deletes it.
 GEMLOG="${PMCP_TEST_GEMLOG:-$PERSIST/gem.log}"
 if [ -d "${GEMLOG%/*}" ]; then
-    _g_l=`ls -ln "$GEMLOG" 2>/dev/null` && set -- $_g_l && [ "${5:-0}" -gt 32768 ] && mv -f "$GEMLOG" "$GEMLOG.1" 2>/dev/null
+    _g_l=`ls -ln "$GEMLOG" 2>/dev/null` && set -- $_g_l
+    case "${5:-0}" in *[!0-9]*) ;; *) if [ "${5:-0}" -gt 32768 ]; then   # bounded even when the move fails
+        mv -f "$GEMLOG" "$GEMLOG.1" 2>/dev/null || rm -f "$GEMLOG" 2>/dev/null; fi ;; esac
     { echo "=== $PMCP_VERSION $ACTION $ARG `date 2>/dev/null`" >> "$GEMLOG"; } 2>/dev/null || GEMLOG=""
 else
     GEMLOG=""
@@ -425,9 +427,12 @@ java_part_tolerable() {
     _t_n=1; _t_x=$_t_id
     while [ "${_t_x#*+}" != "$_t_x" ]; do _t_x=${_t_x#*+}; _t_n=$((_t_n + 1)); done
     [ $# -eq $_t_n ] || { set +f; return 1; }
+    _t_seen=" "
     for _t_w in "$@"; do
         case "$_t_w" in *[!A-Za-z0-9._-]*|.*) set +f; return 1 ;; esac
-        [ -f "$JARS/$_t_w" ] || { set +f; return 1; }
+        case "$_t_seen" in *" $_t_w "*) set +f; return 1 ;; esac
+        _t_seen="$_t_seen$_t_w "
+        [ -f "$JARS/$_t_w" ] && [ ! -h "$JARS/$_t_w" ] || { set +f; return 1; }
         case "$_t_w" in
             pmcp-*.jar) ;;
             *) case " `echo $_t_known` " in *" $_t_w "*) ;; *) set +f; return 1 ;; esac ;;
@@ -718,18 +723,22 @@ do_aa_on() {
     # the stable set: the recording (experimental) goes; the output the user chose (AA 1.0: GEM or the settings page) stays,
     # only as a valid line (the feeder's first valid one), so an update by 3 never moves a user from the bridge to direct
     if [ "$ARG" = gamma ]; then
+        # the feeder's rule (v14): key at the line start, value exactly direct|ring, trailing blanks/CR ignored, first
+        # valid line wins; sed with the same anchors, so 3 keeps exactly what the feeder uses
         _o_out=""
         if [ -f "$PERSIST/aa-extra.conf" ]; then
-            while read _o_l; do
-                case "$_o_l" in PMCP_AA_OUTPUT=direct|PMCP_AA_OUTPUT=ring) [ -n "$_o_out" ] || _o_out=$_o_l ;; esac
-            done < "$PERSIST/aa-extra.conf"
+            for _o_v in `sed -n 's/^PMCP_AA_OUTPUT=\([a-z]*\)[[:space:]]*$/\1/p' "$PERSIST/aa-extra.conf" 2>/dev/null`; do
+                case "$_o_v" in direct|ring) _o_out=$_o_v; break ;; esac
+            done
         fi
         rm -f "$PERSIST"/aa-extra.conf.pmcp-new "$PERSIST"/aa-stream.h264* 2>/dev/null
-        if [ -n "$_o_out" ] && { echo "# pmcp $PMCP_VERSION: AA switches (kept by 3)"; echo "$_o_out"; } > "$PERSIST/aa-extra.conf.pmcp-new" 2>/dev/null \
-            && mv "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/aa-extra.conf"; then
-            say "  AA output kept: ${_o_out#PMCP_AA_OUTPUT=}"
+        if [ -n "$_o_out" ] && echo "# pmcp $PMCP_VERSION: AA switches (kept by 3)" > "$PERSIST/aa-extra.conf.pmcp-new" 2>/dev/null \
+            && echo "PMCP_AA_OUTPUT=$_o_out" >> "$PERSIST/aa-extra.conf.pmcp-new" 2>/dev/null \
+            && mv "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/aa-extra.conf" && grep -qx "PMCP_AA_OUTPUT=$_o_out" "$PERSIST/aa-extra.conf"; then
+            say "  AA output kept: $_o_out"
         else
-            rm -f "$PERSIST/aa-extra.conf" "$PERSIST"/aa-extra.conf.pmcp-new 2>/dev/null   # the set's default (direct)
+            [ -e "$PERSIST/aa-extra.conf" ] && say "  AA output: the set's default (direct)"
+            rm -f "$PERSIST/aa-extra.conf" "$PERSIST"/aa-extra.conf.pmcp-new 2>/dev/null
         fi
     fi
     detect_state
@@ -913,16 +922,21 @@ do_aa_retry() {
 # from it. One key changes, the other is kept; the file is replaced in one mv. Main menu 3 removes the file.
 aa_extra_set() {    # KEY VALUE
     _x_f="$PERSIST/aa-extra.conf"
-    _x_out=`grep '^PMCP_AA_OUTPUT=' "$_x_f" 2>/dev/null | head -1`
-    _x_cap=`grep '^PMCP_AA_CAPTURE_S=' "$_x_f" 2>/dev/null | head -1`
+    # the other key is kept only as a valid line (output: direct|ring; recording: 0|60), as the feeder reads it
+    _x_out=`grep -x -e 'PMCP_AA_OUTPUT=direct' -e 'PMCP_AA_OUTPUT=ring' "$_x_f" 2>/dev/null | head -1`
+    _x_cap=`grep -x -e 'PMCP_AA_CAPTURE_S=0' -e 'PMCP_AA_CAPTURE_S=60' "$_x_f" 2>/dev/null | head -1`
     case "$1" in
         PMCP_AA_OUTPUT) _x_out="PMCP_AA_OUTPUT=$2" ;;
         PMCP_AA_CAPTURE_S) _x_cap="PMCP_AA_CAPTURE_S=$2" ;;
     esac
     mkdir -p "$PERSIST" 2>/dev/null
-    { echo "# pmcp $PMCP_VERSION: AA switches (GEM)"; [ -z "$_x_out" ] || echo "$_x_out"; [ -z "$_x_cap" ] || echo "$_x_cap"; } \
-        > "$_x_f.pmcp-new" || fail "AA_SWITCH_WRITE_FAILED"
+    rm -f "$_x_f.pmcp-new" 2>/dev/null
+    # redirects on echo only (a failed redirect on a compound command may end the script without a FAIL line)
+    echo "# pmcp $PMCP_VERSION: AA switches (GEM)" > "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"
+    if [ -n "$_x_out" ]; then echo "$_x_out" >> "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"; fi
+    if [ -n "$_x_cap" ]; then echo "$_x_cap" >> "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"; fi
     mv "$_x_f.pmcp-new" "$_x_f" || fail "AA_SWITCH_WRITE_FAILED"
+    grep -qx "$1=$2" "$_x_f" || fail "AA_SWITCH_READBACK_FAILED"
 }
 
 aa_switch_ready() {    # [exp]: experimental cards only (aa-capture)
@@ -1008,12 +1022,14 @@ do_aa_log_clear() {
     selftest
     firmware_identity
     detect_state
-    if [ -n "$GEMLOG" ]; then   # the button log starts again with this press (header written again)
-        { : > "$GEMLOG"; echo "=== $PMCP_VERSION $ACTION $ARG `date 2>/dev/null`" >> "$GEMLOG"; } 2>/dev/null
+    # carplaymaps/logs only when carplaymaps is ours (review A153: never another mod's directory)
+    if [ -e "$ROOT/logs" ] && ! pmcp_root; then
+        fail "AA_LOG_CLEAR_CARPLAYMAPS_IS_NOT_A_PMCP_INSTALL_NOTHING_CHANGED"
     fi
     _c_any=""
     for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/boot.log" "$PERSIST/gem.log.1"; do [ -e "$_c_f" ] && _c_any=1; done
     if [ -z "$_c_any" ]; then
+        aa_gemlog_restart
         say "PMCP_AA_LOG_CLEAR_OK (nothing saved, nothing to delete)"
         return 0
     fi
@@ -1023,8 +1039,17 @@ do_aa_log_clear() {
     for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/boot.log" "$PERSIST/gem.log.1"; do
         [ -e "$_c_f" ] && fail "AA_LOG_CLEAR_FAILED_${_c_f##*/}"
     done
+    aa_gemlog_restart   # only after the deletes: a failure above keeps the button history that explains it
     flush
     say "PMCP_AA_LOG_CLEAR_OK"
+}
+
+# gem.log starts again with this press (its header written again). Redirects on echo only: a failed redirect on the
+# special builtin ":" would end the script (review A153).
+aa_gemlog_restart() {
+    [ -n "$GEMLOG" ] || return 0
+    { echo "=== $PMCP_VERSION $ACTION $ARG `date 2>/dev/null`" > "$GEMLOG"; } 2>/dev/null || GEMLOG=""
+    say "pmcp $PMCP_VERSION: $ACTION $ARG (gem.log emptied)"
 }
 
 # navigation messages the hook logged in this start (event=aap.nav_msg)
