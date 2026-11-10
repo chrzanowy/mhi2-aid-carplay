@@ -592,6 +592,14 @@ public final class TestUi {
         check(a.current() == 0 && a.savedOutput() == null, "unknown value: default direct");
         Files.write(conf, "PMCP_AA_OUTPUT=bogus\nPMCP_AA_OUTPUT=ring\n".getBytes(StandardCharsets.US_ASCII));
         check(a.current() == 1, "first valid line counts, as the feeder");
+        Files.write(conf, "PMCP_AA_OUTPUT=ring\rjunk\n".getBytes(StandardCharsets.US_ASCII));
+        check(a.current() == 1, "value ends at the first CR, as the feeder");
+        // a staged file left by an interrupted save is replaced; CR on the kept capture line stays
+        Files.write(conf, "PMCP_AA_CAPTURE_S=60\r\n".getBytes(StandardCharsets.US_ASCII));
+        Files.write(p.resolve("aa-extra.conf.pmcp-new"), "junk".getBytes(StandardCharsets.US_ASCII));
+        a.select(1);
+        check("# pmcp: AA switches (settings page)\nPMCP_AA_OUTPUT=ring\nPMCP_AA_CAPTURE_S=60\r\n".equals(bytes(conf))
+                && !Files.exists(p.resolve("aa-extra.conf.pmcp-new")), "stale staged file replaced, capture line kept as is");
         // AA not active in this start: shown, still switchable
         Files.write(root.resolve("ramdisk/pmcp-aa-last"), "set=gamma-11111111-22222222-33333333 use=no capture=no\n".getBytes(StandardCharsets.US_ASCII));
         check(a.valueText().indexOf("not active") >= 0 && a.blocked(1) == null, "use=no: note, switch allowed");

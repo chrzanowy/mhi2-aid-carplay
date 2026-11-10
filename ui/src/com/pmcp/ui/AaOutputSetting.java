@@ -18,6 +18,7 @@ import java.io.FileOutputStream;
  */
 final class AaOutputSetting extends Setting {
     static final String[] VALUES = {"direct", "ring"};
+    private static final int MAX = 16384;
     static final String[] LABELS = {"pmcp MOST writer (default)", "CarPlay bridge (fallback)"};
 
     private final String persist;
@@ -76,15 +77,11 @@ final class AaOutputSetting extends Setting {
         if (!persistDir.isDirectory()) {
             throw new IllegalStateException("Persist directory missing.");
         }
-        String output = null;
         String capture = null;
-        byte[] old = SpeedLimitSetting.readSmall(new File(conf), 4096);
+        byte[] old = SpeedLimitSetting.readSmall(new File(conf), MAX);
         if (old != null) {
             String[] lines = split(new String(old, "ISO-8859-1"));
             for (int k = 0; k < lines.length; k++) {
-                if (output == null && lines[k].startsWith("PMCP_AA_OUTPUT=")) {
-                    output = lines[k];
-                }
                 if (capture == null && lines[k].startsWith("PMCP_AA_CAPTURE_S=")) {
                     capture = lines[k];
                 }
@@ -110,7 +107,7 @@ final class AaOutputSetting extends Setting {
             } finally {
                 out.close();
             }
-            if (!SpeedLimitSetting.equalsBytes(SpeedLimitSetting.readSmall(staged, 4096), data)) {
+            if (!SpeedLimitSetting.equalsBytes(SpeedLimitSetting.readSmall(staged, MAX), data)) {
                 throw new IllegalStateException("Staged file did not read back.");
             }
             if (!staged.renameTo(target)) {
@@ -151,7 +148,11 @@ final class AaOutputSetting extends Setting {
         if (why != null) {
             return invalidText();
         }
-        String text = choice(current());
+        int c = current();
+        if (c < 0) {
+            return invalidText();    // the AA state changed between the two reads
+        }
+        String text = choice(c);
         String last = SpeedLimitSetting.firstLine(aaLast);
         if (last != null && last.indexOf(" use=no") >= 0) {
             return new StringBuffer(text).append(" (AA not active this start)").toString();
@@ -161,7 +162,7 @@ final class AaOutputSetting extends Setting {
 
     /** The output the feeder takes from aa-extra.conf: the first exact direct|ring value, else null. */
     String savedOutput() {
-        byte[] data = SpeedLimitSetting.readSmall(new File(conf), 4096);
+        byte[] data = SpeedLimitSetting.readSmall(new File(conf), MAX);
         if (data == null) {
             return null;
         }
@@ -171,7 +172,7 @@ final class AaOutputSetting extends Setting {
                 if (!lines[k].startsWith("PMCP_AA_OUTPUT=")) {
                     continue;
                 }
-                String value = trimEnd(lines[k].substring("PMCP_AA_OUTPUT=".length()));
+                String value = feederValue(lines[k].substring("PMCP_AA_OUTPUT=".length()));
                 if ("direct".equals(value) || "ring".equals(value)) {
                     return value;
                 }
@@ -182,11 +183,15 @@ final class AaOutputSetting extends Setting {
         return null;
     }
 
-    private static String trimEnd(String value) {
-        int end = value.length();
+    /** As the feeder: the value ends at the first CR, then trailing blanks and tabs go. */
+    private static String feederValue(String value) {
+        int end = value.indexOf('\r');
+        if (end < 0) {
+            end = value.length();
+        }
         while (end > 0) {
             char c = value.charAt(end - 1);
-            if (c != ' ' && c != '\t' && c != '\r') {
+            if (c != ' ' && c != '\t') {
                 break;
             }
             end--;
