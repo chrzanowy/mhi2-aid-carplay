@@ -86,6 +86,30 @@
  *   - PMCP_AA_KF_BRIDGE (default 0): the bridge's IDR request file is removed and counted, but no focus cycle / config
  *     resend follows unless this is 1 (both break the phone's session, A-AA11/A-AA15).
  *
+ * v11: our own MOST output, PMCP_AA_OUTPUT=direct (default "ring" = everything above, unchanged). The feeder starts no
+ * altscreen-most-bridge and makes no ring: it muxes the frames itself (aa/most/ts_mux.c, the bridge's TS byte for byte)
+ * and writes whole 12032-byte blocks to /dev/mlb/isoTX2 from a writer thread (aa/most/most_writer.c, the bridge's open
+ * and devctl sequence). The queue holds whole access units in process memory and never drops, skips or truncates one,
+ * and never waits for or asks for an IDR (the phone sends one about every 60 s; a request breaks its session).
+ * Backpressure goes to the phone only: ACKs are held while more than PMCP_AA_ACK_HIGH_PKTS TS packets (default 1024,
+ * ~125 ms of MOST) are queued and released once fewer than PMCP_AA_ACK_LOW_PKTS (default 512) are. The PTS is set when
+ * the AU's first packet is built (lead over PCR ~100 ms, never negative), the first AU carries the discontinuity flag.
+ * The guardian is the same: it runs no bridge in this mode, waits for the pipe and gives MOST back with dmdt; the feeder
+ * closes isoTX2 before it closes the pipe. A write error, a short write or a stuck write gives MOST back mid-session
+ * and the session goes on as analysis, as when the bridge dies. Diagnostics for both outputs: the guardian keeps the
+ * first 30 bridge lines (the devctl read-backs) besides the last ones, and PMCP_AA_CAPTURE_S=N records the phone's
+ * access units for N s (Annex B with an AUD per AU, at most 6 MB, plus an .idx with their times) to
+ * PMCP_AA_CAPTURE_PATH (default /mnt/persist/pmcp/aa-stream.h264).
+ *
+ * v12 (car test A147: direct ran 890 s with no error): direct mode drops the v10 pacing (it only kept the mathsls bridge
+ * under its latency-reset and held frames up to 405 ms here); the MOST writer's first sleep after an accepted block is
+ * sized to the block time (PMCP_AA_MOST_SLEEP_US); the capture keeps 8 MB free, is cut to what fits and reports errno.
+ *
+ * v13 (car test A152): the full status of the last 3 sessions is kept (<status>-prev1..3, prev1 newest) for the log; the
+ * MOST events also note phone gaps (>= 1.5 s, and a stall >= 3 s with the ACK/queue state at that moment) and every ACK
+ * hold on/off; direct: PTS lead rebased down above 130 ms (PMCP_AA_LEAD_MAX_MS, was 200) and the start sync hold is
+ * PMCP_AA_DIRECT_SYNC_HOLD_MS (default 1500, was the shared 3000); the capture keeps 4 MB free.
+ *
  * Modes (PMCP_AA_MODE): "analyze" (default) only reads, ACKs and writes a summary; the cluster keeps
  * the VW map. "most" also takes the MOST channel over. The summary is rewritten once a second to
  * PMCP_AA_STATUS (default /ramdisk/pmcp-aa-feeder.txt); nothing grows without bound.
@@ -108,6 +132,7 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -115,8 +140,12 @@
 #include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
-#define FEEDER_VERSION "10"
+#include "../most/ts_mux.h"
+#include "../most/most_writer.h"
+
+#define FEEDER_VERSION "13"
 
 #define RING_MAGIC      0x43505247u
 #define RING_VERSION    1u
@@ -130,6 +159,7 @@
 
 #define IN_BUF_MAX      (1024u * 1024u)   /* raw Annex B waiting for an access unit boundary */
 #define AU_MAX          RING_DATA_MAX     /* the ring cannot carry a larger frame */
+#define AU_BUF_MAX      (IN_BUF_MAX + 1024u)   /* v11 direct output: no 256 KB limit (AVCC adds 1 byte per 3-byte start code) */
 #define PS_MAX          256u              /* one SPS or PPS */
 #define ACK_QUEUE       64u
 #define SYNC_POOL       (768u * 1024u)    /* frames the phone sent during the start hold (window: 8) */
@@ -141,6 +171,15 @@
 #define WIN_US          10000000u
 #define BIG_LOG_MAX     6u
 #define BIG_BYTES       32768u            /* a "large" frame for the status */
+#define MUX_ENTRIES     1024u             /* v11: AUs + parameter sets the direct queue can hold */
+#define EV_FIRST        30u               /* v11: first and last MOST events kept for the status */
+#define EV_LAST         24u
+#define BO_FIRST        30u               /* v11: first bridge lines kept by the guardian (devctl read-backs) */
+#define CAP_MAX         (6u * 1024u * 1024u)   /* v11: capture limit, H.264 + index */
+#define CAP_CFG_MAX     1024u
+#define CAP_RESERVE     (4ull * 1024u * 1024u)  /* v13: free space the capture leaves on the partition (v12: 8 MB, v11: 16 MB;
+                                                   * the car has ~7 MB free on /mnt/persist, A152) */
+#define CAP_MIN         (256u * 1024u)          /* v12: a cut capture smaller than this is not written */
 
 static const char *g_mode, *g_status_path, *g_ring_path, *g_bridge_path, *g_dmdt_path, *g_ack_path;
 static const char *g_flush_dev, *g_kf_req_path, *g_run_dir;
@@ -160,6 +199,19 @@ static uint64_t g_kf_last_us;    /* last 'K' sent */
 static int g_kf_waiting;         /* a 'K' went out and no IDR has come since */
 static unsigned g_idle_ms;       /* the hook writes a frame at once: a pause this long ends it */
 static volatile sig_atomic_t g_stop;
+/* v11 direct output */
+static int g_direct;             /* PMCP_AA_OUTPUT=direct */
+static int g_direct_on;          /* MOST taken in direct mode and the writer thread running */
+static ts_mux_t g_mux;
+static ts_mux_cfg_t g_mux_cfg;
+static most_writer_t g_mw;
+static most_cfg_t g_mw_cfg;
+static unsigned long g_queue_kb, g_ack_high, g_ack_low;
+static int g_ack_hold;           /* ACKs held: the direct queue went over the high-water mark */
+static uint64_t g_hold_t0;
+static unsigned g_au_limit = RING_DATA_MAX;   /* largest frame taken (the ring's slot; direct: AU_BUF_MAX) */
+static unsigned long g_cap_s;    /* v11 capture seconds, 0 = off */
+static const char *g_cap_path;
 
 /* ---------------------------------------------------------------- time */
 
@@ -206,9 +258,19 @@ static const char *const CONF_KEYS[] = { "PMCP_AA_MODE", "PMCP_AA_RATE_KBPS", "P
                                          "PMCP_AA_SETTLE_MS", "PMCP_AA_KF_METHOD", "PMCP_AA_SYNC_HOLD_MS",
                                          "PMCP_AA_SYNC_REPEAT_MS", "PMCP_AA_CP_WAIT_MS", "PMCP_AA_PACE_KBPS",
                                          "PMCP_AA_PACE_BURST_KB", "PMCP_AA_PACE_GAP_MS", "PMCP_AA_KF_BRIDGE",
-                                         "PMCP_AA_PACE_DRAIN_KBPS", NULL };
+                                         "PMCP_AA_PACE_DRAIN_KBPS",
+                                         /* v11 */
+                                         "PMCP_AA_OUTPUT", "PMCP_AA_ACK_HIGH_PKTS", "PMCP_AA_ACK_LOW_PKTS",
+                                         "PMCP_AA_QUEUE_KB", "PMCP_AA_MOST_WAIT", "PMCP_AA_MOST_STALL_MS", "PMCP_AA_MOST_SLEEP_US",
+                                         "PMCP_AA_LEAD_MS", "PMCP_AA_LEAD_MIN_MS", "PMCP_AA_LEAD_MAX_MS",
+                                         "PMCP_AA_DISC_FIRST", "PMCP_AA_CAPTURE_S",
+                                         "PMCP_AA_DIRECT_SYNC_HOLD_MS", NULL };
 
-static void load_conf(const char *path)
+/* v11: GEM switches (pmcp.sh aa-output / aa-capture) write a second, unpinned file on /mnt/persist: only these keys,
+ * never a path, read before the pinned settings so the switch wins over them (the environment still wins). */
+static const char *const EXTRA_KEYS[] = { "PMCP_AA_OUTPUT", "PMCP_AA_CAPTURE_S", NULL };
+
+static void load_keys(const char *path, const char *const *keys)
 {
     char line[128];
     FILE *f = fopen(path, "r");
@@ -220,11 +282,13 @@ static void load_conf(const char *path)
         *eq = '\0';
         end = eq + 1 + strcspn(eq + 1, "\r\n");
         *end = '\0';
-        for (i = 0; CONF_KEYS[i] != NULL; ++i)
-            if (strcmp(line, CONF_KEYS[i]) == 0) (void)setenv(line, eq + 1, 0);
+        for (i = 0; keys[i] != NULL; ++i)
+            if (strcmp(line, keys[i]) == 0) (void)setenv(line, eq + 1, 0);
     }
     fclose(f);
 }
+
+static void load_conf(const char *path) { load_keys(path, CONF_KEYS); }
 
 /* ---------------------------------------------------------------- statistics */
 
@@ -254,10 +318,20 @@ typedef struct {
     unsigned long pace_delayed, pace_wait_max_ms, pace_q_hi, pace_overflow;
     unsigned long pace_drain;                 /* v10: frames out over the byte budget to drain the queue */
     uint64_t last_frame_us, gap_max_us, gap_max_at_us;
+    int stall_logged;                    /* v13: this gap already noted at 3 s */
     unsigned long gaps_1s, gaps_3s;
     unsigned long win[WIN_N], win_kb[WIN_N];  /* frames / KB per 10 s window, circular */
     uint64_t win_no;                          /* absolute number of the current window, from the first frame */
     unsigned long big_n, big_log_s[BIG_LOG_MAX], big_log_kb[BIG_LOG_MAX];
+    /* v11 direct output */
+    unsigned long hold_n, hold_ms_max, hold_ms_sum, acks_held, ack_forced, put_waits, put_wait_ms_max, put_err;
+    uint64_t wr_max_logged;
+    int poll_off_logged, first_block_logged;
+    /* v11 capture: 0 off, 1 recording (from the first frame), 2 being written, 3 written (cap_rc 0 or errno) */
+    int cap_state, cap_rc;
+    unsigned long cap_aus, cap_bytes, cap_s;
+    unsigned long cap_free_kb, cap_written_kb;  /* v12: free space found before the write, what was written */
+    int cap_cut;                                /* v12: cut to the free space */
 } stats_t;
 
 static stats_t S;
@@ -318,7 +392,7 @@ static void write_status_v9(FILE *f, uint64_t t)
                 g_pace_bps * 8.0 / 1000.0, g_pace_burst / 1000.0, (unsigned long)(g_pace_gap_us / 1000u), S.pace_delayed,
                 S.pace_wait_max_ms, S.pace_q_hi, PACE_MAX, S.pace_drain, S.pace_overflow);
     else
-        fprintf(f, "dawkowanie: wylaczone\n");
+        fprintf(f, "dawkowanie: wylaczone%s\n", g_direct ? " (direct: kolejka + wstrzymane ACK)" : "");
     if (S.last_frame_us)
         fprintf(f, "przerwy: ostatnia klatka %lums temu, najdluzsza %lums (%lus po przejeciu) >1s=%lu >3s=%lu\n",
                 (unsigned long)((t - S.last_frame_us) / 1000u), (unsigned long)(S.gap_max_us / 1000u),
@@ -341,6 +415,8 @@ static void write_status_v9(FILE *f, uint64_t t)
     fprintf(f, "\n");
 }
 
+static void write_status_direct(FILE *f);
+
 static void write_status(void)
 {
     char pb[256];
@@ -352,7 +428,7 @@ static void write_status(void)
     snprintf(tmp, sizeof tmp, "%s.tmp", g_status_path);
     f = fopen(tmp, "w");
     if (f == NULL) return;
-    fprintf(f, "PMCP AA FEEDER v%s mode=%s czas=%.0fs\n", FEEDER_VERSION, g_mode, secs);
+    fprintf(f, "PMCP AA FEEDER v%s mode=%s%s czas=%.0fs\n", FEEDER_VERSION, g_mode, g_direct ? " wyjscie=direct" : "", secs);
     fprintf(f, "klatki=%lu IDR=%lu fps=%.1f B-slice=%lu\n", S.frames, S.idrs,
             fsecs > 0.5 ? (double)S.frames / fsecs : 0.0, S.b_slices);
     if (S.sps_ok)
@@ -395,7 +471,15 @@ static void write_status(void)
         fprintf(f, "\n");
     }
     write_status_v9(f, t);
-    copy_lines(f, run_path(pb, sizeof pb, "pmcp-aa-bridge.txt"), "");
+    if (g_direct) write_status_direct(f);         /* v11: no bridge in this mode, its old file is not shown */
+    else copy_lines(f, run_path(pb, sizeof pb, "pmcp-aa-bridge.txt"), "");
+    if (g_cap_s != 0u)
+        fprintf(f, "nagranie: %s AU=%lu %luKB %lus (limit %lus, 6 MB) plik=%s%s errno=%d wolne=%luKB zapisane=%luKB%s\n",
+                S.cap_state == 1 ? (S.cap_aus ? "TRWA" : "czeka na klatke") : S.cap_state == 2 ? "zapis" :
+                (S.cap_rc == 0 ? "zapisane" : "BLAD"), S.cap_aus, S.cap_bytes / 1024ul, S.cap_s, g_cap_s, g_cap_path,
+                S.cap_state == 3 && S.cap_rc != 0 ? (S.cap_rc == ENOMEM ? " (brak pamieci)" : S.cap_rc == ENOSPC ?
+                " (brak miejsca)" : " (zapis nieudany)") : "", S.cap_rc, S.cap_free_kb, S.cap_written_kb,
+                S.cap_cut ? " (przyciete do wolnego miejsca)" : "");
     copy_lines(f, run_path(pb, sizeof pb, "pmcp-aa-sessions.txt"), "poprzednia ");
     if (fclose(f) == 0) rename(tmp, g_status_path);
 }
@@ -516,6 +600,9 @@ static int slice_type(const uint8_t *nal, unsigned len, unsigned *first_mb)
 
 /* ---------------------------------------------------------------- ring */
 
+static void direct_put_params(void);
+static void direct_put(const uint8_t *au, unsigned len, uint32_t frame_no);
+
 static volatile uint8_t *g_ring;
 static uint32_t g_seq;
 static unsigned long g_frame_no;
@@ -564,6 +651,7 @@ static void send_avcc(void)
     uint8_t a[11u + 2u * PS_MAX];
     unsigned n = 0;
     if (!g_avcc_dirty || g_sps_len < 4u || g_pps_len == 0u) return;
+    if (g_direct_on) { direct_put_params(); g_avcc_dirty = 0; return; }   /* v11: SPS/PPS go to the mux in order */
     a[n++] = 1; a[n++] = g_sps[1]; a[n++] = g_sps[2]; a[n++] = g_sps[3];
     a[n++] = 0xff;                       /* 4-byte NAL lengths */
     a[n++] = 0xe1;                       /* one SPS */
@@ -600,11 +688,12 @@ static void ack_connect(void)
     g_ack_fd = fd;
 }
 
-/* Sends every ACK due by t (UINT64_MAX: all of them, when the queue is full); delays are measured to now. */
+/* Sends every ACK due by t (UINT64_MAX: all of them, when the queue is full); delays are measured to now.
+ * v11: while the direct queue is over its high-water mark (g_ack_hold) nothing goes, except for UINT64_MAX. */
 static void ack_send_due(uint64_t t)
 {
     uint64_t now = now_us();
-    while (g_ack_count > 0u && g_ack_due[g_ack_head] <= t) {
+    while (g_ack_count > 0u && g_ack_due[g_ack_head] <= t && (!g_ack_hold || t == UINT64_MAX)) {
         unsigned long d_ms = (unsigned long)((now - g_ack_queued_at[g_ack_head]) / 1000u);
         ack_connect();
         if (g_ack_fd >= 0) {
@@ -633,7 +722,8 @@ static void ack_schedule(unsigned bytes)
         g_tokens -= (double)bytes;
         if (g_tokens < 0.0) due = t + (uint64_t)(-g_tokens * 1e6 / g_rate_bps);
     }
-    if (g_ack_count == ACK_QUEUE) ack_send_due(UINT64_MAX);
+    if (g_ack_count == ACK_QUEUE) { if (g_ack_hold) S.ack_forced++; ack_send_due(UINT64_MAX); }
+    if (g_ack_hold) S.acks_held++;              /* v11: this ACK waits for the direct queue to drain */
     last = g_ack_count ? g_ack_due[(g_ack_head + g_ack_count - 1u) % ACK_QUEUE] : 0u;
     if (due < last) due = last;
     idx = (g_ack_head + g_ack_count) % ACK_QUEUE;
@@ -745,6 +835,8 @@ static void dmdt_restore(void)
 typedef struct {
     unsigned long resets, idr_req, idr_resume, wait_writer, most_fail, lines;
     char last[2][160], metrics[160];
+    char first[BO_FIRST][160];   /* v11: the first lines (open, devctl read-backs, start), kept for good */
+    unsigned nfirst;
     char buf[512];
     unsigned len;
     int dirty;
@@ -753,6 +845,7 @@ typedef struct {
 static void bo_line(bridge_out_t *o, const char *l)
 {
     o->lines++;
+    if (o->nfirst < BO_FIRST) snprintf(o->first[o->nfirst++], sizeof o->first[0], "%s", l);
     if (strstr(l, "latency-reset")) o->resets++;
     if (strstr(l, "latency-request-idr") || strstr(l, "IDR request")) o->idr_req++;
     if (strstr(l, "resume-idr")) o->idr_resume++;
@@ -791,6 +884,10 @@ static void bo_write(bridge_out_t *o)
     if (o->metrics[0]) fprintf(f, "bridge metryki: %s\n", o->metrics);
     if (o->last[0][0]) fprintf(f, "bridge: %s\n", o->last[0]);
     if (o->last[1][0]) fprintf(f, "bridge: %s\n", o->last[1]);
+    {
+        unsigned k;
+        for (k = 0; k < o->nfirst; ++k) fprintf(f, "bridge poczatek %02u: %s\n", k + 1u, o->first[k]);
+    }
     if (fclose(f) == 0) rename(tmp, path);
     o->dirty = 0;
 }
@@ -819,6 +916,18 @@ static void guardian(int rfd)
         int fd = open(gpath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         snprintf(pf, sizeof pf, "%ld\n", (long)getpid());
         if (fd >= 0) { (void)write(fd, pf, strlen(pf)); close(fd); }
+    }
+    if (g_direct) {
+        /* v11 direct output: no bridge. The feeder itself writes isoTX2 and closes it before this pipe (or the kernel
+         * closes both when it dies); then MOST goes back exactly as below. */
+        for (;;) {                                /* blocking read: EOF when the feeder closed its end or died */
+            ssize_t n = read(rfd, &c, 1);
+            if (n == 0 || (n < 0 && errno != EINTR)) break;
+        }
+        sleep_ms(250);
+        dmdt_restore();
+        (void)unlink(gpath);
+        _exit(0);
     }
     if (pipe(bp) != 0) { bp[0] = bp[1] = -1; }
     b = fork();
@@ -871,6 +980,8 @@ static void guardian(int rfd)
     (void)unlink(gpath);                          /* only now may the next session take MOST */
     _exit(0);
 }
+
+static int direct_start(void);
 
 static void most_restore(void)
 {
@@ -955,10 +1066,12 @@ static int most_take(void)
         snprintf(S.most_state, sizeof S.most_state, "zajety (%s)", busy);
         return -1;
     }
-    if (access(g_bridge_path, X_OK) != 0) { set_error("brak bridge %s", g_bridge_path); return -1; }
-    /* A ring left by an earlier session (ours or CarPlay's) is reset in place, never unlinked while it may be mapped (v8). */
-    if (ring_prepare() != 0) return -1;
-    (void)unlink(g_kf_req_path);                /* a request left by an earlier bridge is not ours */
+    if (!g_direct) {                            /* v11: direct output needs no bridge and no ring */
+        if (access(g_bridge_path, X_OK) != 0) { set_error("brak bridge %s", g_bridge_path); return -1; }
+        /* A ring left by an earlier session (ours or CarPlay's) is reset in place, never unlinked while it may be mapped (v8). */
+        if (ring_prepare() != 0) return -1;
+        (void)unlink(g_kf_req_path);            /* a request left by an earlier bridge is not ours */
+    }
     if (pipe(p) != 0) { set_error("pipe errno=%d", errno); return -1; }
     rc = dmdt("dc", "72", NULL);
     S.dmdt_release_rc = rc != 0 ? rc : dmdt("sc", "4", "72");
@@ -976,6 +1089,7 @@ static int most_take(void)
     g_guard_fd = p[1];
     (void)fcntl(g_guard_fd, F_SETFD, FD_CLOEXEC);
     S.bridge_pid = (long)g_guard_pid;
+    if (g_direct) return direct_start();        /* v11: open isoTX2 here, the guardian holds no device */
     for (i = 0; i < 300 && !g_stop; ++i) {     /* the bridge creates and initialises the ring */
         int st;
         if (waitpid(g_guard_pid, &st, WNOHANG) == g_guard_pid) {
@@ -1048,7 +1162,8 @@ static void kf_poll(uint64_t t)
 
 static uint8_t g_in[IN_BUF_MAX];
 static unsigned g_in_len;
-static uint8_t g_au[AU_MAX];
+static uint8_t g_au_ring[AU_MAX];
+static uint8_t *g_au = g_au_ring;           /* v11 direct: AU_BUF_MAX bytes from malloc */
 static int g_most_failed;
 
 typedef struct { unsigned off, len; } nal_t;
@@ -1061,9 +1176,379 @@ static unsigned start_code_at(const uint8_t *p, unsigned i, unsigned n)
     return 0u;
 }
 
+/* ---------------------------------------------------------------- v11 direct output */
+
+/* MOST events (open, devctl read-backs, first block, slow writes, errors): the first EV_FIRST kept for good, then the
+ * last EV_LAST, all shown in the status. */
+static char g_ev_first[EV_FIRST][120], g_ev_last[EV_LAST][120];
+static unsigned g_ev_nfirst;
+static unsigned long g_ev_nlast;
+
+static void ev_log(const char *fmt, ...)
+{
+    char line[120];
+    va_list ap;
+    unsigned long ms = (unsigned long)((now_us() - S.t_start_us) / 1000u);
+    int k = snprintf(line, sizeof line, "%lu.%03lus ", ms / 1000ul, ms % 1000ul);
+    if (k < 0 || k >= (int)sizeof line) k = 0;
+    va_start(ap, fmt);
+    vsnprintf(line + k, sizeof line - (size_t)k, fmt, ap);
+    va_end(ap);
+    if (g_ev_nfirst < EV_FIRST) memcpy(g_ev_first[g_ev_nfirst++], line, sizeof line);
+    else memcpy(g_ev_last[g_ev_nlast++ % EV_LAST], line, sizeof line);
+}
+
+/* ACK hold with hysteresis: on over g_ack_high queued TS packets, off under g_ack_low (or when the output is gone). */
+static void direct_hold_update(uint64_t t)
+{
+    uint32_t pk = 0;
+    if (g_direct_on) ts_mux_depth(&g_mux, &pk, NULL);
+    if (!g_ack_hold && g_direct_on && pk > g_ack_high) {
+        g_ack_hold = 1;
+        g_hold_t0 = t;
+        S.hold_n++;
+        S.acks_held += g_ack_count;               /* the ACKs already waiting now wait for the drain too */
+        ev_log("ACK wstrzymane: kolejka %u pakietow > %lu, ACK czeka %u", (unsigned)pk, g_ack_high, (unsigned)g_ack_count);
+    } else if (g_ack_hold && (!g_direct_on || pk < g_ack_low)) {
+        unsigned long ms = (unsigned long)((t - g_hold_t0) / 1000u);
+        g_ack_hold = 0;
+        S.hold_ms_sum += ms;
+        if (ms > S.hold_ms_max) S.hold_ms_max = ms;
+        ev_log("ACK puszczone po %lums (kolejka %u pakietow)", ms, (unsigned)pk);
+    }
+}
+
+/* The queue has no room for the next AU (never expected: 8 MB by default): wait for the writer. 0 = give up. */
+static int direct_wait_room(void)
+{
+    most_stats_t ms;
+    if (g_stop) return 0;
+    most_snapshot(&g_mw, &ms);
+    if (ms.failed || ms.done) return 0;
+    sleep_ms(2);
+    return 1;
+}
+
+static void direct_put_params(void)
+{
+    int r;
+    while ((r = ts_mux_put_params(&g_mux, g_sps, g_sps_len, g_pps, g_pps_len)) == -1 && direct_wait_room()) {}
+    if (r == 0) S.avcc_writes++;
+    else { S.put_err++; set_error("SPS/PPS do kolejki r=%d", r); }
+}
+
+/* One frame (AVCC, as for the ring) into the TS queue, whole; the hold is updated before its ACK is scheduled. */
+static void direct_put(const uint8_t *au, unsigned len, uint32_t frame_no)
+{
+    uint64_t t0 = now_us();
+    int r, waited = 0;
+    while ((r = ts_mux_put_avcc(&g_mux, au, len, 0, now_us(), frame_no)) == -1) {
+        if (!waited) { waited = 1; S.put_waits++; }
+        if (!direct_wait_room()) break;
+    }
+    if (waited) {
+        unsigned long ms = (unsigned long)((now_us() - t0) / 1000u);
+        if (ms > S.put_wait_ms_max) S.put_wait_ms_max = ms;
+    }
+    if (r == 0) S.ring_writes++;
+    else { S.put_err++; set_error("klatka do kolejki r=%d len=%u", r, len); }
+    direct_hold_update(now_us());
+}
+
+/* Is a MOST output (ring or direct) taking frames? */
+static int out_on(void)
+{
+    return g_ring != NULL || g_direct_on;
+}
+
+static void out_frame(const uint8_t *au, unsigned len, uint32_t frame_no)
+{
+    if (g_direct_on) direct_put(au, len, frame_no);
+    else ring_put(RING_TYPE_FRAME, au, len, frame_no);
+}
+
+/* Called by most_take after dmdt released MOST and the guardian runs: queue, isoTX2, writer thread. */
+static int direct_start(void)
+{
+    if (g_au == g_au_ring) { set_error("brak pamieci na klatki"); most_restore(); return -1; }
+    if (ts_mux_init(&g_mux, (uint32_t)(g_queue_kb * 1024u), MUX_ENTRIES, &g_mux_cfg) != 0) {
+        set_error("brak pamieci na kolejke %luKB", g_queue_kb); most_restore(); return -1;
+    }
+    if (most_open(&g_mw, &g_mw_cfg) != 0) {
+        if (g_mw.dev.open_errno) ev_log("open %s blad errno=%d", g_mw_cfg.dev, g_mw.dev.open_errno);
+        else ev_log("start status=%d: MOST nie ruszyl", g_mw.dev.start_rc);
+        set_error("isoTX2 open errno=%d start=%d", g_mw.dev.open_errno, g_mw.dev.start_rc);
+        most_restore();
+        return -1;
+    }
+    ev_log("open %s ok (oczekiwanie %s)", g_mw_cfg.dev, most_wait_name(g_mw_cfg.wait));
+    ev_log("devctl interfejs status=%d wartosc=%u", g_mw.dev.iface_rc, (unsigned)g_mw.dev.iface);
+    ev_log("devctl rozmiar-pakietu status=%d wartosc=%u", g_mw.dev.packet_rc, (unsigned)g_mw.dev.packet_size);
+    ev_log("devctl liczba-blokow status=%d wartosc=%u", g_mw.dev.block_rc, (unsigned)g_mw.dev.block_count);
+    ev_log("devctl flush status=%d", g_mw.dev.flush_rc);
+    ev_log("devctl start status=%d pakiety=64", g_mw.dev.start_rc);
+    if (most_start(&g_mw, &g_mux) != 0) {
+        most_stop(&g_mw, 0u);
+        set_error("watek zapisu errno=%d", errno);
+        most_restore();
+        return -1;
+    }
+    g_direct_on = 1;
+    g_au_limit = AU_BUF_MAX;
+    g_avcc_dirty = 1;
+    snprintf(S.most_state, sizeof S.most_state, "przejety (direct)");
+    S.t_taken_us = now_us();
+    return 0;
+}
+
+/* The writer failed or stalled: MOST goes back now (device closed first, then the guardian's pipe), the session
+ * goes on as analysis (every ACK at once from now on). */
+static void direct_lost(const char *why)
+{
+    ev_log("MOST oddane: %s", why);
+    most_stop(&g_mw, 0u);
+    g_direct_on = 0;
+    direct_hold_update(now_us());
+    most_restore();
+    set_error("MOST: %s", why);
+    snprintf(S.most_state, sizeof S.most_state, "oddane (%s)", why);
+    g_most_failed = 1;
+}
+
+/* Main loop: the writer's health, and the events worth keeping. */
+static void direct_check(uint64_t t)
+{
+    most_stats_t ms;
+    if (!g_direct_on) return;
+    most_snapshot(&g_mw, &ms);
+    if (ms.blocks && !S.first_block_logged) {
+        S.first_block_logged = 1;
+        ev_log("pierwszy blok zapisany %llums po starcie", (unsigned long long)(ms.first_block_us / 1000u));
+    }
+    if (ms.poll_off && !S.poll_off_logged) { S.poll_off_logged = 1; ev_log("poll() nic nie daje: czekanie 1 ms"); }
+    if (S.last_frame_us != 0u && !S.stall_logged && t > S.last_frame_us && t - S.last_frame_us >= 3000000u) {
+        uint32_t pk = 0, aus = 0;                 /* v13 (A152): what was waiting while the phone sent nothing */
+        S.stall_logged = 1;
+        ts_mux_depth(&g_mux, &pk, &aus);
+        ev_log("brak klatek 3 s: ACK czeka %u (wstrzymane %s) kolejka %u pakietow/%u AU bloki=%llu",
+               (unsigned)g_ack_count, g_ack_hold ? "TAK" : "nie", (unsigned)pk, (unsigned)aus,
+               (unsigned long long)ms.blocks);
+    }
+    if (ms.write_us_max >= 10000u && ms.write_us_max >= 2u * S.wr_max_logged) {
+        S.wr_max_logged = ms.write_us_max;
+        ev_log("najdluzszy zapis %llums (blok %llu)", (unsigned long long)(ms.write_us_max / 1000u),
+               (unsigned long long)ms.blocks);
+    }
+    if (ms.failed || ms.done) {
+        char why[80];
+        snprintf(why, sizeof why, "%s", ms.failed ? ms.fail_what : "zapis zakonczony");
+        direct_lost(why);
+        return;
+    }
+    if (most_write_age_us(&g_mw, t) > ((uint64_t)g_mw_cfg.stall_ms + 1000u) * 1000u) {
+        most_debug_flush(g_flush_dev);            /* what the guardian does for a bridge that does not stop */
+        direct_lost("zapis zawieszony");
+    }
+}
+
+/* Session end: the queue drains for up to 200 ms (the hook kills the feeder 300 ms after its SIGTERM), then the
+ * writer stops and isoTX2 is closed; most_restore() then lets the guardian give MOST back. */
+static void direct_finish(void)
+{
+    uint32_t pk = 0;
+    most_stats_t ms;
+    if (!g_direct_on) return;
+    most_stop(&g_mw, 200u);
+    ts_mux_depth(&g_mux, &pk, NULL);
+    most_snapshot(&g_mw, &ms);
+    ev_log("koniec: blokow=%llu, w kolejce zostalo %u pakietow", (unsigned long long)ms.blocks, (unsigned)pk);
+    g_direct_on = 0;
+    direct_hold_update(now_us());
+}
+
+static void write_status_direct(FILE *f)
+{
+    ts_mux_stats_t m;
+    most_stats_t w;
+    uint32_t pk = 0, aus = 0;
+    unsigned k;
+    if (g_mux.pool == NULL) {
+        fprintf(f, "wyjscie direct: nie uruchomione\n");
+    } else {
+        ts_mux_snapshot(&g_mux, &m);
+        ts_mux_depth(&g_mux, &pk, &aus);
+        most_snapshot(&g_mw, &w);
+        fprintf(f, "kolejka direct: teraz=%u pakietow/%u AU max=%u pakietow/%u AU pelna=%lu czekanie max=%lums bledy=%lu\n",
+                (unsigned)pk, (unsigned)aus, (unsigned)m.queue_packets_hi, (unsigned)m.queue_aus_hi, S.put_waits,
+                S.put_wait_ms_max, S.put_err);
+        fprintf(f, "ACK wstrzymane: teraz=%u (%s) razy=%lu ACK=%lu najdluzej=%lums razem=%lums wymuszone=%lu progi=%lu/%lu pakietow\n",
+                g_ack_hold ? g_ack_count : 0u, g_ack_hold ? "TRWA" : "nie", S.hold_n, S.acks_held, S.hold_ms_max,
+                S.hold_ms_sum, S.ack_forced, g_ack_high, g_ack_low);
+        fprintf(f, "zapis MOST: bloki=%llu EAGAIN=%llu poll=%llu poll_falszywe=%llu sny=%llu (pierwszy %uus: %llu) krotkie=%llu"
+                " wolne>=50ms=%llu oczekiwanie=%s%s\n",
+                (unsigned long long)w.blocks, (unsigned long long)w.eagain, (unsigned long long)w.polls,
+                (unsigned long long)w.poll_ready_false, (unsigned long long)w.sleeps, g_mw_cfg.first_sleep_us,
+                (unsigned long long)w.long_sleeps, (unsigned long long)w.short_writes,
+                (unsigned long long)w.slow_writes, most_wait_name(g_mw_cfg.wait), w.poll_off ? " (poll wylaczony)" : "");
+        fprintf(f, "czas zapisu bloku: <5ms=%llu <10ms=%llu <30ms=%llu <50ms=%llu <100ms=%llu >=100ms=%llu max=%lluus sr=%lluus\n",
+                (unsigned long long)w.hist[0], (unsigned long long)w.hist[1], (unsigned long long)w.hist[2],
+                (unsigned long long)w.hist[3], (unsigned long long)w.hist[4], (unsigned long long)w.hist[5],
+                (unsigned long long)w.write_us_max, (unsigned long long)(w.blocks ? w.write_us_sum / w.blocks : 0u));
+        if (m.have_lead)
+            fprintf(f, "PTS-PCR (90kHz): pierwszy pakiet min=%lld max=%lld ostatnio=%lld, ostatni pakiet min=%lld;"
+                    " przesuniecia w gore=%llu w dol=%llu krok+1=%llu (cel %u min %u max %u)\n",
+                    (long long)m.lead_first_min, (long long)m.lead_first_max, (long long)m.lead_first_last,
+                    (long long)m.lead_last_min, (unsigned long long)m.pts_rebase_up, (unsigned long long)m.pts_rebase_down,
+                    (unsigned long long)m.pts_forced_step, (unsigned)g_mux_cfg.lead_90k, (unsigned)g_mux_cfg.lead_min_90k,
+                    (unsigned)g_mux_cfg.lead_max_90k);
+        else
+            fprintf(f, "PTS-PCR (90kHz): -\n");
+        fprintf(f, "AU direct: przyjete=%llu wyslane=%llu kluczowe=%llu bez SPS/PPS=%llu pakiety video=%llu null=%llu niezgodne=%llu\n",
+                (unsigned long long)m.aus_in, (unsigned long long)m.aus_out, (unsigned long long)m.keyframes_out,
+                (unsigned long long)m.aus_without_ps, (unsigned long long)m.video_packets,
+                (unsigned long long)m.null_packets, (unsigned long long)m.packet_count_mismatch);
+    }
+    fprintf(f, "devctl: interfejs=%u (status %d) rozmiar-pakietu=%u (status %d) liczba-blokow=%u (status %d) flush=%d start=%d"
+            " urzadzenie=%s\n",
+            (unsigned)g_mw.dev.iface, g_mw.dev.iface_rc, (unsigned)g_mw.dev.packet_size, g_mw.dev.packet_rc,
+            (unsigned)g_mw.dev.block_count, g_mw.dev.block_rc, g_mw.dev.flush_rc, g_mw.dev.start_rc, g_mw_cfg.dev);
+    for (k = 0; k < g_ev_nfirst; ++k) fprintf(f, "MOST poczatek %02u: %s\n", k + 1u, g_ev_first[k]);
+    {
+        unsigned long n = g_ev_nlast < EV_LAST ? g_ev_nlast : EV_LAST, j;
+        for (j = g_ev_nlast - n; j < g_ev_nlast; ++j) fprintf(f, "MOST: %s\n", g_ev_last[j % EV_LAST]);
+    }
+}
+
+/* ---------------------------------------------------------------- v11 capture */
+
+/* The phone's access units for g_cap_s seconds from its first frame, in memory, then written once (from a thread,
+ * so flash never stalls the stream): Annex B with an AUD first in every AU (bridge-stage0's driver splits at AUDs),
+ * the codec config the hook sent before a frame in front of it, 4-byte start codes; <path>.idx has one line per AU:
+ * "us_since_first bytes idr". At most CAP_MAX bytes in all. */
+static uint8_t *g_cap;
+static size_t g_cap_len;
+static char *g_cap_idx;
+static size_t g_cap_idx_len;
+static uint8_t g_cap_cfg[CAP_CFG_MAX];
+static unsigned g_cap_cfg_len;
+static uint64_t g_cap_t0;
+static pthread_t g_cap_th;
+static int g_cap_th_on;
+
+static int write_all(const char *path, const void *data, size_t n)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return errno ? errno : -1;
+    while (n > 0u) {
+        ssize_t w = write(fd, p, n);
+        if (w < 0 && errno == EINTR) continue;
+        if (w <= 0) { int e = errno; close(fd); return e ? e : -1; }
+        p += w; n -= (size_t)w;
+    }
+    return close(fd) == 0 ? 0 : errno;
+}
+
+static void *cap_write(void *arg)
+{
+    char dir[256], idx[300];
+    char *slash;
+    (void)arg;
+    snprintf(dir, sizeof dir, "%s", g_cap_path);
+    for (slash = dir + 1; (slash = strchr(slash, '/')) != NULL; ++slash) {   /* mkdir -p of the parent */
+        *slash = '\0';
+        (void)mkdir(dir, 0755);
+        *slash = '/';
+    }
+    snprintf(idx, sizeof idx, "%s.idx", g_cap_path);
+    {   /* never fill the persistent partition: CAP_RESERVE must stay free. v12: in the car (A147) the whole 6 MB did
+         * not fit with v11's 16 MB reserve, so the capture is cut at an AU boundary to what fits (at least 256 KB) */
+        struct statvfs v;
+        *strrchr(dir, '/') = '\0';
+        if (statvfs(dir, &v) == 0) {
+            uint64_t fr = (uint64_t)v.f_bavail * v.f_frsize;
+            uint64_t room = fr > CAP_RESERVE ? fr - CAP_RESERVE : 0u;
+            S.cap_free_kb = (unsigned long)(fr / 1024u);
+            if (room < (uint64_t)g_cap_len + g_cap_idx_len) {
+                size_t len = 0u, il = 0u;
+                while (il < g_cap_idx_len) {          /* "us bytes idr\n" per AU */
+                    unsigned long long us; unsigned b; int idr;
+                    char *nl = memchr(g_cap_idx + il, '\n', g_cap_idx_len - il);
+                    if (nl == NULL || sscanf(g_cap_idx + il, "%llu %u %d", &us, &b, &idr) != 3) break;
+                    if ((uint64_t)len + b + (size_t)(nl + 1 - g_cap_idx) > room) break;
+                    len += b; il = (size_t)(nl + 1 - g_cap_idx);
+                }
+                if (len < CAP_MIN) { S.cap_rc = ENOSPC; S.cap_state = 3; return NULL; }
+                g_cap_len = len; g_cap_idx_len = il;
+                S.cap_cut = 1;
+            }
+        }
+    }
+    S.cap_rc = write_all(g_cap_path, g_cap, g_cap_len);
+    if (S.cap_rc == 0) S.cap_rc = write_all(idx, g_cap_idx, g_cap_idx_len);
+    if (S.cap_rc == 0) S.cap_written_kb = (unsigned long)(g_cap_len / 1024u);
+    S.cap_state = 3;                              /* written (cap_rc: 0 or errno) */
+    return NULL;
+}
+
+static void cap_finish(int wait)
+{
+    if (S.cap_state != 1) return;
+    S.cap_state = 2;
+    if (!wait && pthread_create(&g_cap_th, NULL, cap_write, NULL) == 0) { g_cap_th_on = 1; return; }
+    cap_write(NULL);
+}
+
+static void cap_put(const void *d, size_t n)
+{
+    memcpy(g_cap + g_cap_len, d, n);
+    g_cap_len += n;
+}
+
+/* Every AU as it came from the hook (nals: its NAL units). */
+static void cap_au(const uint8_t *p, const nal_t *nals, unsigned cnt, uint64_t t)
+{
+    static const uint8_t sc[4] = { 0, 0, 0, 1 }, aud[2] = { 0x09, 0xf0 };
+    unsigned j, need = 6u + g_cap_cfg_len;
+    int vcl = 0, idr = 0;
+    char line[64];
+    int ln;
+    if (S.cap_state != 1) return;
+    for (j = 0; j < cnt; ++j) {
+        unsigned type = p[nals[j].off] & 0x1fu;
+        if (type == 1u || type == 5u) vcl = 1;
+        if (type == 5u) idr = 1;
+        if (type != 9u) need += 4u + nals[j].len;
+    }
+    if (!vcl) {                                   /* codec config alone: goes in front of the next frame */
+        for (j = 0; j < cnt; ++j) {
+            if ((p[nals[j].off] & 0x1fu) == 9u || g_cap_cfg_len + 4u + nals[j].len > CAP_CFG_MAX) continue;
+            memcpy(g_cap_cfg + g_cap_cfg_len, sc, 4); memcpy(g_cap_cfg + g_cap_cfg_len + 4u, p + nals[j].off, nals[j].len);
+            g_cap_cfg_len += 4u + nals[j].len;
+        }
+        return;
+    }
+    if (g_cap_t0 == 0u) g_cap_t0 = t;
+    if (t - g_cap_t0 > (uint64_t)g_cap_s * 1000000u) { cap_finish(0); return; }
+    ln = snprintf(line, sizeof line, "%llu %u %d\n", (unsigned long long)(t - g_cap_t0), need, idr);
+    if (ln < 0 || g_cap_len + need + g_cap_idx_len + (size_t)ln > CAP_MAX) { cap_finish(0); return; }
+    cap_put(sc, 4); cap_put(aud, 2);
+    if (g_cap_cfg_len) { cap_put(g_cap_cfg, g_cap_cfg_len); g_cap_cfg_len = 0; }
+    for (j = 0; j < cnt; ++j) {
+        if ((p[nals[j].off] & 0x1fu) == 9u) continue;
+        cap_put(sc, 4); cap_put(p + nals[j].off, nals[j].len);
+    }
+    memcpy(g_cap_idx + g_cap_idx_len, line, (size_t)ln);
+    g_cap_idx_len += (size_t)ln;
+    S.cap_aus++;
+    S.cap_bytes = (unsigned long)g_cap_len;
+    S.cap_s = (unsigned long)((t - g_cap_t0) / 1000000u);
+}
+
 /* ---------------------------------------------------------------- start sync (v6) */
 
-static uint8_t g_sync_idr[AU_MAX];             /* the session's first IDR as ring data */
+static uint8_t g_sync_idr_ring[AU_MAX];
+static uint8_t *g_sync_idr = g_sync_idr_ring;   /* the session's first IDR as ring data (v11 direct: AU_BUF_MAX) */
 static unsigned g_sync_idr_len;
 static unsigned g_sync_idr_ack;                /* its input size, for the held ACK */
 static uint64_t g_sync_until, g_sync_next, g_sync_t0;
@@ -1107,7 +1592,7 @@ static void pace_refill(uint64_t t)
 static void pace_emit(const uint8_t *au, unsigned len, unsigned ack)
 {
     g_pace_last_us = now_us();
-    if (g_ring != NULL) ring_put(RING_TYPE_FRAME, au, len, (uint32_t)++g_frame_no);
+    if (out_on()) out_frame(au, len, (uint32_t)++g_frame_no);   /* v11: the ring or the direct queue */
     if (g_pace_bps > 0.0) g_ptok -= (double)len;
     drain_refill(g_pace_last_us); g_dtok -= (double)len;
     ack_schedule(ack);
@@ -1232,9 +1717,9 @@ static void sync_end(uint64_t t)
 static void sync_poll(uint64_t t)
 {
     if (S.sync_state != 1u) return;
-    if (g_ring == NULL || t >= g_sync_until || g_stop) { sync_end(t); return; }
+    if (!out_on() || t >= g_sync_until || g_stop) { sync_end(t); return; }
     if (t >= g_sync_next) {
-        ring_put(RING_TYPE_FRAME, g_sync_idr, g_sync_idr_len, (uint32_t)++g_frame_no);
+        out_frame(g_sync_idr, g_sync_idr_len, (uint32_t)++g_frame_no);
         S.sync_repeats++;
         g_sync_next = t + (uint64_t)g_sync_repeat_ms * 1000u;
     }
@@ -1279,6 +1764,7 @@ static void handle_au(const uint8_t *p, unsigned n)
         if (j > start) { nals[cnt].off = start; nals[cnt].len = j - start; cnt++; }
         i = end;
     }
+    if (S.cap_state == 1) cap_au(p, nals, cnt, t);   /* v11: the phone's AU as it came, before any limit */
     for (j = 0; j < cnt; ++j) {
         const uint8_t *nal = p + nals[j].off;
         unsigned len = nals[j].len, type = nal[0] & 0x1fu, first_mb;
@@ -1292,7 +1778,11 @@ static void handle_au(const uint8_t *p, unsigned n)
             st = slice_type(nal, len, &first_mb);
             if (st == 1) S.b_slices++;
         }
-        if (out + 4u + len > AU_MAX) { S.dropped_big++; set_error("klatka > 256 KB"); return; }
+        if (out + 4u + len > g_au_limit) {
+            S.dropped_big++;
+            if (g_au_limit == RING_DATA_MAX) set_error("klatka > 256 KB"); else set_error("klatka > %u KB", g_au_limit / 1024u);
+            return;
+        }
         g_au[out++] = (uint8_t)(len >> 24); g_au[out++] = (uint8_t)(len >> 16);
         g_au[out++] = (uint8_t)(len >> 8); g_au[out++] = (uint8_t)len;
         memcpy(g_au + out, nal, len); out += len;
@@ -1310,7 +1800,9 @@ static void handle_au(const uint8_t *p, unsigned n)
         if (g > S.gap_max_us) { S.gap_max_us = g; S.gap_max_at_us = S.last_frame_us; }
         if (g >= 1000000u) S.gaps_1s++;
         if (g >= 3000000u) S.gaps_3s++;
+        if (g >= 1500000u && g_direct) ev_log("przerwa od telefonu %lums (koniec)", (unsigned long)(g / 1000u));
     }
+    S.stall_logged = 0;
     S.last_frame_us = t;
     win_advance(t);
     S.win[S.win_no % WIN_N]++;
@@ -1349,12 +1841,12 @@ static void handle_au(const uint8_t *p, unsigned n)
         S.sync_overflow++;
         sync_end(t);
     }
-    if (g_ring != NULL) {
+    if (out_on()) {
         if (g_avcc_dirty) pace_flush();           /* frames before a new avcC go out first, in order */
         send_avcc();
         if (is_idr && g_sync_hold_ms != 0u && S.sync_state == 0u) {
             pace_flush();
-            ring_put(RING_TYPE_FRAME, g_au, out, (uint32_t)++g_frame_no);
+            out_frame(g_au, out, (uint32_t)++g_frame_no);
             if (g_pace_bps > 0.0) { pace_refill(t); g_ptok -= (double)out; }
             memcpy(g_sync_idr, g_au, out); g_sync_idr_len = out; g_sync_idr_ack = n;
             g_sync_t0 = t;
@@ -1442,7 +1934,8 @@ static int connect_stream(const char *url)
 /* One line per session in <rundir>/pmcp-aa-sessions.txt, the last 10 kept (small /ramdisk). */
 static void append_session(void)
 {
-    char path[256], tmp[260], line[256], keep[10][256];
+    char path[256], tmp[260], line[1400];
+    static char keep[10][1400];                  /* v13: room for the longest possible line (gcc 8 -Wformat-truncation) */
     unsigned n = 0, i;
     FILE *f;
     uint64_t t = now_us();
@@ -1457,10 +1950,12 @@ static void append_session(void)
         fclose(f);
     }
     if (n == 10u) { for (i = 1; i < 10u; ++i) memcpy(keep[i - 1u], keep[i], sizeof keep[0]); n = 9u; }
-    snprintf(keep[n++], sizeof keep[0], "sesja start=%.0fs czas=%.0fs klatki=%lu fps=%.1f IDR=%lu przerwa_max=%lums MOST=%s czekanie=%lums blad=%s",
+    snprintf(keep[n++], sizeof keep[0], "sesja start=%.0fs czas=%.0fs klatki=%lu fps=%.1f IDR=%lu przerwa_max=%lums (>3s=%lu,"
+             " ostatnia klatka %lus przed koncem) ACK=%lu wstrzymane=%lu MOST=%s blad=%s",
              (double)S.t_start_us / 1e6, secs, S.frames, fsecs > 0.5 ? (double)S.frames / fsecs : 0.0, S.idrs,
-             (unsigned long)(S.gap_max_us / 1000u), S.most_state[0] ? S.most_state : "-", S.take_wait_ms,
-             S.last_error[0] ? S.last_error : "-");
+             (unsigned long)(S.gap_max_us / 1000u), S.gaps_3s,
+             S.last_frame_us && t > S.last_frame_us ? (unsigned long)((t - S.last_frame_us) / 1000000u) : 0ul,
+             S.acks_sent, S.hold_n, S.most_state[0] ? S.most_state : "-", S.last_error[0] ? S.last_error : "-");
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
     if ((f = fopen(tmp, "w")) == NULL) return;
     for (i = 0; i < n; ++i) fprintf(f, "%s\n", keep[i]);
@@ -1476,6 +1971,7 @@ int main(int argc, char **argv)
     uint64_t last_status = 0, last_rx = 0;
     char pidbuf[32];
 
+    load_keys(env_or("PMCP_AA_CONF_EXTRA", "/mnt/persist/pmcp/aa-extra.conf"), EXTRA_KEYS);   /* v11: GEM switches */
     load_conf(env_or("PMCP_AA_CONF", "/mnt/app/carplaymaps/aa/feeder.conf"));
     g_mode = env_or("PMCP_AA_MODE", "analyze");
     if (strcmp(g_mode, "most") != 0) g_mode = "analyze";
@@ -1492,6 +1988,9 @@ int main(int argc, char **argv)
     g_cp_wait_ms = env_ul("PMCP_AA_CP_WAIT_MS", 20000ul, 0ul, 60000ul);
     g_cp_ready_path = env_or("PMCP_AA_CP_READY", "/ramdisk/carplay-bridge.ready");
     g_sync_hold_ms = env_ul("PMCP_AA_SYNC_HOLD_MS", 0ul, 0ul, 8000ul);           /* 0 = no start sync */
+    if (strcmp(env_or("PMCP_AA_MODE", "analyze"), "most") == 0 && strcmp(env_or("PMCP_AA_OUTPUT", "ring"), "direct") == 0
+        && g_sync_hold_ms != 0u)                 /* v13: direct has its own (shorter) hold; feeder.conf's is the bridge's */
+        g_sync_hold_ms = env_ul("PMCP_AA_DIRECT_SYNC_HOLD_MS", 1500ul, 0ul, 8000ul);
     g_sync_repeat_ms = env_ul("PMCP_AA_SYNC_REPEAT_MS", 500ul, 100ul, 2000ul);
     g_pace_bps = (double)env_ul("PMCP_AA_PACE_KBPS", 0ul, 0ul, 20000ul) * 1000.0 / 8.0;   /* 0 = no pacing (v9) */
     g_pace_burst = (double)env_ul("PMCP_AA_PACE_BURST_KB", 64ul, 8ul, 256ul) * 1000.0;
@@ -1507,6 +2006,39 @@ int main(int argc, char **argv)
     g_rate_bps = (double)env_ul("PMCP_AA_RATE_KBPS", 700ul, 0ul, 4000ul) * 1000.0;
     g_burst = (double)env_ul("PMCP_AA_BURST_KB", 150ul, 16ul, 180ul) * 1000.0;
     if (strcmp(g_mode, "analyze") == 0 && getenv("PMCP_AA_RATE_KBPS") == NULL) g_rate_bps = 0.0;
+    /* v11: PMCP_AA_OUTPUT=direct (only with PMCP_AA_MODE=most). The queue-based ACK hold replaces the byte budget
+     * there, so the budget is off unless set explicitly. */
+    g_direct = strcmp(g_mode, "most") == 0 && strcmp(env_or("PMCP_AA_OUTPUT", "ring"), "direct") == 0;
+    if (g_direct) {
+        const char *wait = env_or("PMCP_AA_MOST_WAIT", "auto");
+        if (getenv("PMCP_AA_RATE_KBPS") == NULL) g_rate_bps = 0.0;
+        g_queue_kb = env_ul("PMCP_AA_QUEUE_KB", 8192ul, 1024ul, 65536ul);
+        g_ack_high = env_ul("PMCP_AA_ACK_HIGH_PKTS", 1024ul, 16ul, 65536ul);
+        g_ack_low = env_ul("PMCP_AA_ACK_LOW_PKTS", 512ul, 0ul, 65536ul);
+        if (g_ack_low > g_ack_high) g_ack_low = g_ack_high / 2u;
+        ts_mux_default_cfg(&g_mux_cfg);
+        g_mux_cfg.lead_90k = (uint32_t)env_ul("PMCP_AA_LEAD_MS", 100ul, 20ul, 1000ul) * 90u;
+        g_mux_cfg.lead_min_90k = (uint32_t)env_ul("PMCP_AA_LEAD_MIN_MS", 50ul, 0ul, 1000ul) * 90u;
+        g_mux_cfg.lead_max_90k = (uint32_t)env_ul("PMCP_AA_LEAD_MAX_MS", 130ul, 0ul, 10000ul) * 90u;   /* 0 = never down; v13: 130 (A152: 200 let the lead sit at ~150 ms) */
+        g_mux_cfg.discontinuity_first = env_ul("PMCP_AA_DISC_FIRST", 1ul, 0ul, 1ul) == 1ul;
+        g_mw_cfg.dev = env_or("PMCP_AA_MOST_DEV", "/dev/mlb/isoTX2");   /* environment only (host tests), never the file */
+        g_mw_cfg.wait = strcmp(wait, "poll") == 0 ? MOST_WAIT_POLL : strcmp(wait, "sleep") == 0 ? MOST_WAIT_SLEEP :
+                        strcmp(wait, "block") == 0 ? MOST_WAIT_BLOCK : MOST_WAIT_AUTO;
+        g_mw_cfg.stall_ms = (unsigned)env_ul("PMCP_AA_MOST_STALL_MS", 5000ul, 500ul, 60000ul);
+        /* v12: first sleep after an accepted block; one 12032-byte block is ~7.9 ms of MOST (A147: write sr 7884 us) */
+        g_mw_cfg.first_sleep_us = (unsigned)env_ul("PMCP_AA_MOST_SLEEP_US", 6500ul, 0ul, 7500ul);
+        /* v12: no v10 pacing here. It only existed to keep the mathsls bridge under its 1024-packet latency-reset;
+         * our queue never drops and backpressure is the ACK hold. In the car (A147) it held 286 frames up to 405 ms. */
+        g_pace_bps = 0.0;
+        g_pace_gap_us = 0u;
+        /* frames up to the input buffer instead of the ring's 256 KB slot; allocated only in this mode */
+        {
+            uint8_t *a = (uint8_t *)malloc(AU_BUF_MAX), *b = (uint8_t *)malloc(AU_BUF_MAX);
+            if (a != NULL && b != NULL) { g_au = a; g_sync_idr = b; } else { free(a); free(b); }
+        }
+    }
+    g_cap_s = env_ul("PMCP_AA_CAPTURE_S", 0ul, 0ul, 600ul);                       /* v11: 0 = no capture */
+    g_cap_path = env_or("PMCP_AA_CAPTURE_PATH", "/mnt/persist/pmcp/aa-stream.h264");   /* environment only */
     g_tokens = g_burst;
     g_idle_ms = (unsigned)env_ul("PMCP_AA_IDLE_MS", 8ul, 2ul, 30ul);
 
@@ -1515,6 +2047,23 @@ int main(int argc, char **argv)
     memset(&S, 0, sizeof S);
     S.t_start_us = now_us(); g_tokens_t = S.t_start_us; S.sec_start_us = S.t_start_us;
     S.bridge_pid = -1;
+    if (g_cap_s != 0u) {                          /* v11: one allocation for the whole capture */
+        g_cap = (uint8_t *)malloc(CAP_MAX);
+        g_cap_idx = (char *)malloc(CAP_MAX / 16u);
+        if (g_cap != NULL && g_cap_idx != NULL) S.cap_state = 1;
+        else { free(g_cap); free(g_cap_idx); g_cap = NULL; g_cap_idx = NULL; S.cap_rc = ENOMEM; S.cap_state = 3; }
+    }
+    {   /* v13 (A152): keep the full status of the last 3 sessions, prev1 newest (a lost picture is in the one before) */
+        char a[280], b[280];
+        int k;
+        for (k = 3; k > 1; --k) {
+            snprintf(a, sizeof a, "%s-prev%d", g_status_path, k - 1);
+            snprintf(b, sizeof b, "%s-prev%d", g_status_path, k);
+            (void)rename(a, b);
+        }
+        snprintf(b, sizeof b, "%s-prev1", g_status_path);
+        (void)rename(g_status_path, b);
+    }
     snprintf(pidbuf, sizeof pidbuf, "%ld\n", (long)getpid());
     {
         char pf[256];
@@ -1539,7 +2088,7 @@ int main(int argc, char **argv)
         struct pollfd pfd;
         int timeout = 200, r;
         uint64_t t = now_us();
-        if (g_ack_count > 0u) {
+        if (g_ack_count > 0u && !g_ack_hold) {
             uint64_t due = g_ack_due[g_ack_head];
             int ms = due > t ? (int)((due - t + 999u) / 1000u) : 0;
             if (ms < timeout) timeout = ms;
@@ -1547,6 +2096,8 @@ int main(int argc, char **argv)
         if (g_in_len > 0u && last_rx != 0u && timeout > (int)g_idle_ms) timeout = (int)g_idle_ms;
         { int st = sync_timeout_ms(t); if (st >= 0 && st < timeout) timeout = st; }
         { int pt = pace_timeout_ms(t); if (pt >= 0 && pt < timeout) timeout = pt; }
+        if (g_direct_on && timeout > 20) timeout = 20;            /* v11: writer health, every 20 ms */
+        if (g_ack_hold && g_ack_count > 0u && timeout > 2) timeout = 2;   /* v11: release held ACKs within 2 ms */
         pfd.fd = fd; pfd.events = POLLIN; pfd.revents = 0;
         r = poll(&pfd, 1, timeout);
         t = now_us();
@@ -1560,26 +2111,37 @@ int main(int argc, char **argv)
         }
         sync_poll(now_us());
         pace_poll(now_us());
+        if (g_direct) { direct_check(now_us()); direct_hold_update(now_us()); }   /* v11 */
         ack_send_due(now_us());
         kf_poll(now_us());
+        if (S.cap_state == 1 && g_cap_t0 != 0u && now_us() - g_cap_t0 > (uint64_t)g_cap_s * 1000000u) cap_finish(0);
         if (g_guard_pid > 0) {                   /* bridge gone mid-session: the guardian gave MOST back */
             int st;
             if (waitpid(g_guard_pid, &st, WNOHANG) == g_guard_pid) {
                 g_guard_pid = -1;
-                if (g_ring != NULL) { munmap((void *)g_ring, RING_FILE_SIZE); g_ring = NULL; }
-                if (g_guard_fd >= 0) { close(g_guard_fd); g_guard_fd = -1; }
-                set_error("bridge zakonczyl sie w trakcie");
-                snprintf(S.most_state, sizeof S.most_state, "oddane (bridge)");
-                g_most_failed = 1;
+                if (g_direct_on) {
+                    /* v11: the guardian is gone, so nobody would give MOST back: stop writing and do it here */
+                    direct_lost("straznik zakonczyl sie");
+                    dmdt_restore();
+                } else {
+                    if (g_ring != NULL) { munmap((void *)g_ring, RING_FILE_SIZE); g_ring = NULL; }
+                    if (g_guard_fd >= 0) { close(g_guard_fd); g_guard_fd = -1; }
+                    set_error("bridge zakonczyl sie w trakcie");
+                    snprintf(S.most_state, sizeof S.most_state, "oddane (bridge)");
+                    g_most_failed = 1;
+                }
             }
         }
         if (t - last_status >= 1000000u) { write_status(); last_status = t; }
     }
     sync_end(now_us());
     pace_flush();
+    direct_finish();                              /* v11: queue drained (<= 200 ms), writer stopped, isoTX2 closed */
     ack_send_due(UINT64_MAX);
     close(fd);
     most_restore();
+    cap_finish(1);                                /* v11: a capture still recording is written now */
+    if (g_cap_th_on) pthread_join(g_cap_th, NULL);
     write_status();
     append_session();
     if (g_ack_fd >= 0) close(g_ack_fd);

@@ -1,0 +1,10 @@
+repo: github.com/omonob/MHI2-Carplay-Maps (GPL-3.0)
+path: src/vc-runtime/runtime/
+HEAD: 5ba6f7f579305960f8cae941fd4a4061f759b054
+bridge file history (git log --oneline -- altscreen_most_bridge.c):
+2f5fd58 Release 2.0 native VC settings, mirroring and cluster card profiles
+
+7151e2cc64a5048f4f8e96a115ffa8b9fe3dee4f85d5db93777b9052ed72051d  altscreen_most_bridge.c
+0cb45ceaeec7a418b2e9e9779a05ac3902d272e6e93cb5bf792ce73c7275a509  altscreen_frame_protocol.h
+664b2379f9a040a1174b18bd6bba731badab253734b94f1a99586bc73c41ee92  cpmap_intro_policy.h
+e24d0e3c159d5fc173fff692ac7cd2fcda3195c73c85bc2a8fb67e526a60334b  cpmap_resources.h

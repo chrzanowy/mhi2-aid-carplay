@@ -19,6 +19,10 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
 PMCP_BASE_VERSION = "pmcp-0.5.1-mu1161-791"   # release v1.5.1: new GEM menu, settings page (ui), Android Auto 0.1
+# Experimental card from the same tree (PMCP_BUILD_EXPERIMENTAL=1): "-exp-" in the version, plus the diagnostics buttons
+# (AA record, AA output switches are in every card since AA 1.0). Same payload otherwise, so it never forces another set.
+if os.environ.get("PMCP_BUILD_EXPERIMENTAL") == "1":
+    PMCP_BASE_VERSION = PMCP_BASE_VERSION.replace("-mu1161-", "-exp-mu1161-")
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)
@@ -122,6 +126,16 @@ PAYLOAD.update({
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", 1219, "aa/feeder.conf"),
 })
+# Experimental builds only: the experimental AA set = the stable set with this feeder instead of AA_FEEDER (same hook,
+# hook settings and feeder settings; set id gamma-<hook>-<this feeder>-<hook settings>). Installed only from aa_advanced
+# ("AA experimental on", pmcp.sh aa-on-exp); main menu 3 replaces it with the stable set. A release card has no AAX_*
+# key, so there the experimental set is unknown and main menu 3 removes it first (aa_off). Feeder v12 (aa/feeder,
+# A148): pmcp's own MOST writer (PMCP_AA_OUTPUT=direct), switches in /mnt/persist/pmcp/aa-extra.conf.
+if "-exp-" in PMCP_BASE_VERSION:
+    PAYLOAD["AAX_FEEDER"] = (PROJ / "aa/prebuilt/aa-most-feeder-exp",
+                             "17a366da1d364bf9559df54b9d598516b3b21a026ec0786bba3e578c6c63a5f1", 56336, "aa/aa-most-feeder-exp")
+    # the experimental set needs its own id (aa_set_id: the feeder is part of it), or stable and experimental are one set
+    assert PAYLOAD["AAX_FEEDER"][1][:8] != PAYLOAD["AA_FEEDER"][1][:8], "experimental feeder = stable feeder"
 # AA sets of earlier (experimental) cards: whole tuples of (sha256, sha1, size) for hook, feeder, hook settings, feeder
 # settings, as they were on that card. pmcp.sh aa_state reports them as "old" with that card's AA_BOOT; aa-install (main menu 3) and aa-on
 # brings them up to date. Only the hashes go to the card, so no earlier build is needed here.
@@ -226,6 +240,16 @@ AA_OLD = [
               ("c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", "5b86be4b6630da664e77d7435e8ffb04ca92ca51", 34856),
               ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
               ("c26c69a8562f4773edbbbf287ecf20e52d208f27135b944df04c6f8bbf70dccc", "785285dbeb3c719d83833b59aab31382d9137dee", 1160)]),
+    # gamma g2, feeder v11 (direct MOST writer opt-in), 6 Mbit/s (experimental 0.5.0, card a55867ab)
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("76901cc7caa8b6a6aa3111f31b8dd3ee974f779cff818aba8f221dd79367cad0", "43f2aa88ae12811824b3da4d8bd2772b3f35b6a7", 53796),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", "8cc8efcc2e8a8fcf05eec4e96eae0d59e8c0a62c", 1219)]),
+    # gamma g2, feeder v12 (card 15d19b43; the experimental set of cards c234a9ff / 02aa81cb, in the car 2026-11-10)
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("f87923b5249775bdb47f1ca93b77a04bfdb0043c70d8ca80003c37f1f061e0d9", "9a8c2205228cf2a21c4ee5e197756e442dd512d8", 54868),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", "8cc8efcc2e8a8fcf05eec4e96eae0d59e8c0a62c", 1219)]),
 ]
 
 # Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): the v1.0-v1.3 driver and
@@ -508,7 +532,12 @@ AA_MENU = [("aa-confirm", "aa-confirm", "AA Confirm: AA works (only in the start
            ("aa-log-clear", "aa-log-clear", "AA delete saved logs, AA and CarPlay (after the log card copied them)"),
            ("aa-remove", "aa-remove", "AA remove (factory Android Auto back)")]
 # experimental builds only: their extra Android Auto software (empty on release cards)
-AA_EXP_MENU = []
+AA_EXP_MENU = [] if "-exp-" not in PMCP_BASE_VERSION else [
+    ("aa-on-exp", "aa-on-exp", "AA EXPERIMENTAL on: feeder v13, pmcp MOST writer (5. Confirm after the AA trial; 3 = stable)"),
+    ("aa-output-direct", "aa-output direct", "AA TEST output: pmcp direct MOST writer, no CarPlay bridge (next connection)"),
+    ("aa-output-ring", "aa-output ring", "AA output: CarPlay bridge (next connection)"),
+    ("aa-capture-60", "aa-capture 60", "AA record: first 60 s of the phone video at each connection (for the log card)"),
+    ("aa-capture-off", "aa-capture off", "AA record: off")]
 
 
 # main menu 4, in order: unsupported route guidance / Java files back to factory (features-reset), an earlier card's
@@ -644,11 +673,19 @@ def main():
             pairs[h] = h1
             hs.append("%s %d" % (h, size))
         assert [(f[0], f[2]) for f in files] != cur_aa, "AA_OLD tuple equals this card's AA set"
+        if "AAX_FEEDER" in PAYLOAD:
+            assert [(f[0], f[2]) for f in files] != [cur_aa[0], PAYLOAD["AAX_FEEDER"][1:3]] + cur_aa[2:], \
+                "AA_OLD tuple equals this card's experimental AA set"
         # the set id (mode + hook, feeder, hook settings) does not cover feeder.conf: pmcp.sh aa-on drops the markers of
         # such a set, so its confirmation does not carry over to this card's settings (card 030b7df2: same id, 2 Mbit/s)
         if mode == "gamma" and [f[0][:8] for f in files[:3]] == [c[0][:8] for c in cur_aa[:3]]:
             print("WARNING: AA_OLD set %s (feeder.conf %s) has this card's AA set id: AA 1 removes its confirmation, the "
                   "next AA connection is a trial" % ("-".join([mode] + [f[0][:8] for f in files[:3]]), files[3][0][:8]))
+        if "AAX_FEEDER" in PAYLOAD and mode == "gamma" and \
+                [f[0][:8] for f in files[:3]] == [cur_aa[0][0][:8], PAYLOAD["AAX_FEEDER"][1][:8], cur_aa[2][0][:8]]:
+            print("WARNING: AA_OLD set %s (feeder.conf %s) has this card's EXPERIMENTAL AA set id: aa-on-exp removes its "
+                  "confirmation, the next AA connection is a trial" % ("-".join([mode] + [f[0][:8] for f in files[:3]]),
+                                                                       files[3][0][:8]))
         aa_old.append(mode + " " + " ".join(hs))
     for key, h, size, rel in rows:
         data = (pm / "payload" / rel).read_bytes()

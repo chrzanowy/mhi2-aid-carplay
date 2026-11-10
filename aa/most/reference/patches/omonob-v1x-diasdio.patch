@@ -1,0 +1,72 @@
+--- a/altscreen_most_bridge.c
++++ b/altscreen_most_bridge.c
+@@ -336,9 +336,19 @@
+     size_t discarded;
+     pthread_mutex_lock(&queue->mutex);
+     discarded = queue->count;
++#ifdef ALTSCREEN_DIASDIO
++    /* diasdio_apply.py, binary 0x1b04-0x1b10: flush only when the window
++     * high-water mark is 0; high_water_window is no longer reset here.
++     * The return value is still the count before the (skipped) flush. */
++    if (queue->high_water_window == 0) {
++        queue->read_index = queue->write_index;
++        queue->count = 0;
++    }
++#else
+     queue->read_index = queue->write_index;
+     queue->count = 0;
+     queue->high_water_window = 0;
++#endif
+     pthread_mutex_unlock(&queue->mutex);
+     return discarded;
+ }
+@@ -383,7 +393,12 @@
+     unsigned long streak = g_writer_fast_streak;
+     return (unsigned long)(blocks - g_recovery_writer_generation) >=
+                RECOVERY_FAST_WRITES_REQUIRED &&
++#ifdef ALTSCREEN_DIASDIO
++           /* diasdio_apply.py, binary 0x4174: cmphi r3,#7 -> cmphi r3,#0 */
++           streak >= 1U;
++#else
+            streak >= RECOVERY_FAST_WRITES_REQUIRED;
++#endif
+ }
+ 
+ static void queue_metric_snapshot(PacketQueue *queue, size_t *current,
+@@ -1341,9 +1356,16 @@
+     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: shared ring %s bytes=%u slots=%u -> %s\n",
+             ALT_FRAME_RING_PATH, (unsigned)sizeof(*ring),
+             ALT_FRAME_RING_SLOT_COUNT, device);
++#ifdef ALTSCREEN_V1X
++    /* v1.x (fed7dce4) has no intro policy: play the intro when the variable
++     * is set, otherwise start reading at sequence 1 at once. */
++    (void)intro_policy;
++    if (0) {
++#else
+     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: intro-policy=%s\n",
+             intro_policy == CPMAP_INTRO_OFF ? "off" : intro_policy == CPMAP_INTRO_EVERY_CONNECT ? "every-connect" : "once-per-boot");
+     if (!cpmap_intro_should_play(intro_policy, INTRO_ONCE_PATH)) {
++#endif
+         /* A second CarPlay session in the same boot must start at a fresh
+          * config/IDR boundary, even though the animation is not replayed. */
+         __sync_synchronize();
+@@ -1375,8 +1397,19 @@
+             usleep(1000);
+             continue;
+         }
++#ifdef ALTSCREEN_V1X
++        /* v1.x: log and restart at sequence 1, nothing else (CONTRACT.md 1). */
+         if (ring->generation != generation) {
+             generation = ring->generation;
++            next_sequence = 1;
++            cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
++                    "bridge: ring generation=%u\n", generation);
++        }
++        if (0) {
++#else
++        if (ring->generation != generation) {
++#endif
++            generation = ring->generation;
+             /* A saved menu change applies on the next phone connection. */
+             intro_policy = cpmap_intro_read_policy(INTRO_POLICY_PATH);
+             next_sequence = 1;

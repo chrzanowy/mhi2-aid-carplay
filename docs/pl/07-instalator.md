@@ -188,8 +188,10 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
      eksperymentalne oprogramowanie Android Auto tylko na tym ekranie.
    Żadna akcja nie wymaga pliku odblokowania (do v1.1.0 akcje Java i systemu prowadzenia wymagały `pmcp/ODBLOKUJ_ETAP_B`).
 3. Wynik jest na ekranie GEM. Karta SD jest w GEM tylko do odczytu (nawet `mount -uw` się nie udaje), więc logu nie da się
-   zapisać na kartę: instalator wypisuje `PMCP_WARN=SD_LOG_NOT_WRITABLE` i działa dalej. **Rób zdjęcia ekranu.** Jeśli karta
-   jest zapisywalna, log trafia do `/pmcp/log/pmcp-<akcja>-<pid>.log`.
+   zapisać na kartę. Wynik każdego przycisku trafia więc do radia: `/mnt/persist/pmcp/gem.log` (najwyżej ~2 x 32 KB,
+   starsza połowa w `gem.log.1`; tylko gdy pmcp już utworzył `/mnt/persist/pmcp`), kopiuje go karta logów, „AA delete saved
+   logs” go czyści, „Remove everything” usuwa. Gdy nie da się zapisać nigdzie: `PMCP_WARN=NO_LOG_WRITABLE`, akcja działa
+   dalej. **Rób zdjęcia ekranu.** Jeśli karta jest zapisywalna, log trafia też do `/pmcp/log/pmcp-<akcja>-<pid>.log`.
 
 Wszystkie etykiety są po angielsku (od v1.4) i w czystym ASCII.
 

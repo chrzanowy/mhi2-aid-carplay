@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Assemble the complete pmcp INSTALL card (card 1) from the pinned M.I.B. 3.6.0 zip + a verified build_sd.py output. Host tool.
 
-  python3 -I build_card_install.py SD_BUILD_DIR OUT_DIR
+  python3 -I build_card_install.py SD_BUILD_DIR OUT_DIR   (an -exp- build needs PMCP_CARD_EXPERIMENTAL=1)
 
 Output = the M.I.B. 3.6.0 tree exactly as in the zip (autorun stays DISARMED: _Swdlautorun.txt), plus
   - pmcp/ and esd/Launcher-sda0.esd from SD_BUILD_DIR (every file checked against its BUILD-MANIFEST.txt first);
@@ -10,6 +10,7 @@ Nothing on this card runs by itself: the installer is started from GEM, one acti
 The rescue card (build_rescue.py) is a separate card; this script refuses anything that would mix the two.
 """
 import hashlib
+import os
 import pathlib
 import shutil
 import sys
@@ -58,8 +59,10 @@ def main():
     # 1. the installer build: exactly the files of its BUILD-MANIFEST.txt, nothing more, nothing less
     man = (sdb / "BUILD-MANIFEST.txt").read_text().splitlines()
     ver, entries = man[0], [l.split() for l in man[1:] if l.strip()]
-    if not ver.startswith("pmcp-0.5.1-mu1161-791-"):
+    if not ver.startswith(("pmcp-0.5.1-mu1161-791-", "pmcp-0.5.1-exp-mu1161-791-")):
         sys.exit("unexpected build version: %s" % ver)
+    if "-exp-" in ver and os.environ.get("PMCP_CARD_EXPERIMENTAL") != "1":
+        sys.exit("experimental build %s: set PMCP_CARD_EXPERIMENTAL=1 to make an install card of it" % ver)
     listed = set()
     for h, size, rel in entries:
         data = (sdb / rel).read_bytes()

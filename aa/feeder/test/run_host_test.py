@@ -28,7 +28,7 @@ def run(case, mode, n_frames=60, kill_after=None, rate=None, idr_every=30, conf=
     ack_srv = socket.socket(socket.AF_UNIX); ack_srv.bind(ack_path); ack_srv.listen(1)
     srv = socket.socket(); srv.bind(('127.0.0.1', 0)); srv.listen(1)
     with open(P('feeder.conf'), 'w') as f: f.write(conf or '')
-    env = dict(os.environ, PMCP_AA_CONF=P('feeder.conf'), PMCP_AA_STATUS=P('status.txt'), PMCP_AA_RING=P('ring.bin'),
+    env = dict(os.environ, PMCP_AA_CONF_EXTRA=P('extra.conf'), PMCP_AA_CONF=P('feeder.conf'), PMCP_AA_STATUS=P('status.txt'), PMCP_AA_RING=P('ring.bin'),
                PMCP_AA_BRIDGE=os.path.join(HERE, 'fake_bridge.sh'), PMCP_AA_DMDT=os.path.join(HERE, 'fake_dmdt.sh'),
                PMCP_AA_ACK=ack_path, PMCP_AA_FLUSH_DEV=P('flush.dev'), FAKE_DMDT_LOG=P('dmdt.log'),
                FAKE_BRIDGE_OUT=P('bridge.jsonl'), PMCP_AA_KF_REQ=P('kf.request'), PMCP_AA_RUNDIR=d)

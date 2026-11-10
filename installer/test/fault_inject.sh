@@ -16,6 +16,7 @@ H=$(cd "$(dirname "$0")" && pwd)
 BK="${PMCP_BACKUP:-$REPO/backup/MU1161}/advanced/MU1161-appimg"
 export PMCP_TEST_GAWK="${PMCP_TEST_GAWK:-$REPO/upstream/tools/gawk-3.1.5/gawk}"
 W=$(mktemp -d /tmp/pmcp-fi.XXXX)
+export PMCP_TEST_GEMLOG="$W/gem.log"   # the GEM button log outside the unit tree (the tree checks stay exact)
 U="$W/unit/mnt/app"
 FAILS=0; CASES=0
 bad() { echo "  FAIL $*"; FAILS=$((FAILS+1)); }
@@ -121,6 +122,12 @@ OWN=("install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" "java-o
 MAIN=("map-install map-square-fps40" "aa-install" "fx:aa-unknown" "aa-install" "rg-system-on" "java-on rg" "java-on nai" \
       "fx:java-unknown" "fx:rg-unknown" "features-reset" "rg-system-on" "java-on np" "fx:dio-mixed" "map-install map-square-fps40" "restore")
 OWN+=("${MAIN[@]}")
+# experimental cards: the experimental AA set swapped in and out (aa_advanced "AA EXPERIMENTAL on", main menu 3)
+XAA=()
+grep -q '^AAX_FEEDER ' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && \
+    XAA=("map-install map-square-fps40" "aa-install" "aa-on-exp" "aa-output direct" "aa-capture 60" "aa-install" "aa-on-exp" \
+         "aa-remove" "aa-on-exp" "restore")
+OWN+=("${XAA[@]}")
 if [ "$OLDCARDS" = yes ]; then
 CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on rglu" "rg-update" "java-update" "java-on np" \
        "switch map-clean-l40" "java-off np" "java-off rg" "rg-system-off" "java-off nai" "restore" \
@@ -130,7 +137,7 @@ CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on
        "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore" \
        "exp:install map-clean" "exp:aa-on gamma" "aa-on" "restore" \
        "x143:install map-square-fps40" "x143:rg-system-on" "x143:java-on nai" "x143:java-on rg-aa" "x143:aa-on" "java-update" "aa-on" "restore" \
-       "${MAIN[@]}")
+       "${MAIN[@]}" "${XAA[@]}")
 else
 CHAIN=("${OWN[@]}")
 fi
@@ -212,7 +219,7 @@ one_target() {
                 || bad "[$target] kill@$n ($killed): java-update again did not finish: $(grep PMCP_FAIL "$W/out")"
         fi
         case "$target" in
-            "map-install "*|aa-install|features-reset)
+            "map-install "*|aa-install|aa-on-exp|features-reset)
                 # the main menu's own repair: the same button pressed again finishes the interrupted run
                 rm -rf "$W/rerun"; cp -Rp "$W/unit" "$W/rerun"; mv "$W/unit" "$W/unit.k"; mv "$W/rerun" "$W/unit"
                 run $target
