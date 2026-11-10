@@ -208,7 +208,7 @@ old” i „packages of an earlier card: rglu”), potem „2. Install CarPlay�
 Auto”, jeśli używasz Android Auto, „4. Install additional features” (uruchamia `rg-update` i `java-update`); tylko jeśli 3
 albo 4 coś zainstalowały: restart (start próbny) → „5. Confirm” w tym starcie albo „Save: everything works” na stronie ustawień
 (z v1.5.0 przycisk 4 dodaje `ui`, więc restart i 5 są potrzebne; gdy wszystkie trzy odpowiadają „already installed” /
-„nothing changed”: bez restartu i bez 5). Zrób też nową kartę ratunkową (niżej).
+„nothing changed” (karta z tymi samymi funkcjami): bez restartu i bez 5). Zrób też nową kartę ratunkową (niżej).
 Karta ratunkowa jest na awarię po potwierdzeniu; wcześniejszy test jest opcjonalny.
 
 Szczegółowy przewodnik po kolejnych krokach w aucie: [09-tutorial-w-aucie.md](09-tutorial-w-aucie.md).

@@ -112,7 +112,7 @@ All variants declare a physical size of 240×144 mm. Switching a variant swaps o
 "already installed"), **3. Install Android Auto** if you use Android Auto, **4. Install additional features**. If 3 or 4
 installed something: restart (trial start) → test → **5. Confirm** in that start (or "Save: everything works" on the settings page). From
 v1.5.0, 4 adds the settings page, so the restart and 5 are needed. If they all answer "already installed" / "nothing
-changed", nothing changed: no restart and no 5 needed. Button 4 replaces the earlier driver, reader and Java packages
+changed" (a card with the same features), nothing changed: no restart and no 5 needed. Button 4 replaces the earlier driver, reader and Java packages
 (`rglu`, `rg`, the experimental `rg-aa` → this card's `rg`) by this card's. Button 3 updates an earlier experimental
 card's Android Auto that it knows in place and replaces Android Auto it does not support by this card's. Make a new
 card 2 as well when coming from v1.0-v1.3: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.

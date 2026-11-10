@@ -144,9 +144,7 @@ Restart once more. From now on the set loads at every start. **"7. Status (read-
 
 The same steps for v1.5.0, v1.4.x and v1.0-v1.3. From v1.5.0, 4 adds the settings page (`ui`), so the restart and 5
 (or "Save: everything works" on the page) are needed. Only when 2, 3 and 4 all answer "already installed" /
-"everything was already on, nothing changed" (a card with the same features), nothing changed and no restart and no 5
-are needed. Restart and 5
-(steps 5 and 6) are needed only if 3 or 4 actually installed something.
+"everything was already on, nothing changed" (a card with the same features) are no restart and no 5 needed.
 
 1. Make **card 1 from this release** and insert it. **"1. Check card and unit (read-only)"** → `PMCP_VERIFY_OK state=JAVA`.
    "7. Status (read-only)" may show "Route guidance system: old" and "packages of an earlier card: rglu": that is
@@ -159,10 +157,11 @@ are needed. Restart and 5
    a set this card does not support is removed first (factory `gal` back), then this card's set is installed.
 4. **"4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)"** → `PMCP_FEATURES_ON_OK`
    (or `PMCP_FEATURES_ON_OK (everything was already on, nothing changed)`). It replaces the earlier iAP2 driver and reader by this card's (the factory copies stay) and makes one new Java set in
-   which `rglu` (or `rg`, or the experimental `rg-aa`) becomes the new `rg`.
+   which `rglu` (or `rg`, or the experimental `rg-aa`) becomes the new `rg`, and adds `ui` (the settings page).
 5. Only if 3 or 4 installed something: restart, this start is the **trial**. Check that CarPlay connects, then the arrows (also right at the start of a route),
    lanes, the distance bar and the street name. With Android Auto: connect the phone in this start as well.
-6. **"5. Confirm: everything works (in the first start after 3 or 4)"** in the same start, then restart.
+6. **"5. Confirm: everything works (in the first start after 3 or 4)"** in the same start, or on the unit App-Connect >
+   Settings > AID navigation configuration > Changes > "Save: everything works"; then restart.
 7. Make a **new card 2** (copy helper option 2): rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
 
 Android Auto in the car, and how to remove it: [13-android-auto-guide.md](13-android-auto-guide.md).

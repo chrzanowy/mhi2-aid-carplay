@@ -124,7 +124,7 @@ CZĘŚĆ 2 - W AUCIE
     4. "4. Install additional features: ..."  ->  PMCP_FEATURES_ON_OK
        (zastępuje wcześniejsze pliki prowadzenia i paczki, także eksperymentalne rg-aa)
        Z v1.5.0 przycisk 4 dodaje stronę ustawień (ui), więc kroki 5 i 6 są potrzebne. Tylko
-       gdy 2, 3 i 4 wszystkie piszą "already installed" / "everything was already on, nothing
+       gdy wszystkie trzy (2, 3 i 4) piszą "already installed" / "everything was already on, nothing
        changed" (karta z tymi samymi funkcjami), nic się nie zmieniło - bez restartu i bez 5.
     5. Tylko jeśli 3 albo 4 coś zainstalowały: restart, ten start jest PRÓBNY. Sprawdź strzałki, pasy, nazwę ulicy (i Android Auto,
        jeśli naciśnięto 3: podłącz telefon).

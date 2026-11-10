@@ -112,7 +112,7 @@ Wszystkie warianty deklarują rozmiar fizyczny 240×144 mm. Zmiana wariantu podm
 (zwykle „already installed”), **3. Install Android Auto**, jeśli używasz Android Auto, **4. Install additional
 features**. Jeśli 3 albo 4 coś zainstalowały: restart (start próbny) → test → **5. Confirm** w tym starcie (albo „Save: everything works” na stronie ustawień).
 Z v1.5.0 przycisk 4 dodaje stronę ustawień, więc restart i 5 są potrzebne. Jeśli wszystkie odpowiadają
-„already installed” / „nothing changed”, nic się nie zmieniło: bez restartu i bez 5. Przycisk 4 zastępuje wcześniejszy sterownik,
+„already installed” / „nothing changed” (karta z tymi samymi funkcjami), nic się nie zmieniło: bez restartu i bez 5. Przycisk 4 zastępuje wcześniejszy sterownik,
 czytnik i paczki Java (`rglu`, `rg`, eksperymentalne `rg-aa` → `rg` z tej karty) plikami z tej karty. Przycisk 3
 aktualizuje na miejscu znane mu Android Auto z wcześniejszej karty eksperymentalnej, a Android Auto, którego nie
 obsługuje, zastępuje zestawem z tej karty. Przy przejściu z v1.0–v1.3 zrób też nową kartę 2: karty ratunkowe sprzed

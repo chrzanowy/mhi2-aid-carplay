@@ -140,10 +140,9 @@ zestaw i `This boot: set=... use=yes`.
 ## Aktualizacja z wcześniejszej wersji
 
 Te same kroki dla v1.5.0, v1.4.x i v1.0-v1.3. Z v1.5.0 przycisk 4 dodaje stronę ustawień (`ui`), więc restart i 5
-(albo „Save: everything works” na stronie) są potrzebne. Tylko gdy 2, 3 i 4 wszystkie odpowiadają „already installed” /
-„everything was already on, nothing changed” (karta z tymi samymi funkcjami), nic się nie zmieniło i nie trzeba ani
-restartu, ani 5. Restart i 5 (kroki 5 i 6)
-są potrzebne tylko wtedy, gdy 3 albo 4 faktycznie coś zainstalowały.
+(albo „Save: everything works” na stronie) są potrzebne. Tylko gdy wszystkie trzy (2, 3 i 4) odpowiadają „already
+installed” / „everything was already on, nothing changed” (karta z tymi samymi funkcjami), nie trzeba ani restartu,
+ani 5.
 
 1. Zrób **kartę 1 z tego wydania** i włóż ją. **„1. Check card and unit (read-only)”** → `PMCP_VERIFY_OK state=JAVA`.
    „7. Status (read-only)” może pokazać „Route guidance system: old” i „packages of an earlier card: rglu”: tak ma być,
@@ -157,10 +156,11 @@ są potrzebne tylko wtedy, gdy 3 albo 4 faktycznie coś zainstalowały.
    z tej karty.
 4. **„4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)”** → `PMCP_FEATURES_ON_OK`
    (albo `PMCP_FEATURES_ON_OK (everything was already on, nothing changed)`). Zastępuje wcześniejszy sterownik iAP2 i czytnik plikami z tej karty (kopie fabryczne zostają) i tworzy jeden nowy
-   zestaw Java, w którym `rglu` (albo `rg`, albo eksperymentalne `rg-aa`) staje się nowym `rg`.
+   zestaw Java, w którym `rglu` (albo `rg`, albo eksperymentalne `rg-aa`) staje się nowym `rg`, i dodaje `ui` (stronę ustawień).
 5. Tylko jeśli 3 albo 4 coś zainstalowały: restart, ten start jest **próbny**. Sprawdź, czy CarPlay się łączy, potem strzałki (także od razu na starcie trasy),
    pasy, pasek odległości i nazwę ulicy. Z Android Auto: w tym starcie podłącz też telefon.
-6. **„5. Confirm: everything works (in the first start after 3 or 4)”** w tym samym starcie, potem restart.
+6. **„5. Confirm: everything works (in the first start after 3 or 4)”** w tym samym starcie albo w radiu App-Connect >
+   Settings > AID navigation configuration > Changes > „Save: everything works”; potem restart.
 7. Zrób **nową kartę 2** (pomocnik kopiowania, opcja 2): karty ratunkowe sprzed v1.4 nie przywracają sterownika iAP2 z v1.4.
 
 Android Auto w aucie i jego usuwanie: [13-instrukcja-android-auto.md](13-instrukcja-android-auto.md).

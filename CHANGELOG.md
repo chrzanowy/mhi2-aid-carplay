@@ -10,8 +10,8 @@ A new GEM menu (one button per part, stable versions only) and a settings page o
 
 - **Settings page on the unit: App-Connect > Settings > "AID navigation configuration"** (package `ui`,
   `pmcp-ui.jar`). It uses the factory look (native rows, drop-down list, touch, back button) and has two rows:
-  - **Changes**: shows whether this start is a trial ("Not saved (trial start)", "Saved", "Android Auto not saved",
-    "Android Auto: connect the phone", "Off (rescue card)").
+  - **Changes**: shows whether this start is a trial, e.g. "Not saved (trial start)", "Not saved (restart
+    first)", "Saved", "Android Auto not saved", "Android Auto: connect the phone", "Off (rescue card)".
   - **Speed limit**: Off / Before street name / Street name (trial). It writes the same file as
     `pmcp.sh speedlimit-mode` (`/mnt/persist/pmcp/native-speedlimit-mode`), under the same lock and rules: `sl` in a
     confirmed, running Java set; "Before street name" also needs `rg`. The change applies within about a second, no

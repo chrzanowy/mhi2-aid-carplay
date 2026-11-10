@@ -210,8 +210,8 @@ Updating from v1.5.0, v1.4.x or v1.0-v1.3: "1. Check" (state `JAVA`; "7. Status"
 and "packages of an earlier card: rglu"), then "2. Install CarPlay" (usually "already installed"), "3. Install Android
 Auto" if Android Auto is used, "4. Install additional features" (runs `rg-update` and `java-update`); only if 3 or 4
 installed something: restart (trial boot) → "5. Confirm" in that boot or "Save: everything works" on the settings page (from v1.5.0,
-4 adds `ui`, so a restart and 5 are needed; when all three answer "already installed" / "nothing changed": no restart,
-no 5). Make a new rescue card too (see below).
+4 adds `ui`, so a restart and 5 are needed; when all three answer "already installed" / "nothing changed" (a card with the same
+features): no restart, no 5). Make a new rescue card too (see below).
 The rescue card is for emergencies after Confirm; testing it first is optional.
 
 Step-by-step guide for the car: [09-in-car-guide.md](09-in-car-guide.md).
