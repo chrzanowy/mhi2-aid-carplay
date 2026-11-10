@@ -1,4 +1,4 @@
-# Android Auto na AID (Android Auto 0.1, otwarta alfa, od v1.5.0)
+# Android Auto na AID (Android Auto 1.0 od v1.6.0; w v1.5.x otwarta alfa 0.1)
 
 [English version: README.md](README.md)
 

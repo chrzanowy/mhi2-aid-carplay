@@ -31,7 +31,7 @@ This repository holds only what is specific to this head unit. It builds on the 
 | CarPlay track title and artist on the AID | works |
 | Day/night switching of the cluster map | works |
 | Speed limit from the phone (`showSpeedLimit=yes`) | shows nothing on this unit |
-| Android Auto 0.1 (open alpha, v1.5.0): Google Maps picture on the AID, VW arrows from Google Maps | works, with known limits: [Android Auto](#android-auto-on-the-aid-android-auto-01-open-alpha) |
+| Android Auto 1.0 (stable since v1.6.0; 0.1 open alpha in v1.5.x): Google Maps picture on the AID through pmcp's own MOST writer, VW arrows from Google Maps | works, with one known issue: [Android Auto](#android-auto-on-the-aid-android-auto-10) |
 | Settings page on the unit (v1.5.1, package `ui`): App-Connect > Settings > AID navigation configuration; "Save: everything works" confirms a trial start without the SD card | new in v1.5.1, [details](ui/README.md) |
 | Optional (v1.4.1, package `sl`; mode buttons fixed in v1.4.2 by amjad-alarori, mode set on the settings page since v1.5.1): the car's own VW map speed limit in front of the street name, or a trial in CurrentPositionInfo | 50 → 70 km/h confirmed on an e-Golf (AID 795A); not yet tried on AID 791. [Details](docs/en/16-native-speed-limits.md) |
 
@@ -116,6 +116,8 @@ changed" (a card with the same features), nothing changed: no restart and no 5 n
 (`rglu`, `rg`, the experimental `rg-aa` → this card's `rg`) by this card's. Button 3 updates an earlier experimental
 card's Android Auto that it knows in place and replaces Android Auto it does not support by this card's. Make a new
 card 2 as well when coming from v1.0-v1.3: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
+**From v1.5.1 with Android Auto:** 3 brings Android Auto 1.0 in place (also from an experimental card's feeder v11-v13),
+then restart, connect the phone and 5 (or "Save" on the settings page) in that start.
 
 Before you start you need [M.I.B. installed on the unit and a backup](docs/en/01-mib-install-backup.md). The installer
 on the card checks every file of your head unit first. On any other firmware it stops and changes nothing.
@@ -207,29 +209,35 @@ English in [`docs/en/`](docs/en/), Polish in [`docs/pl/`](docs/pl/):
 
 The component directories have an English `README.md` and a Polish `README.pl.md`.
 
-## Android Auto on the AID (Android Auto 0.1, open alpha)
+## Android Auto on the AID (Android Auto 1.0)
 
-Since v1.5.0 the same card also brings Android Auto to the AID: the Google Maps picture from an Android phone, over the
-head unit's own MOST path (no extra adapter), and the native VW arrows from Google Maps.
+The same card also brings Android Auto to the AID: the Google Maps picture from an Android phone, over the head unit's
+own MOST path (no extra adapter), and the native VW arrows from Google Maps. Android Auto 1.0 (v1.6.0) is the first
+stable version: pmcp writes the picture to the AID itself (direct); v1.5.x had the 0.1 open alpha over the CarPlay bridge.
 
-![Android Auto 0.1 in the car: Google Maps from an Android phone on the AID, a left turn in 400 m](docs/img/aa-cluster.jpg)
+![Android Auto in the car: Google Maps from an Android phone on the AID, a left turn in 400 m](docs/img/aa-cluster.jpg)
 
-*Android Auto 0.1 in the car (2026-11): the Google Maps picture from an Android phone on the AID.*
+*Android Auto in the car (2026-11): the Google Maps picture from an Android phone on the AID.*
 
 What works (tested in the car, Samsung Galaxy A16 with Android 16):
 - the Google Maps picture on the AID, also when switching from CarPlay to Android Auto without a restart;
-- VW arrows with distance from Google Maps manoeuvres, shown by the same route guidance package `rg` as for CarPlay.
+- VW arrows with distance from Google Maps manoeuvres, shown by the same route guidance package `rg` as for CarPlay;
+- no frame lost and no MOST error over several drives; the picture follows the phone with about 0.1 s of decoder lead.
 
-Known limits:
+Output: "AA output: pmcp MOST writer (default, from the next connection)" or "AA output: CarPlay bridge (fallback, from
+the next connection)" in `aa_advanced` (also on the settings page). It applies at the next phone connection, with no
+restart and no 5.
+
+Known issue and limits:
+- after leaving Android Auto on the main screen and coming back, the phone may slow the AID picture down and, rarely,
+  stop it (the AID shows its loading screen): plug the phone in again;
 - the stream starts about 5 s after the phone connects;
-- now and then the picture starts dark (or the AID shows its loading screen) until the phone's next key frame;
-  plugging the phone in again helps;
 - no VW arrow at the very first step of a route; destination distance and arrival time stay in the Google Maps picture.
 
 Install (needs the CarPlay map from "2."; for the arrows also "4. Install additional features"):
 1. GEM → `pmcp_stream_map_aid` → **"3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)"**. It also
-   updates an earlier experimental card's Android Auto, and replaces Android Auto files this card does not support (e.g.
-   from an experimental card).
+   updates Android Auto of v1.5.x and of earlier experimental cards in place, and replaces Android Auto files this card
+   does not support.
 2. Restart, connect the Android phone (cable), start a route in Google Maps. This first session is a trial.
 3. If the picture is on the AID: "5. Confirm: everything works (in the first start after 3 or 4)" in that same start,
    with the phone connected (it confirms the CarPlay features' trial at the same time, if there is one).

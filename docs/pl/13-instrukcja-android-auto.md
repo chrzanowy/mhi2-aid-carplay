@@ -2,7 +2,10 @@
 
 [English version](../en/13-android-auto-guide.md) · Tło: [aa/README.pl.md](../../aa/README.pl.md)
 
-Android Auto 0.1 (otwarta alfa, od v1.5.0): obraz Google Maps z telefonu z Androidem na AID i strzałki VW z Google Maps.
+Android Auto 1.0 (od v1.6.0; w v1.5.x otwarta alfa 0.1): obraz Google Maps z telefonu z Androidem na AID i strzałki VW
+z Google Maps. Obraz idzie przez własny zapis MOST pmcp; „AA output: CarPlay bridge (fallback, from the next connection)”
+w `aa_advanced` przełącza na bridge CarPlay (bez restartu, bez 5). Gdy po wyjściu z Android Auto na ekranie głównym
+i powrocie AID pokazuje ekran ładowania: podłącz telefon ponownie (znany problem).
 Instaluje się własnym przyciskiem na ekranie głównym (GEM: `pmcp_stream_map_aid`), **„3. Install Android Auto: Google
 Maps on the AID + VW arrows (needs 2)”**, osobno od funkcji CarPlay: „4. Install additional features” ani go nie
 instaluje, ani nie usuwa. Szczegóły (potwierdzenie AA, logi, usuwanie) są na ekranie `pmcp_advanced` → `aa_advanced`.

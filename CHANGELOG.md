@@ -3,6 +3,38 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
+## Unreleased
+
+**Android Auto 1.0**: the first stable Android Auto on the AID (no longer alpha). The picture goes to the AID through
+pmcp's own MOST writer instead of the CarPlay bridge; the bridge stays as a fallback output.
+
+- **Own MOST output (direct) by default.** Feeder v14 (`aa/feeder`): it writes the stream to the AID video channel itself
+  (TS mux + MOST writer in `aa/most`), no frame pacing and no bridge queue in between. Tested in the car over several
+  drives (up to 20 min per session) with no MOST error, no frame lost and no held ACK. The decoder's lead is kept at
+  about 80-130 ms; the start hold is 1.5 s instead of 3 s.
+- **Output switch without a trial.** GEM `aa_advanced`: "AA output: pmcp MOST writer (default, from the next
+  connection)" and "AA output: CarPlay bridge (fallback, from the next connection)". The switch is one line in
+  `/mnt/persist/pmcp/aa-extra.conf` (`PMCP_AA_OUTPUT=direct|ring`); it changes no file of the set and no confirmation,
+  so no restart and no 5 are needed. Feeder v14 takes only `direct` or `ring` from that line; any other value is ignored
+  and the set's default (direct) applies.
+- **Main menu 3 updates every earlier Android Auto in place**: the v1.5.0/v1.5.1 set (feeder v10), and the experimental
+  sets of earlier cards (feeders v11, v12, v13). The first connection afterwards is a trial (5 or "Save" on the page).
+- **3 no longer waits for 4** when only the Java part is of a version this card does not support and is plainly ours
+  (lsd.sh ours or factory, every JAR of the set present, ours by name or known to this card). Android Auto never touches
+  the Java part; 4 replaces it as before. Anything else still stops with "press 4, then 3".
+- **GEM button log on the unit.** The SD card is read-only in GEM, so every pmcp button's output now also goes to
+  `/mnt/persist/pmcp/gem.log` (at most ~2 x 32 KB). The log card copies it.
+- **"AA delete saved logs"** deletes everything pmcp saved for the log card (AA and CarPlay logs, the recorded phone
+  video, the boot log, the button log); with nothing to delete it answers OK instead of a FAIL.
+- **"AA save log"** also saves the feeder's full status of the last 3 sessions of that start, so a lost picture can be
+  read after the phone was plugged in again.
+- Experimental cards (`pmcp-...-exp-...`, built from the same tree with `PMCP_BUILD_EXPERIMENTAL=1`) carry the same
+  Android Auto set plus "AA record" (60 s of the phone's video for the log card).
+
+Known issue: after leaving Android Auto on the main screen and coming back, the phone may slow down the picture for the
+AID and, rarely, stop it (the AID shows its loading screen). Plugging the phone in again brings it back. The same
+happened with the CarPlay bridge; the cause is on the phone's side of the protocol and is still being looked at.
+
 ## v1.5.1 (2026-11-10)
 
 A new GEM menu (one button per part, stable versions only) and a settings page on the unit. Installer version

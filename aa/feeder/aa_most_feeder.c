@@ -110,6 +110,10 @@
  * hold on/off; direct: PTS lead rebased down above 130 ms (PMCP_AA_LEAD_MAX_MS, was 200) and the start sync hold is
  * PMCP_AA_DIRECT_SYNC_HOLD_MS (default 1500, was the shared 3000); the capture keeps 4 MB free.
  *
+ * v14 = AA 1.0 (user decision A153): PMCP_AA_OUTPUT is taken only when it is exactly "direct" or "ring" (trailing
+ * blanks/CR ignored); any other value in aa-extra.conf or feeder.conf is ignored and counted in the status, so a bad switch
+ * (the on-unit UI page writes it without a trial) always gives the default from feeder.conf (AA 1.0: direct).
+ *
  * Modes (PMCP_AA_MODE): "analyze" (default) only reads, ACKs and writes a summary; the cluster keeps
  * the VW map. "most" also takes the MOST channel over. The summary is rewritten once a second to
  * PMCP_AA_STATUS (default /ramdisk/pmcp-aa-feeder.txt); nothing grows without bound.
@@ -145,7 +149,7 @@
 #include "../most/ts_mux.h"
 #include "../most/most_writer.h"
 
-#define FEEDER_VERSION "13"
+#define FEEDER_VERSION "14"
 
 #define RING_MAGIC      0x43505247u
 #define RING_VERSION    1u
@@ -270,7 +274,10 @@ static const char *const CONF_KEYS[] = { "PMCP_AA_MODE", "PMCP_AA_RATE_KBPS", "P
  * never a path, read before the pinned settings so the switch wins over them (the environment still wins). */
 static const char *const EXTRA_KEYS[] = { "PMCP_AA_OUTPUT", "PMCP_AA_CAPTURE_S", NULL };
 
-static void load_keys(const char *path, const char *const *keys)
+static unsigned long g_output_ignored;    /* v14: PMCP_AA_OUTPUT lines with a value other than direct/ring */
+static char g_output_from[16] = "domyslne";
+
+static void load_keys(const char *path, const char *const *keys, const char *from)
 {
     char line[128];
     FILE *f = fopen(path, "r");
@@ -281,14 +288,19 @@ static void load_keys(const char *path, const char *const *keys)
         if (line[0] == '#' || eq == NULL) continue;
         *eq = '\0';
         end = eq + 1 + strcspn(eq + 1, "\r\n");
+        while (end > eq + 1 && (end[-1] == ' ' || end[-1] == '\t')) --end;
         *end = '\0';
+        if (strcmp(line, "PMCP_AA_OUTPUT") == 0) {   /* v14: only the two known outputs */
+            if (strcmp(eq + 1, "direct") != 0 && strcmp(eq + 1, "ring") != 0) { g_output_ignored++; continue; }
+            if (getenv("PMCP_AA_OUTPUT") == NULL) snprintf(g_output_from, sizeof g_output_from, "%s", from);
+        }
         for (i = 0; keys[i] != NULL; ++i)
             if (strcmp(line, keys[i]) == 0) (void)setenv(line, eq + 1, 0);
     }
     fclose(f);
 }
 
-static void load_conf(const char *path) { load_keys(path, CONF_KEYS); }
+static void load_conf(const char *path) { load_keys(path, CONF_KEYS, "feeder.conf"); }
 
 /* ---------------------------------------------------------------- statistics */
 
@@ -429,6 +441,9 @@ static void write_status(void)
     f = fopen(tmp, "w");
     if (f == NULL) return;
     fprintf(f, "PMCP AA FEEDER v%s mode=%s%s czas=%.0fs\n", FEEDER_VERSION, g_mode, g_direct ? " wyjscie=direct" : "", secs);
+    if (strcmp(g_mode, "most") == 0)              /* v14: where the output came from, bad switch values ignored */
+        fprintf(f, "wyjscie: %s (z: %s) zignorowane wartosci=%lu\n", g_direct ? "direct" : "bridge (ring)", g_output_from,
+                g_output_ignored);
     fprintf(f, "klatki=%lu IDR=%lu fps=%.1f B-slice=%lu\n", S.frames, S.idrs,
             fsecs > 0.5 ? (double)S.frames / fsecs : 0.0, S.b_slices);
     if (S.sps_ok)
@@ -1971,7 +1986,12 @@ int main(int argc, char **argv)
     uint64_t last_status = 0, last_rx = 0;
     char pidbuf[32];
 
-    load_keys(env_or("PMCP_AA_CONF_EXTRA", "/mnt/persist/pmcp/aa-extra.conf"), EXTRA_KEYS);   /* v11: GEM switches */
+    {   /* v14: an output from the environment (host tests) is checked like the files' */
+        const char *o = getenv("PMCP_AA_OUTPUT");
+        if (o != NULL && strcmp(o, "direct") != 0 && strcmp(o, "ring") != 0) { unsetenv("PMCP_AA_OUTPUT"); g_output_ignored++; }
+        else if (o != NULL) snprintf(g_output_from, sizeof g_output_from, "srodowisko");
+    }
+    load_keys(env_or("PMCP_AA_CONF_EXTRA", "/mnt/persist/pmcp/aa-extra.conf"), EXTRA_KEYS, "aa-extra.conf");   /* v11: GEM switches */
     load_conf(env_or("PMCP_AA_CONF", "/mnt/app/carplaymaps/aa/feeder.conf"));
     g_mode = env_or("PMCP_AA_MODE", "analyze");
     if (strcmp(g_mode, "most") != 0) g_mode = "analyze";

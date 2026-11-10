@@ -2,12 +2,14 @@
 
 [Polska wersja](../pl/13-instrukcja-android-auto.md) · Background: [aa/README.md](../../aa/README.md)
 
-Android Auto 0.1 (open alpha, since v1.5.0): the Google Maps picture from an Android phone on the AID, and the VW arrows
-from Google Maps. It is installed with its own button on the main screen (GEM: `pmcp_stream_map_aid`), **"3. Install
+Android Auto 1.0 (since v1.6.0; 0.1 open alpha in v1.5.x): the Google Maps picture from an Android phone on the AID, and
+the VW arrows from Google Maps. The picture goes through pmcp's own MOST writer; "AA output: CarPlay bridge (fallback,
+from the next connection)" in `aa_advanced` switches to the CarPlay bridge (no restart, no 5). It is installed with its own button on the main screen (GEM: `pmcp_stream_map_aid`), **"3. Install
 Android Auto: Google Maps on the AID + VW arrows (needs 2)"**, separately from the CarPlay features: "4. Install
 additional features" neither installs nor removes it. The details (AA confirm, logs, removal) are on the screen
-`pmcp_advanced` → `aa_advanced`. Experimental cards (not releases) add their experimental Android Auto software there
-only; the main screen installs the stable version.
+`pmcp_advanced` → `aa_advanced`. Experimental cards (not releases) add "AA record" there (diagnostics); the main
+screen installs the stable version. If the AID shows its loading screen after you left Android Auto on the main screen
+and came back: plug the phone in again (known issue).
 
 ## Before
 

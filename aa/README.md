@@ -1,4 +1,4 @@
-# Android Auto on the AID (Android Auto 0.1, open alpha, since v1.5.0)
+# Android Auto on the AID (Android Auto 1.0 since v1.6.0; 0.1 open alpha in v1.5.x)
 
 [Polska wersja: README.pl.md](README.pl.md)
 
@@ -9,6 +9,13 @@ Status (2026-11-07, car-tested on a Passat B8, MU1161 / AID 791, Samsung Galaxy 
 - **Known limits:** the stream starts about 5 s after the phone connects; now and then the picture starts dark until the
   phone's next key frame (feeder v10: start sync, pacing at 6 Mbit/s without bursts, no focus cycle); no VW arrow at the
   very first step of a route ("depart" is not mapped yet).
+
+**Android Auto 1.0 (feeder v14, audit A152/A153):** the default output is pmcp's own MOST writer (`most/`, "direct"):
+the feeder muxes the stream to TS and writes it to `/dev/mlb/isoTX2` itself, with no frame pacing and no CarPlay bridge
+in between; the CarPlay bridge path below stays as the fallback output ("AA output: CarPlay bridge", or
+`PMCP_AA_OUTPUT=ring` in `/mnt/persist/pmcp/aa-extra.conf`, no trial). Known issue: after leaving Android Auto on the main
+screen and coming back, the phone may slow down the cluster stream and, rarely, stop it; plugging the phone in again
+brings it back.
 
 Android Auto is installed with its own main-screen button in GEM, "3. Install Android Auto: Google Maps on the AID + VW
 arrows (needs 2)"; its details (AA confirm, status, logs, removal) are on the screen `pmcp_advanced` → `aa_advanced`.

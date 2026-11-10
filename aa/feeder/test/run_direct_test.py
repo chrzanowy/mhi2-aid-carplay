@@ -246,7 +246,7 @@ STEADY = [(1, 1, 20000, 20000, False), (149, 0, 1500, 6000, False)]
 r = analyse(run('steady', plan_synth(STEADY)))
 common(r, 'steady', 150, lead_min=4500)
 st = r.status
-check(st.startswith('PMCP AA FEEDER v13 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
+check(st.startswith('PMCP AA FEEDER v14 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
 for p in ('kolejka direct:', 'ACK wstrzymane:', 'zapis MOST:', 'czas zapisu bloku:', 'PTS-PCR (90kHz):', 'devctl: interfejs=0 (status 0)',
           'MOST poczatek 01: ', 'AU direct:'):
     check(any(l.startswith(p) for l in st.split('\n')), 'steady: status line %r' % p)
@@ -384,8 +384,8 @@ check('przerwa od telefonu 3' in r.status or 'przerwa od telefonu 4' in r.status
 bl = [l for l in r.status.split('\n') if 'brak klatek 3 s' in l]
 check(len(bl) == 2 and 'ACK czeka 0 (wstrzymane nie)' in bl[-1] and 'kolejka 0 pakietow/0 AU' in bl[-1], 'gap: stall noted with ACK/queue state %s' % bl)
 pv = [open(SPATH + '-prev%d' % k).read() if os.path.exists(SPATH + '-prev%d' % k) else '' for k in (1, 2, 3)]
-check(all(x.startswith('PMCP AA FEEDER v13') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
-check([num(x.split('\n')[1], 'klatki') for x in pv] == [30, 30, 30] and pv[0] != pv[1] != pv[2], 'prev: prev1..3 are separate sessions')
+check(all(x.startswith('PMCP AA FEEDER v14') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
+check([num(line(x, 'klatki='), 'klatki') for x in pv] == [30, 30, 30] and pv[0] != pv[1] != pv[2], 'prev: prev1..3 are separate sessions')
 sess = [l for l in open(os.path.join(OUT, 'prev3', 'pmcp-aa-sessions.txt')).read().split('\n') if l]
 check(len(sess) == 1 and '>3s=1' in sess[0] and 'ACK=30' in sess[0]
       and ('ostatnia klatka 4s przed koncem' in sess[0] or 'ostatnia klatka 5s przed koncem' in sess[0]), 'session line: gaps, last frame, ACKs %s' % sess)
@@ -421,7 +421,7 @@ r = run('ring-explicit', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 
         env_add={'PMCP_AA_OUTPUT': 'ring', 'FAKE_BRIDGE_PRINT': '1', 'PMCP_AA_CAPTURE_S': '1',
                  'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'ring.h264')})
 check(not os.path.exists(r.P('mlb.ts')) and os.path.exists(r.P('bridge.jsonl')) and r.acks == 40, 'ring-explicit: ring + bridge, no isoTX2')
-check(r.status.startswith('PMCP AA FEEDER v13 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
+check(r.status.startswith('PMCP AA FEEDER v14 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
 bt = open(r.P('pmcp-aa-bridge.txt')).read() if os.path.exists(r.P('pmcp-aa-bridge.txt')) else ''
 check('bridge poczatek 01: bridge: start status=0 packets=64' in bt and 'bridge poczatek 02: bridge: latency-reset' in bt,
       'ring-explicit: guardian keeps the first bridge lines')
@@ -436,13 +436,38 @@ r = run('extra-switch', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 6
         conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=ring\n', env_add={'PMCP_AA_OUTPUT': None, 'PMCP_AA_MODE': None,
         'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'extra.h264')},
         extra='PMCP_AA_OUTPUT=direct\nPMCP_AA_CAPTURE_S=1\nPMCP_AA_MODE=analyze\nPMCP_AA_CAPTURE_PATH=/tmp/x\n')
-check(r.status.startswith('PMCP AA FEEDER v13 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
+check(r.status.startswith('PMCP AA FEEDER v14 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
 check(os.path.exists(os.path.join(OUT, 'capture-files', 'extra.h264')) and 'nagranie: zapisane' in r.status,
       'extra-switch: capture switched on there, path key there ignored')
 check(r.acks == 40, 'extra-switch: every frame (%d)' % r.acks)
 r = run('extra-ring', plan_synth([(1, 1, 20000, 20000, False), (19, 0, 1500, 6000, False)], seed=22),
         conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=direct\n', env_add={'PMCP_AA_OUTPUT': None}, extra='PMCP_AA_OUTPUT=ring\n')
 check(os.path.exists(r.P('bridge.jsonl')) and not os.path.exists(r.P('mlb.ts')), 'extra-ring: switch back to the bridge wins over feeder.conf')
+check('wyjscie: bridge (ring) (z: aa-extra.conf) zignorowane wartosci=0' in r.status, 'extra-ring: status shows the source')
+
+# 15b. v14 (AA 1.0, A153): the on-unit UI writes the switch without a trial, so a bad value must give the default
+# (feeder.conf: direct), start without an error, and change no file
+BAD = ['PMCP_AA_OUTPUT=\n', 'PMCP_AA_OUTPUT=bridge\n', 'PMCP_AA_OUTPUT=Direct\n', 'PMCP_AA_OUTPUT=direct;rm\n',
+       'PMCP_AA_OUTPUT=\xc3\xa9\n', 'PMCP_AA_OUTPUT=rin\n', 'PMCP_AA_OUTPUT= direct\n']
+for k, ex in enumerate(BAD):
+    r = run('extra-bad%d' % k, plan_synth([(1, 1, 20000, 20000, False), (9, 0, 1500, 6000, False)], seed=60 + k),
+            conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=direct\n', env_add={'PMCP_AA_OUTPUT': None}, extra=ex)
+    before = open(r.P('extra.conf')).read()
+    check(r.rc == 0 and os.path.exists(r.P('mlb.ts')) and not os.path.exists(r.P('bridge.jsonl')) and r.acks == 10
+          and 'wyjscie: direct (z: feeder.conf) zignorowane wartosci=1' in r.status and 'blad: strumien zamkniety' in r.status
+          and before == ex, 'extra-bad %r: default direct, no error, file unchanged' % ex)
+r = run('extra-crlf', plan_synth([(1, 1, 20000, 20000, False), (9, 0, 1500, 6000, False)], seed=70),
+        conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=direct\n', env_add={'PMCP_AA_OUTPUT': None}, extra='PMCP_AA_OUTPUT=ring \r\n')
+check(os.path.exists(r.P('bridge.jsonl')) and 'zignorowane wartosci=0' in r.status, 'extra-crlf: "ring" with a blank and CRLF is ring')
+r = run('extra-dup', plan_synth([(1, 1, 20000, 20000, False), (9, 0, 1500, 6000, False)], seed=71),
+        conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=direct\n', env_add={'PMCP_AA_OUTPUT': None},
+        extra='PMCP_AA_OUTPUT=junk\nPMCP_AA_OUTPUT=ring\nPMCP_AA_OUTPUT=direct\n')
+check(os.path.exists(r.P('bridge.jsonl')) and 'wyjscie: bridge (ring) (z: aa-extra.conf) zignorowane wartosci=1' in r.status,
+      'extra-dup: the first valid line wins, the junk one is counted')
+r = run('conf-bad', plan_synth([(1, 1, 20000, 20000, False), (9, 0, 1500, 6000, False)], seed=72),
+        conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=xyz\n', env_add={'PMCP_AA_OUTPUT': None})
+check(os.path.exists(r.P('bridge.jsonl')) and 'wyjscie: bridge (ring) (z: domyslne)' in r.status,
+      'conf-bad: nothing valid anywhere = the built-in ring (feeder.conf is pinned by hash, so only a test case)')
 
 print('runs kept in', OUT)
 print('FAILED CHECKS: %d' % len(fails))

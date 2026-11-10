@@ -26,13 +26,14 @@
 #   pmcp.sh aa-status           read-only: AA state, the last session's stream analysis, the manoeuvres for rg
 #   pmcp.sh aa-log-save         copy this start's AA log from /ramdisk to carplaymaps/logs (for the log card)
 #   pmcp.sh aa-log-clear        delete the saved AA and CarPlay logs, the recorded phone video and the boot log
-# Experimental cards only (manifest key AAX_FEEDER; aa_advanced):
-#   pmcp.sh aa-on-exp           the experimental AA set (the stable one with the experimental feeder, its own set id and
-#                               trial); replaces the stable set in place; main menu 3 (aa-install) goes back to stable
-#   pmcp.sh aa-output direct|ring  experimental set: AA picture through pmcp's own MOST writer (direct) or the CarPlay
-#                               bridge (ring, default); from the next AA connection (/mnt/persist/pmcp/aa-extra.conf)
-#   pmcp.sh aa-capture 60|off   experimental set: record the first 60 s of the phone's video at each AA connection to
+#   pmcp.sh aa-output direct|ring  AA 1.0: the AA picture through pmcp's own MOST writer (direct, the set's default) or
+#                               the CarPlay bridge (ring, fallback); from the next AA connection, no trial (user
+#                               decision A153; the on-unit settings page writes the same line of aa-extra.conf)
+# Experimental cards only (pmcp-...-exp-...; aa_advanced):
+#   pmcp.sh aa-capture 60|off   record the first 60 s of the phone's video at each AA connection to
 #                               /mnt/persist/pmcp/aa-stream.h264 (for the log card)
+#   pmcp.sh aa-on-exp           only with a manifest key AAX_FEEDER (an experimental feeder next to the stable one; none
+#                               since AA 1.0): that set, its own set id and trial; main menu 3 goes back to stable
 #   pmcp.sh speedlimit-mode MODE  optional native VW limit (package sl): off (default); turnto = before the street that rg
 #                               writes to TurnToInfo (needs rg); street = trial, in CurrentPositionInfo only
 #   pmcp.sh speedlimit-status   read-only saved mode and native-limit reader snapshot
@@ -405,6 +406,37 @@ java_set_consistent() {
     return 0
 }
 
+# AA 1.0 (A153, conditions of the CP review): Android Auto never touches the Java part, so main menu 3 does not wait for
+# 4 when only the Java part is of a version this card does not support (e.g. a package this card does not know), and
+# only when that part is plainly ours: map and route guidance system fine, lsd.sh factory or ours, and with ours the set
+# file names exactly one existing plain JAR per package, each ours by name (pmcp-*.jar) or known to this card.
+java_part_tolerable() {
+    [ "$MAPOK" = yes ] && [ "$RGSYS" != unknown ] && [ "$JAVAPART" = mixed ] || return 1
+    matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" && return 0
+    set -- `manifest_get LSD_JAVA`
+    matches "$LSD" "$1" "$2" || return 1
+    _t_line=`cat "$ROOT/HMI_BOOT" 2>/dev/null`
+    _t_known=`java_catalog | while read _t_a _t_f; do echo "$_t_f"; done; echo "$JAVA_OLD" | while read _t_a _t_b _t_c _t_f _t_d; do echo "$_t_f"; done`
+    set -f
+    set -- $_t_line
+    _t_id=$1
+    case "$_t_id" in ""|*[!A-Za-z0-9+-]*) set +f; return 1 ;; esac
+    shift
+    _t_n=1; _t_x=$_t_id
+    while [ "${_t_x#*+}" != "$_t_x" ]; do _t_x=${_t_x#*+}; _t_n=$((_t_n + 1)); done
+    [ $# -eq $_t_n ] || { set +f; return 1; }
+    for _t_w in "$@"; do
+        case "$_t_w" in *[!A-Za-z0-9._-]*|.*) set +f; return 1 ;; esac
+        [ -f "$JARS/$_t_w" ] || { set +f; return 1; }
+        case "$_t_w" in
+            pmcp-*.jar) ;;
+            *) case " `echo $_t_known` " in *" $_t_w "*) ;; *) set +f; return 1 ;; esac ;;
+        esac
+    done
+    set +f
+    return 0
+}
+
 # state -> STOCK | VIDEO | JAVA | PARTIAL | UNKNOWN (reason in STATE_WHY)
 #   VIDEO: stage A (wrapper active, factory lsd.sh, no JAR of ours)   JAVA: stage A + lsd.sh block + a consistent JAR set
 detect_state() {
@@ -597,7 +629,12 @@ do_aa_on() {
     selftest
     firmware_identity
     detect_state
-    case "$STATE" in VIDEO|JAVA) ;; *) fail "AA_NEEDS_STAGE_A_STATE_$STATE" ;; esac
+    case "$STATE" in
+        VIDEO|JAVA) ;;
+        # AA 1.0: only the Java part unsupported and plainly ours (java_part_tolerable): AA leaves it as it is
+        PARTIAL) [ "$AASYS" != unknown ] && [ "$CORE_STATE" = PARTIAL ] && java_part_tolerable || fail "AA_NEEDS_STAGE_A_STATE_$STATE" ;;
+        *) fail "AA_NEEDS_STAGE_A_STATE_$STATE" ;;
+    esac
     [ "$AASYS" = on ] && [ "$AAMODE" = "$ARG" ] && fail "AA_ALREADY_ON"
     aa_check_payload $ARG
     set -- `manifest_get AA_MODE`; M_SHA=$1; M_SIZE=$2; M_PATH=$3
@@ -724,6 +761,13 @@ do_aa_install() {    # [gammax]: aa-on-exp, the experimental set of an experimen
     case "$CORE_STATE" in
         VIDEO|JAVA) ;;
         STOCK) fail "AA_INSTALL_NEEDS_CARPLAY_FIRST_PRESS_2" ;;
+        PARTIAL) if java_part_tolerable; then
+               say "Java part of a version this card does not support: left as it is (Android Auto does not touch it; 4 replaces it)"
+           else
+               [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
+               [ "$MAPOK" = yes ] && fail "AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3"
+               fail "AA_INSTALL_NEEDS_A_WORKING_CARPLAY_INSTALL_PRESS_2_STATE_$STATE"
+           fi ;;
         *) [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
            [ "$MAPOK" = yes ] && fail "AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3"
            fail "AA_INSTALL_NEEDS_A_WORKING_CARPLAY_INSTALL_PRESS_2_STATE_$STATE" ;;
@@ -849,9 +893,9 @@ do_aa_retry() {
     say "PMCP_AA_RETRY_OK set=$SET (restart the unit; the next AA connection is a new trial)"
 }
 
-# Experimental switches for the experimental feeder (v12+), read at each AA connection from
-# /mnt/persist/pmcp/aa-extra.conf: only PMCP_AA_OUTPUT and PMCP_AA_CAPTURE_S are taken from it (the feeder ignores any
-# other line). One key changes, the other is kept; the file is replaced in one mv. Only with the experimental set on.
+# AA switches, read by the feeder (v12+) at each AA connection from /mnt/persist/pmcp/aa-extra.conf: only PMCP_AA_OUTPUT
+# (direct|ring; any other value is ignored by feeder v14, so the set's default applies) and PMCP_AA_CAPTURE_S are taken
+# from it. One key changes, the other is kept; the file is replaced in one mv. Main menu 3 removes the file.
 aa_extra_set() {    # KEY VALUE
     _x_f="$PERSIST/aa-extra.conf"
     _x_out=`grep '^PMCP_AA_OUTPUT=' "$_x_f" 2>/dev/null | head -1`
@@ -866,12 +910,14 @@ aa_extra_set() {    # KEY VALUE
     mv "$_x_f.pmcp-new" "$_x_f" || fail "AA_SWITCH_WRITE_FAILED"
 }
 
-aa_switch_ready() {
-    [ -n "`manifest_get AAX_FEEDER`" ] || fail "AA_EXPERIMENTAL_NOT_ON_THIS_CARD"
+aa_switch_ready() {    # [exp]: experimental cards only (aa-capture)
+    if [ "$1" = exp ]; then
+        case "$PMCP_VERSION" in *-exp-*) ;; *) fail "AA_EXPERIMENTAL_NOT_ON_THIS_CARD" ;; esac
+    fi
     selftest
     firmware_identity
     detect_state
-    [ "$AASYS" = on ] && [ "$AAMODE" = gammax ] || fail "AA_SWITCH_NEEDS_THE_EXPERIMENTAL_AA_SET_ON_$AASYS${AAMODE:+_$AAMODE}"
+    [ "$AASYS" = on ] || fail "AA_SWITCH_NEEDS_THIS_CARDS_AA_SET_ON_$AASYS${AAMODE:+_$AAMODE}"
 }
 
 do_aa_output() {
@@ -880,30 +926,18 @@ do_aa_output() {
         direct|ring) ;;
         *) fail "AA_OUTPUT_MUST_BE_direct_OR_ring" ;;
     esac
-    # Another output is another way to the screen: the set's confirmation and trial go first (a kill after this only
-    # costs a trial with the old output), so the next AA connection is a trial and 5 confirms it (A150).
-    _x_now=`sed -n 's/^PMCP_AA_OUTPUT=//p' "$PERSIST/aa-extra.conf" 2>/dev/null | head -1`
-    _x_trial=no
-    if [ "${_x_now:-ring}" != "$ARG" ]; then
-        SET=`aa_set_id gammax`
-        rm -f "$PERSIST/aa-ok.$SET" "$PERSIST/aa-trial.$SET" "$RAMDISK/pmcp-aa-trial.$SET" 2>/dev/null
-        [ ! -e "$PERSIST/aa-ok.$SET" ] && [ ! -e "$PERSIST/aa-trial.$SET" ] && [ ! -e "$RAMDISK/pmcp-aa-trial.$SET" ] \
-            || fail "AA_MARKER_REMOVE_FAILED"
-        _x_trial=yes
-    fi
+    # AA 1.0 (user decision A153): no trial. The output changes no file of the set, no AA_BOOT and no marker (the same
+    # hook and feeder take the phone); a direct output that cannot take MOST gives it back and the AID keeps the VW map.
     aa_extra_set PMCP_AA_OUTPUT "$ARG"
     flush
     say "PMCP_AA_OUTPUT_OK output=$ARG (from the next AA connection; unplug and plug the phone)"
-    if [ $_x_trial = yes ]; then
-        say "New output: the next AA connection is a TRIAL. If the picture is right, 5. Confirm in that same start."
-    fi
 }
 
 # Recording (PMCP_AA_CAPTURE_S in aa-extra.conf): the feeder writes the phone's video to aa-stream.h264, the picture is
 # the same, so the confirmation stays. Not the gal wrapper's /mnt/persist/pmcp/aa-capture (the 1.7 navigation capture
 # of earlier cards; its comment still says "pmcp.sh aa-capture"): pmcp.sh removes that marker and never writes it.
 do_aa_capture() {
-    aa_switch_ready
+    aa_switch_ready exp
     case "$ARG" in
         60) aa_extra_set PMCP_AA_CAPTURE_S 60 ;;
         off) aa_extra_set PMCP_AA_CAPTURE_S 0 ;;
@@ -1005,7 +1039,7 @@ do_aa_status() {
     fi
     [ "$AAMODE" = gammax ] && say "  EXPERIMENTAL set (aa_advanced); main menu 3 goes back to the stable set"
     [ -s "$RAMDISK/pmcp-aa-last" ] && say "Last gal start: `cat "$RAMDISK/pmcp-aa-last"`"
-    [ -s "$PERSIST/aa-extra.conf" ] && say "Experimental switches: `grep '^PMCP_AA_' "$PERSIST/aa-extra.conf" | tr '\n' ' '`"
+    [ -s "$PERSIST/aa-extra.conf" ] && say "AA switches: `grep '^PMCP_AA_' "$PERSIST/aa-extra.conf" | tr '\n' ' '`"
     [ -s "$PERSIST/aa-stream.h264" ] && say "Recorded phone video: `ls -l "$PERSIST/aa-stream.h264" 2>/dev/null | awk '{print $5}'` bytes"
     aa_nav_counts
     say "Navigation messages logged in this start: 0x8006=$_c_6 0x8007=$_c_7"
@@ -1015,7 +1049,8 @@ do_aa_status() {
         while read l; do say "  $l"; done < "$RAMDISK/pmcp-aa-rg.txt"
     fi
     if [ -d "$ROOT/logs" ]; then
-        say "Saved AA logs (for the log card): `ls "$ROOT/logs" 2>/dev/null`"
+        _s_l=""; for _s_f in "$ROOT"/logs/*; do [ -f "$_s_f" ] && _s_l="$_s_l ${_s_f##*/}"; done   # QNX ls lists . and .. (A153)
+        say "Saved AA logs (for the log card):${_s_l:- none}"
     fi
     # /ramdisk is 20 MB with the 16 MB video ring on it: show how much is left (the hook log stays under 128 KB)
     if [ -z "${PMCP_TEST_ROOT:-}" ] && type df >/dev/null 2>&1; then

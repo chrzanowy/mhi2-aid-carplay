@@ -372,7 +372,8 @@ for SH in "$@"; do
         args=$(sed -n 's#^/bin/ksh /net/mmx/fs/sda0/pmcp/pmcp.sh ##p' "$m")
         case "$args" in
             verify|status|restore|confirm|retry|aa-install|cp-log-save|"map-install map-square-fps40"|java-retry|java-confirm|java-update|aa-remove|aa-on|aa-confirm|aa-retry|aa-status|aa-log-save|aa-log-clear|rg-system-on|rg-system-off|rg-update|speedlimit-status|"speedlimit-mode turnto"|"speedlimit-mode street"|"speedlimit-mode off"|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
-            aa-on-exp|"aa-output direct"|"aa-output ring"|"aa-capture 60"|"aa-capture off")
+            "aa-output direct"|"aa-output ring") ;;
+            "aa-capture 60"|"aa-capture off")
                 case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) ;; *) bad "experimental button on a release card: $args" ;; esac ;;
             *) bad "unexpected button command in $(basename "$m"): $args" ;;
         esac
@@ -417,13 +418,13 @@ for SH in "$@"; do
     aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen aa_advanced/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
     case "$v" in
     *-exp-*)
-        [ "$aa" = "menu/aa-confirm.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh menu/aa-on-exp.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-capture-60.sh menu/aa-capture-off.sh " ] \
-            && ok "aa_advanced (experimental card): the release entries, then AA experimental on and its switches" || bad "aa_advanced: $aa"
+        [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh menu/aa-capture-60.sh menu/aa-capture-off.sh " ] \
+            && ok "aa_advanced (experimental card): the release entries, then AA record on/off" || bad "aa_advanced: $aa"
         sed -n '/^screen pmcp_stream_map_aid/,/^screen aa_advanced/p' "$SDB/esd/Launcher-sda0.esd" | grep -qi 'experimental\|rg-aa' && bad "experimental outside aa_advanced" || ok "experimental entries only on aa_advanced"
         grep -qi 'rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says rg-aa" || ok "menu: no rg-aa" ;;
     *)
-        [ "$aa" = "menu/aa-confirm.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh " ] \
-            && ok "aa_advanced (release card): confirm, retry, status, log save/clear, remove; no AA install there" || bad "aa_advanced: $aa"
+        [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh " ] \
+            && ok "aa_advanced (release card): confirm, output direct/bridge, retry, status, log save/clear, remove; no AA install there" || bad "aa_advanced: $aa"
         grep -qi 'experimental\|rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says experimental or rg-aa" || ok "menu: no 'experimental', no rg-aa"
         grep -q '^AAX_' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && bad "release card carries AAX_ keys" || ok "release card: no experimental AA set" ;;
     esac
@@ -1289,16 +1290,28 @@ PEOF
     fresh_unit; factory=$(snapshot "$W/unit")
     run map-install map-square-fps40; feat; run aa-install; confirm_now; S=$(cat "$U/carplaymaps/aa/AA_BOOT")
     printf 'X' >> "$U/carplaymaps/aa/aa-most-feeder"; echo "gamma-11111111-22222222-33333333" > "$U/carplaymaps/aa/AA_BOOT"
-    echo X > "$U/eso/hmi/lsd/jars/pmcp-zz.jar"; read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+zz-0479f0fa $jars pmcp-zz.jar" > "$U/carplaymaps/HMI_BOOT"
+    # AA 1.0: a set naming a JAR that is not there is not "plainly ours" (java_part_tolerable), so 3 still says 4 first
+    read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+zz-0479f0fa $jars pmcp-zz.jar" > "$U/carplaymaps/HMI_BOOT"
     run status; expect_out "4. Install additional features replaces them; Android Auto files too: then 3" "status: 4, then 3"
     before=$(snapshot "$W/unit")
     run aa-install; rc_is 1; expect_out "AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3" "3 first: says 4, then 3"
     [ "$before" = "$(snapshot "$W/unit")" ] && ok "3: nothing changed" || bad "3 changed the unit"
     feat; expect_out "PMCP_FEATURES_RESET_OK" "4 resets the Java set although AA is unsupported"
     expect_out "PMCP_FAIL=FEATURES_STOPPED_AT_java-update_" "then stops before installing"; expect_out "3. Install Android Auto" "and says 3"
-    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-zz.jar" ] && ok "unknown JAR removed" || bad "pmcp-zz.jar left"
+    [ ! -e "$U/carplaymaps/HMI_BOOT" ] && ok "unknown set removed" || bad "HMI_BOOT left"
     run aa-install; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "3 now replaces Android Auto"
     feat; expect_out "PMCP_FEATURES_ON_OK" "4 again: this card's features"; run status; expect_out "Unit state: JAVA" "JAVA"
+    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+    # AA 1.0: the same with a plainly ours unknown package (its JAR there): 3 first works and leaves Java as it is
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run map-install map-square-fps40; feat; run aa-install; confirm_now
+    printf 'X' >> "$U/carplaymaps/aa/aa-most-feeder"; echo "gamma-11111111-22222222-33333333" > "$U/carplaymaps/aa/AA_BOOT"
+    echo X > "$U/eso/hmi/lsd/jars/pmcp-zz.jar"; read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+zz-0479f0fa $jars pmcp-zz.jar" > "$U/carplaymaps/HMI_BOOT"
+    j0=$(snapshot "$W/unit" | grep '/eso/hmi/lsd/\|/carplaymaps/HMI_BOOT')
+    run aa-install; rc_is 0; expect_out "left as it is" "3 first: Java left"; expect_out "removing them first" "unknown AA removed"
+    expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "then this card's AA"
+    [ "$j0" = "$(snapshot "$W/unit" | grep '/eso/hmi/lsd/\|/carplaymaps/HMI_BOOT')" ] && ok "Java part untouched by 3" || bad "3 changed Java"
+    feat; expect_out "PMCP_FEATURES_ON_OK" "then 4: this card's features"; run status; expect_out "Unit state: JAVA" "JAVA"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
     echo "[38] after the rescue card: 5 refuses, 6 gives both a new trial (also confirmed sets)"
@@ -1398,108 +1411,100 @@ PEOF
     [ ! -e "$SLM" ] && ok "sl off clears the mode, ui stays" || bad "mode left after sl off"
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore after rg+sl+ui: exact factory tree" || bad "tree after restore"
+    P="$W/unit/mnt/persist/pmcp"; RDK="$W/unit/ramdisk"; SF=$(sed -n 's/^AA_FEEDER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")
     case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) EXPCARD=yes ;; *) EXPCARD=no ;; esac
-    if [ $EXPCARD = yes ]; then
-    P="$W/unit/mnt/persist/pmcp"; XF=$(sed -n 's/^AAX_FEEDER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh"); SF=$(sed -n 's/^AA_FEEDER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")
-    echo "[45] experimental card: AA EXPERIMENTAL on (aa-on-exp) swaps the stable set in place, main menu 3 swaps it back"
+    HOOKEDY=$(echo "$HOOKED" | sed 's/^use=trial/use=yes/')
+    # set files, AA_BOOT and the AA markers (what a trial protects): the output switch must not change any of them
+    aaf() { (cd "$U/carplaymaps/aa" && for f in *; do echo "$f $(h "$f")"; done); ls "$P" 2>/dev/null | grep '^aa-ok\.\|^aa-trial\.'; ls "$RDK" 2>/dev/null | grep '^pmcp-aa-trial\.'; }
+    echo "[45] AA 1.0: main menu 3 installs the direct set; the output switch changes no set file, no AA_BOOT, no marker (no trial)"
     fresh_unit; factory=$(snapshot "$W/unit")
+    ! grep -q '^AAX_' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && ok "no experimental AA set: AA 1.0 is the stable one" || bad "AAX_ key on the card"
+    run aa-output direct; rc_is 1; expect_out "AA_SWITCH_NEEDS_THIS_CARDS_AA_SET_ON_off" "output switch without AA refused"
     run map-install map-square-fps40; feat; run aa-install; rc_is 0; S=$(cat "$U/carplaymaps/aa/AA_BOOT")
-    [ "$(h "$U/carplaymaps/aa/aa-most-feeder")" = "$SF" ] && ok "3 installs the stable feeder" || bad "3: feeder $(h "$U/carplaymaps/aa/aa-most-feeder")"
-    run aa-output direct; rc_is 1; expect_out "AA_SWITCH_NEEDS_THE_EXPERIMENTAL_AA_SET_ON_on_gamma" "switches refused with the stable set"
-    galw=$(h "$U/eso/bin/apps/gal"); real=$(h "$U/carplaymaps/aa/gal.real")
-    run aa-on-exp; rc_is 0; X=$(cat "$U/carplaymaps/aa/AA_BOOT")
-    expect_out "Stable Android Auto set on the unit: replacing it" "aa-on-exp says it replaces the stable set"; expect_out "PMCP_AA_ON_OK mode=gammax set=$X" "experimental set on"
-    [ "$X" = "$S" ] && bad "same set id" || ok "own set id: $X"
-    case "$X" in gamma-*-"$(echo "$XF" | cut -c1-8)"-*) ok "set id carries the experimental feeder" ;; *) bad "set id $X" ;; esac
-    [ "$(h "$U/carplaymaps/aa/aa-most-feeder")" = "$XF" ] && [ "$(h "$U/eso/bin/apps/gal")" = "$galw" ] && [ "$(h "$U/carplaymaps/aa/gal.real")" = "$real" ] \
-        && ok "in place: experimental feeder, wrapper and factory gal copy untouched" || bad "files after aa-on-exp"
-    run status; expect_out "Android Auto: on mode=gammax" "status: on, experimental"; run aa-status; expect_out "EXPERIMENTAL set" "aa-status says experimental"
-    run aa-on-exp; rc_is 0; expect_out "PMCP_AA_INSTALL_OK (already installed" "aa-on-exp again: nothing to do"
-    new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "first AA connection with the experimental set: trial" || bad "AA: $o"
-    run confirm; rc_is 0; expect_out "PMCP_AA_CONFIRM_OK set=$X" "5 confirms the experimental set"; [ -e "$P/aa-ok.$X" ] && ok "aa-ok marker of the experimental set" || bad "no aa-ok.$X"
-    run retry; expect_out "Android Auto (set $X): confirmed, nothing to try again" "6 with the experimental set confirmed: no AA trial"
-    run aa-capture 60; rc_is 0; [ -e "$P/aa-ok.$X" ] && ok "recording keeps the confirmation" || bad "aa-capture dropped aa-ok.$X"
-    run aa-output ring; rc_is 0; ! grep -q "TRIAL" "$W/out" && [ -e "$P/aa-ok.$X" ] && ok "aa-output ring (the default): no change, confirmation kept" || bad "aa-output ring: $(cat "$W/out")"
-    run aa-output direct; rc_is 0; expect_out "the next AA connection is a TRIAL" "aa-output direct: new output, trial"
-    [ ! -e "$P/aa-ok.$X" ] && ok "aa-output direct removes the confirmation" || bad "aa-ok.$X still there"
-    new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "direct: first AA connection is a trial" || bad "AA: $o"
-    new_start; o=$(gal_start); [ "$o" = "use=no real=gal.real preload= conf= player=" ] && ok "direct, no confirm: factory gal next start" || bad "AA: $o"
-    run retry; rc_is 0; expect_out "PMCP_AA_RETRY_OK set=$X" "6 with the experimental set: new trial"
-    new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "after 6: trial" || bad "AA: $o"
-    run confirm; rc_is 0; expect_out "PMCP_AA_CONFIRM_OK set=$X" "5 confirms the direct output"
-    run aa-output direct; rc_is 0; ! grep -q "TRIAL" "$W/out" && [ -e "$P/aa-ok.$X" ] && ok "aa-output direct again: confirmation kept" || bad "aa-output direct again"
-    grep -qx 'PMCP_AA_OUTPUT=direct' "$P/aa-extra.conf" && grep -qx 'PMCP_AA_CAPTURE_S=60' "$P/aa-extra.conf" && ok "switches written" || bad "aa-extra.conf: $(cat "$P/aa-extra.conf" 2>&1)"
+    case "$S" in gamma-*-"$(echo "$SF" | cut -c1-8)"-*) ok "3: the set id carries the AA 1.0 feeder: $S" ;; *) bad "set $S" ;; esac
+    [ "$(h "$U/carplaymaps/aa/aa-most-feeder")" = "$SF" ] && grep -qx 'PMCP_AA_OUTPUT=direct' "$U/carplaymaps/aa/feeder.conf" \
+        && ok "3: AA 1.0 feeder, its feeder.conf says direct" || bad "3: feeder or feeder.conf"
+    new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "first connection: trial" || bad "AA: $o"
+    run confirm; rc_is 0; expect_out "PMCP_AA_CONFIRM_OK set=$S" "5 confirms"
+    before=$(aaf); tree0=$(snapshot "$W/unit" | grep -v '/ramdisk/\|/mnt/persist/pmcp/aa-extra.conf\|/mnt/persist/pmcp/gem.log')
+    run aa-output ring; rc_is 0; expect_out "PMCP_AA_OUTPUT_OK output=ring" "aa-output ring"
+    ! grep -q 'TRIAL' "$W/out" && ok "no trial for an output change (A153)" || bad "trial message: $(cat "$W/out")"
+    grep -qx 'PMCP_AA_OUTPUT=ring' "$P/aa-extra.conf" && ok "aa-extra.conf: PMCP_AA_OUTPUT=ring" || bad "aa-extra.conf: $(cat "$P/aa-extra.conf" 2>&1)"
+    [ "$before" = "$(aaf)" ] && [ "$tree0" = "$(snapshot "$W/unit" | grep -v '/ramdisk/\|/mnt/persist/pmcp/aa-extra.conf\|/mnt/persist/pmcp/gem.log')" ] \
+        && ok "(a) ring: only aa-extra.conf changed (set files, AA_BOOT, markers, everything else as before)" || bad "(a) the switch changed: $(aaf)"
+    new_start; o=$(gal_start); [ "$o" = "$HOOKEDY" ] && ok "after the switch: still confirmed, hooked without a trial" || bad "AA: $o"
+    run aa-output direct; rc_is 0; [ "$before" = "$(aaf)" ] && grep -qx 'PMCP_AA_OUTPUT=direct' "$P/aa-extra.conf" \
+        && ok "(a) direct again: only aa-extra.conf" || bad "(a) direct: $(aaf)"
     run aa-output bogus; rc_is 1; expect_out "AA_OUTPUT_MUST_BE_direct_OR_ring" "aa-output: unknown value refused"
-    run aa-capture 5; rc_is 1; expect_out "AA_CAPTURE_MUST_BE_60_OR_off" "aa-capture: unknown value refused"
-    echo x > "$P/aa-stream.h264"; echo 1 > "$P/aa-stream.h264.idx"
-    run aa-status; expect_out "Experimental switches: PMCP_AA_OUTPUT=direct" "aa-status shows the switches"; expect_out "Recorded phone video:" "and the recording"
-    new_start; o=$(gal_start); [ "$o" = "$(echo "$HOOKED" | sed 's/^use=trial/use=yes/')" ] && ok "confirmed experimental set: hooked at each connection" || bad "AA: $o"
-    run aa-install; rc_is 0; expect_out "Experimental Android Auto set on the unit: replacing it with this card's stable set" "3 replaces the experimental set"
-    expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "stable set again"
-    [ "$(h "$U/carplaymaps/aa/aa-most-feeder")" = "$SF" ] && [ "$(h "$U/eso/bin/apps/gal")" = "$galw" ] && ok "stable feeder back, wrapper untouched" || bad "files after 3"
-    [ ! -e "$P/aa-extra.conf" ] && [ ! -e "$P/aa-stream.h264" ] && [ ! -e "$P/aa-stream.h264.idx" ] && ok "switches and recording gone with the experimental set" || bad "left: $(ls "$P")"
-    [ ! -e "$P/aa-ok.$X" ] && [ ! -e "$P/aa-ok.$S" ] && ok "3 back: no AA confirmation left (A150)" || bad "markers after 3: $(ls "$P")"
-    new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "3 back: the stable set starts with a trial" || bad "AA after 3: $o"
-    run confirm; rc_is 0; expect_out "PMCP_AA_CONFIRM_OK set=$S" "5 confirms the stable set"
-    run aa-on-exp; rc_is 0; [ ! -e "$P/aa-ok.$S" ] && [ ! -e "$P/aa-ok.$X" ] && ok "aa-on-exp again: no confirmation carried over" || bad "markers: $(ls "$P")"
-    new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "experimental set again: trial" || bad "AA: $o"
-    run aa-install; rc_is 0
-    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
-
-    echo "[46] experimental card: aa-on-exp over unsupported AA files removes them first; switches without AA refused"
-    fresh_unit; factory=$(snapshot "$W/unit")
-    run map-install map-square-fps40; feat
-    run aa-capture 60; rc_is 1; expect_out "AA_SWITCH_NEEDS_THE_EXPERIMENTAL_AA_SET_ON_off" "switch without AA refused"
-    run aa-install; printf 'X' >> "$U/carplaymaps/aa/aa-most-feeder"; echo "gamma-11111111-22222222-33333333" > "$U/carplaymaps/aa/AA_BOOT"
-    run aa-on-exp; rc_is 0; expect_out "removing them first" "unknown AA files removed first"; expect_out "PMCP_AA_ON_OK mode=gammax" "then the experimental set"
-    [ "$(h "$U/carplaymaps/aa/aa-most-feeder")" = "$XF" ] && [ "$(h "$U/carplaymaps/aa/gal.real")" = "$STOCK_GAL" ] && ok "experimental feeder, factory gal copy" || bad "files"
-    run aa-remove; rc_is 0; [ ! -e "$U/carplaymaps/aa" ] && [ "$(h "$U/eso/bin/apps/gal")" = "$STOCK_GAL" ] && ok "aa-remove: factory gal" || bad "aa-remove"
-    run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
-
-    echo "[47] experimental card: units set up by card a55867ab (v11) and card 15d19b43 (v12), with those cards' own pmcp.sh"
-    OLD11SD="${PMCP_AA_OLD11:-$SDB/../sd-a55867ab}"; NEW12SD="${PMCP_AA_V12:-$SDB/../sd-15d19b43}"
-    if card_ok "$OLD11SD/pmcp/pmcp.sh" a55867ab && card_ok "$NEW12SD/pmcp/pmcp.sh" 15d19b43; then
-        runc() { _c=$1; shift; PMCP_TEST_ROOT="$W/unit" $SH "$_c/pmcp/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
-        # a55867ab: map + AA (v11), confirmed in its trial start; this card sees an old set
-        fresh_unit; factory=$(snapshot "$W/unit")
-        runc "$OLD11SD" install map-square-fps40; rc_is 0; runc "$OLD11SD" aa-on; rc_is 0; O11=$(cat "$U/carplaymaps/aa/AA_BOOT")
-        new_start; o=$(gal_start); runc "$OLD11SD" aa-confirm; rc_is 0; [ -e "$P/aa-ok.$O11" ] && ok "a55867ab: v11 set $O11 confirmed" || bad "a55867ab confirm: $(cat "$W/out")"
-        run status; expect_out "Android Auto: old mode=gamma" "this card: a55867ab's set is old"
-        run aa-on-exp; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gammax" "aa-on-exp brings v11 to the experimental set in place"
-        [ ! -e "$P/aa-ok.$O11" ] && ok "v11 confirmation removed" || bad "aa-ok.$O11 left"
-        new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "experimental set after v11: trial" || bad "AA: $o"
-        run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
-        # 15d19b43 (= the car's card 02aa81cb, same experimental set): map + AA (v12) + direct output, confirmed; feeder v13
-        # makes it an old set here: aa-on-exp replaces it in place, the v12 confirmation goes, the direct output stays
-        fresh_unit; factory=$(snapshot "$W/unit")
-        runc "$NEW12SD" install map-square-fps40; rc_is 0; runc "$NEW12SD" aa-on; rc_is 0; runc "$NEW12SD" aa-output direct; rc_is 0
-        N12=$(cat "$U/carplaymaps/aa/AA_BOOT"); new_start; o=$(gal_start); runc "$NEW12SD" aa-confirm; rc_is 0
-        [ "$N12" != "$X" ] && [ -e "$P/aa-ok.$N12" ] && ok "15d19b43's v12 set $N12 confirmed, not this card's $X" || bad "15d19b43 set $N12, experimental $X"
-        run status; expect_out "Android Auto: old mode=gamma" "this card: 15d19b43's v12 set is old"
-        run aa-on-exp; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gammax" "aa-on-exp brings v12 to v13 in place"
-        [ ! -e "$P/aa-ok.$N12" ] && [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" = "$X" ] && ok "v12 confirmation removed, v13 set active" || bad "after aa-on-exp: $(ls "$P")"
-        run aa-status; expect_out "PMCP_AA_OUTPUT=direct" "direct output kept"
-        new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "v13 set after v12: trial" || bad "AA: $o"
-        run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
-    fi
+    grep -qx 'PMCP_AA_OUTPUT=direct' "$P/aa-extra.conf" && ok "refused value: file unchanged" || bad "aa-extra.conf changed"
+    run aa-status; expect_out "AA switches: PMCP_AA_OUTPUT=direct" "aa-status shows the switch"
+    if [ $EXPCARD = yes ]; then
+        run aa-capture 60; rc_is 0; grep -qx 'PMCP_AA_CAPTURE_S=60' "$P/aa-extra.conf" && grep -qx 'PMCP_AA_OUTPUT=direct' "$P/aa-extra.conf" \
+            && ok "experimental card: recording on, output kept" || bad "aa-extra.conf: $(cat "$P/aa-extra.conf")"
+        [ "$before" = "$(aaf)" ] && ok "recording: no marker or set file changed" || bad "recording changed: $(aaf)"
+        run aa-capture 5; rc_is 1; expect_out "AA_CAPTURE_MUST_BE_60_OR_off" "aa-capture: unknown value refused"
+        run aa-capture off; rc_is 0; grep -qx 'PMCP_AA_CAPTURE_S=0' "$P/aa-extra.conf" && ok "recording off" || bad "capture off"
     else
-    echo "[48] release card: no experimental AA; an experimental card's AA set is replaced by 3"
-    P="$W/unit/mnt/persist/pmcp"; fresh_unit; factory=$(snapshot "$W/unit")
-    run map-install map-square-fps40; feat
-    [ ! -e "$SDB/pmcp/menu/aa-on-exp.sh" ] && ! grep -q '^AAX_' "$SDB/pmcp/pmcp.sh" && ok "no aa-on-exp button, no AAX_ payload" || bad "experimental AA on a release card"
-    for c in aa-on-exp "aa-output direct" "aa-capture 60"; do run $c; rc_is 1; expect_out "AA_EXPERIMENTAL_NOT_ON_THIS_CARD" "$c refused"; done
-    AAXSD="${PMCP_AAX_SD:-}"
-    if [ -n "$AAXSD" ] && card_ok "$AAXSD/pmcp/pmcp.sh" experimental; then
-        runc() { _c=$1; shift; PMCP_TEST_ROOT="$W/unit" $SH "$_c/pmcp/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
-        runc "$AAXSD" aa-install; rc_is 0; runc "$AAXSD" aa-on-exp; rc_is 0; runc "$AAXSD" aa-output direct; rc_is 0
-        X=$(cat "$U/carplaymaps/aa/AA_BOOT"); new_start; o=$(gal_start); runc "$AAXSD" confirm; rc_is 0
-        run status; expect_out "Android Auto: unknown" "release card: the experimental set is unknown here"
-        run aa-install; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "3 replaces the experimental set"
-        [ ! -e "$P/aa-ok.$X" ] && [ ! -e "$P/aa-extra.conf" ] && ok "its confirmation and switches gone" || bad "left: $(ls "$P")"
-        new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "stable set: trial" || bad "AA: $o"
+        run aa-capture 60; rc_is 1; expect_out "AA_EXPERIMENTAL_NOT_ON_THIS_CARD" "release card: no recording button action"
     fi
+    run aa-on-exp; rc_is 1; expect_out "AA_EXPERIMENTAL_NOT_ON_THIS_CARD" "aa-on-exp: no experimental set since AA 1.0"
+    run aa-install; rc_is 0; expect_out "PMCP_AA_INSTALL_OK (already installed" "3 again: nothing to do"
+    grep -qx 'PMCP_AA_OUTPUT=direct' "$P/aa-extra.conf" && ok "3 with this card's set: switch kept" || bad "3 dropped the switch"
+    run aa-remove; rc_is 0; run aa-install; rc_is 0; [ ! -e "$P/aa-extra.conf" ] && ok "3 after AA remove: no switch file, the set's default" || bad "aa-extra.conf left"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
-    fi
+
+    echo "[46] AA 1.0: main menu 3 brings every earlier AA set (v10 of v1.5.1, v11, v12, v13) to this card's set in place"
+    V151SD="${PMCP_V151_SD:-$SDB/../sd-754c9d82}"; OLD11SD="${PMCP_AA_OLD11:-$SDB/../sd-a55867ab}"
+    NEW12SD="${PMCP_AA_V12:-$SDB/../sd-15d19b43}"; V13SD="${PMCP_AA_V13:-$SDB/../sd-d82f8c73}"
+    runc() { _c=$1; shift; PMCP_TEST_ROOT="$W/unit" $SH "$_c/pmcp/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
+    for oc in "$V151SD:754c9d82:aa-install" "$OLD11SD:a55867ab:aa-on" "$NEW12SD:15d19b43:aa-on direct" "$V13SD:d82f8c73:aa-on-exp direct"; do
+        od=${oc%%:*}; rest=${oc#*:}; oid=${rest%%:*}; how=${rest#*:}
+        card_ok "$od/pmcp/pmcp.sh" "$oid" || continue
+        fresh_unit; factory=$(snapshot "$W/unit")
+        runc "$od" install map-square-fps40; rc_is 0
+        case "$how" in
+            aa-install) runc "$od" aa-install; rc_is 0 ;;
+            aa-on) runc "$od" aa-on; rc_is 0 ;;
+            "aa-on direct") runc "$od" aa-on; rc_is 0; runc "$od" aa-output direct; rc_is 0 ;;
+            "aa-on-exp direct") runc "$od" aa-install; rc_is 0; runc "$od" aa-on-exp; rc_is 0; runc "$od" aa-output direct; rc_is 0
+                                runc "$od" aa-capture 60; rc_is 0 ;;
+        esac
+        O=$(cat "$U/carplaymaps/aa/AA_BOOT"); new_start; o=$(gal_start); runc "$od" confirm; rc_is 0
+        [ -e "$P/aa-ok.$O" ] && ok "$oid: its set $O confirmed" || bad "$oid: confirm $(cat "$W/out" | tail -3)"
+        run status; expect_out "Android Auto: old mode=gamma" "$oid: its set is old on this card"
+        galw=$(h "$U/eso/bin/apps/gal"); real=$(h "$U/carplaymaps/aa/gal.real")
+        run aa-install; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "$oid: 3 brings this card's set"
+        [ "$(h "$U/carplaymaps/aa/aa-most-feeder")" = "$SF" ] && [ "$(h "$U/eso/bin/apps/gal")" = "$galw" ] && [ "$(h "$U/carplaymaps/aa/gal.real")" = "$real" ] \
+            && ok "$oid: in place (AA 1.0 feeder, wrapper and factory gal copy untouched)" || bad "$oid: files after 3"
+        [ ! -e "$P/aa-ok.$O" ] && [ ! -e "$P/aa-extra.conf" ] && [ ! -e "$P/aa-stream.h264" ] && ok "$oid: old confirmation, switches, recording gone" || bad "$oid: left $(ls "$P")"
+        new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "$oid: first connection with AA 1.0 is a trial" || bad "$oid: AA $o"
+        run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "$oid: restore exact" || bad "$oid: tree after restore"
+    done
+
+    echo "[47] AA 1.0: main menu 3 leaves a Java part this card does not support when it is plainly ours; otherwise it refuses"
+    jbase() { fresh_unit; run map-install map-square-fps40; run java-on nai; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
+              echo X > "$U/eso/hmi/lsd/jars/pmcp-zz.jar"; read s jars < "$U/carplaymaps/HMI_BOOT"
+              echo "$s+zz-0479f0fa $jars pmcp-zz.jar" > "$U/carplaymaps/HMI_BOOT"; }
+    jtree() { snapshot "$W/unit" | grep '/eso/hmi/lsd/\|/carplaymaps/HMI_BOOT'; }
+    jbase; run status; expect_out "Unit state: PARTIAL" "unknown package zz: Java part PARTIAL"; j0=$(jtree)
+    run aa-install; rc_is 0; expect_out "Java part of a version this card does not support: left as it is" "3 says the Java part stays"
+    expect_out "PMCP_AA_ON_OK mode=gamma set=$S" "3 installs AA over it"; [ "$j0" = "$(jtree)" ] && ok "Java part untouched (lsd.sh, JARs, HMI_BOOT)" || bad "3 changed the Java part"
+    new_start; o=$(gal_start); [ "$o" = "$HOOKED" ] && ok "AA trial as usual" || bad "AA: $o"
+    feat; expect_out "PMCP_FEATURES_RESET_OK" "4 then replaces the Java part"; run status; expect_out "Android Auto: on" "AA stays on"
+    for bad_case in foreign-lsd missing-jar odd-name count other-jar; do
+        jbase
+        case $bad_case in
+            foreign-lsd) echo "# another mod" >> "$U/eso/hmi/lsd/lsd.sh" ;;
+            missing-jar) rm -f "$U/eso/hmi/lsd/jars/pmcp-zz.jar" ;;
+            odd-name) read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s ${jars% *} ../pmcp-zz.jar" > "$U/carplaymaps/HMI_BOOT" ;;
+            count) read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s+yy-11111111 $jars" > "$U/carplaymaps/HMI_BOOT" ;;
+            other-jar) echo X > "$U/eso/hmi/lsd/jars/Other.jar"; read s jars < "$U/carplaymaps/HMI_BOOT"; echo "$s ${jars% *} Other.jar" > "$U/carplaymaps/HMI_BOOT" ;;
+        esac
+        before=$(snapshot "$W/unit" | grep -v '/ramdisk/')
+        run aa-install; rc_is 1; expect_out "AA_INSTALL_NEEDS" "$bad_case: 3 refuses"
+        [ "$before" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "$bad_case: nothing changed" || bad "$bad_case: 3 changed the unit"
+    done
+
 done
 
 rm -rf "$W"

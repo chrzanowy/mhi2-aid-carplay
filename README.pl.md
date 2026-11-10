@@ -31,7 +31,7 @@ W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy proj
 | Tytuł i wykonawca utworu z CarPlay na AID | działa |
 | Przełączanie dzień/noc mapy na liczniku | działa |
 | Ograniczenie prędkości z telefonu (`showSpeedLimit=yes`) | na tym radiu nic nie pokazuje |
-| Android Auto 0.1 (otwarta alfa, v1.5.0): obraz Google Maps na AID, strzałki VW z Google Maps | działa, ze znanymi ograniczeniami: [Android Auto](#android-auto-na-aid-android-auto-01-otwarta-alfa) |
+| Android Auto 1.0 (stabilne od v1.6.0; w v1.5.x otwarta alfa 0.1): obraz Google Maps na AID przez własny zapis MOST pmcp, strzałki VW z Google Maps | działa, z jednym znanym problemem: [Android Auto](#android-auto-na-aid-android-auto-10) |
 | Strona ustawień w radiu (v1.5.1, paczka `ui`): App-Connect → Settings → AID navigation configuration; „Save: everything works” zatwierdza start próbny bez karty SD | nowe w v1.5.1, [opis po angielsku](ui/README.md) |
 | Opcjonalnie (v1.4.1, paczka `sl`; przyciski trybu poprawione w v1.4.2 od amjad-alarori, od v1.5.1 tryb ustawiany na stronie ustawień): limit z map samego auta VW przed nazwą ulicy albo próbnie w CurrentPositionInfo | 50 → 70 km/h potwierdzone w e-Golfie (AID 795A); na AID 791 jeszcze nie sprawdzone. [Opis po angielsku](docs/en/16-native-speed-limits.md) |
 
@@ -117,6 +117,8 @@ czytnik i paczki Java (`rglu`, `rg`, eksperymentalne `rg-aa` → `rg` z tej kart
 aktualizuje na miejscu znane mu Android Auto z wcześniejszej karty eksperymentalnej, a Android Auto, którego nie
 obsługuje, zastępuje zestawem z tej karty. Przy przejściu z v1.0–v1.3 zrób też nową kartę 2: karty ratunkowe sprzed
 v1.4 nie przywracają sterownika iAP2 z v1.4.
+**Z v1.5.1 z Android Auto:** 3 przenosi na miejscu Android Auto na 1.0 (także z feederów v11–v13 kart eksperymentalnych),
+potem restart, telefon i 5 (albo „Save” na stronie ustawień) w tym starcie.
 
 Wcześniej potrzebny jest [M.I.B. w radiu i backup](docs/pl/01-mib-instalacja-backup.md). Instalator na karcie najpierw
 sprawdza każdy plik radia; przy innym firmware zatrzymuje się i niczego nie zmienia.
@@ -188,29 +190,35 @@ Po polsku w [`docs/pl/`](docs/pl/), po angielsku w [`docs/en/`](docs/en/):
 
 Katalogi składników mają `README.md` po angielsku i `README.pl.md` po polsku.
 
-## Android Auto na AID (Android Auto 0.1, otwarta alfa)
+## Android Auto na AID (Android Auto 1.0)
 
-Od v1.5.0 ta sama karta daje też Android Auto na AID: obraz Google Maps z telefonu z Androidem, przez własną drogę MOST
-radia (bez dodatkowego adaptera), oraz natywne strzałki VW z Google Maps.
+Ta sama karta daje też Android Auto na AID: obraz Google Maps z telefonu z Androidem, przez własną drogę MOST radia (bez
+dodatkowego adaptera), oraz natywne strzałki VW z Google Maps. Android Auto 1.0 (v1.6.0) to pierwsza wersja stabilna:
+pmcp sam zapisuje obraz na AID (direct); w v1.5.x była otwarta alfa 0.1 przez bridge CarPlay.
 
-![Android Auto 0.1 w aucie: Google Maps z telefonu z Androidem na AID, skręt w lewo za 400 m](docs/img/aa-cluster.jpg)
+![Android Auto w aucie: Google Maps z telefonu z Androidem na AID, skręt w lewo za 400 m](docs/img/aa-cluster.jpg)
 
-*Android Auto 0.1 w aucie (2026-11): obraz Google Maps z telefonu z Androidem na AID.*
+*Android Auto w aucie (2026-11): obraz Google Maps z telefonu z Androidem na AID.*
 
 Co działa (sprawdzone w aucie, Samsung Galaxy A16 z Androidem 16):
 - obraz Google Maps na AID, także po przełączeniu z CarPlay na Android Auto bez restartu;
-- strzałki VW z dystansem z manewrów Google Maps, pokazywane przez ten sam pakiet prowadzenia `rg` co dla CarPlay.
+- strzałki VW z dystansem z manewrów Google Maps, pokazywane przez ten sam pakiet prowadzenia `rg` co dla CarPlay;
+- przez kilka jazd żadna klatka nie zginęła i nie było błędu MOST; obraz idzie za telefonem z ok. 0,1 s zapasu dekodera.
 
-Znane ograniczenia:
+Wyjście: „AA output: pmcp MOST writer (default, from the next connection)” albo „AA output: CarPlay bridge (fallback,
+from the next connection)” w `aa_advanced` (także na stronie ustawień). Działa od następnego podłączenia telefonu, bez
+restartu i bez 5.
+
+Znany problem i ograniczenia:
+- po wyjściu z Android Auto na ekranie głównym i powrocie telefon może zwolnić obraz na AID, a rzadko go zatrzymać (AID
+  pokazuje ekran ładowania): podłącz telefon ponownie;
 - strumień rusza około 5 s po podłączeniu telefonu;
-- czasem obraz startuje ciemny (albo AID pokazuje ekran ładowania) aż do następnej klatki kluczowej z telefonu;
-  pomaga ponowne podłączenie telefonu;
 - brak strzałki VW na pierwszym kroku trasy; dystans i czas do celu zostają w obrazie Google Maps.
 
 Instalacja (potrzebna mapa CarPlay z „2.”; dla strzałek także „4. Install additional features”):
 1. GEM → `pmcp_stream_map_aid` → **„3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)”**. Aktualizuje
-   też Android Auto z wcześniejszej karty eksperymentalnej i zastępuje pliki Android Auto, których ta karta nie obsługuje (np.
-   z karty eksperymentalnej).
+   na miejscu Android Auto z v1.5.x i z wcześniejszych kart eksperymentalnych i zastępuje pliki Android Auto, których ta
+   karta nie obsługuje.
 2. Restart, telefon z Androidem na kablu, trasa w Google Maps. Ta pierwsza sesja to próba.
 3. Jeśli obraz jest na AID: „5. Confirm: everything works (in the first start after 3 or 4)” w tym samym starcie,
    z podłączonym telefonem (jednocześnie potwierdza próbę funkcji CarPlay, jeśli trwa).

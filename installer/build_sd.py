@@ -122,20 +122,14 @@ PAYLOAD.update({
     "AA_WRAPPER": (PROJ / "aa/unit/gal.wrapper.sh", "57b63037a7d82d45f47773ec76e99ad659490f6d29d540f20de90930f0d65137", 3259, "aa/gal.wrapper.sh"),
     "AA_HOOK": (PROJ / "aa/prebuilt/libgal_hook.so", "bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", 132823, "aa/libgal_hook.so"),
     "AA_DMDT_FLUSH": (PROJ / "aa/prebuilt/libdmdt_flush.so", "4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f", 5328, "aa/libdmdt_flush.so"),
-    "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", 34856, "aa/aa-most-feeder"),
+    # AA 1.0 (A153): feeder v14 = v13 (pmcp's own MOST writer, direct) + only direct|ring taken from PMCP_AA_OUTPUT
+    "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "0003c60c132b56990d6020fe1efad9e549397e9542db9f3d51624a8be4d905d3", 56900, "aa/aa-most-feeder"),
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
-    "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", 1219, "aa/feeder.conf"),
+    "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", 1566, "aa/feeder.conf"),
 })
-# Experimental builds only: the experimental AA set = the stable set with this feeder instead of AA_FEEDER (same hook,
-# hook settings and feeder settings; set id gamma-<hook>-<this feeder>-<hook settings>). Installed only from aa_advanced
-# ("AA experimental on", pmcp.sh aa-on-exp); main menu 3 replaces it with the stable set. A release card has no AAX_*
-# key, so there the experimental set is unknown and main menu 3 removes it first (aa_off). Feeder v12 (aa/feeder,
-# A148): pmcp's own MOST writer (PMCP_AA_OUTPUT=direct), switches in /mnt/persist/pmcp/aa-extra.conf.
-if "-exp-" in PMCP_BASE_VERSION:
-    PAYLOAD["AAX_FEEDER"] = (PROJ / "aa/prebuilt/aa-most-feeder-exp",
-                             "17a366da1d364bf9559df54b9d598516b3b21a026ec0786bba3e578c6c63a5f1", 56336, "aa/aa-most-feeder-exp")
-    # the experimental set needs its own id (aa_set_id: the feeder is part of it), or stable and experimental are one set
-    assert PAYLOAD["AAX_FEEDER"][1][:8] != PAYLOAD["AA_FEEDER"][1][:8], "experimental feeder = stable feeder"
+# Experimental AA set (AAX_FEEDER: an experimental feeder next to the stable one, pmcp.sh aa-on-exp, set id
+# gamma-<hook>-<that feeder>-<hook settings>): none since AA 1.0, whose stable set has the v13/v14 feeder. pmcp.sh keeps
+# the mechanism for the next experimental feeder: add the key here again (experimental builds only, own feeder file).
 # AA sets of earlier (experimental) cards: whole tuples of (sha256, sha1, size) for hook, feeder, hook settings, feeder
 # settings, as they were on that card. pmcp.sh aa_state reports them as "old" with that card's AA_BOOT; aa-install (main menu 3) and aa-on
 # brings them up to date. Only the hashes go to the card, so no earlier build is needed here.
@@ -248,6 +242,16 @@ AA_OLD = [
     # gamma g2, feeder v12 (card 15d19b43; the experimental set of cards c234a9ff / 02aa81cb, in the car 2026-11-10)
     ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
               ("f87923b5249775bdb47f1ca93b77a04bfdb0043c70d8ca80003c37f1f061e0d9", "9a8c2205228cf2a21c4ee5e197756e442dd512d8", 54868),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", "8cc8efcc2e8a8fcf05eec4e96eae0d59e8c0a62c", 1219)]),
+    # gamma g2, feeder v10 = the stable set of releases v1.5.0 and v1.5.1 (Android Auto 0.1 open alpha)
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", "5b86be4b6630da664e77d7435e8ffb04ca92ca51", 34856),
+              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
+              ("ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", "8cc8efcc2e8a8fcf05eec4e96eae0d59e8c0a62c", 1219)]),
+    # gamma g2, feeder v13 (experimental set of card d82f8c73, confirmed in the car 2026-11-10, A153)
+    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
+              ("17a366da1d364bf9559df54b9d598516b3b21a026ec0786bba3e578c6c63a5f1", "978dbfe48e6ec7c3e4ccb0ca602c300b2eb99242", 56336),
               ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
               ("ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", "8cc8efcc2e8a8fcf05eec4e96eae0d59e8c0a62c", 1219)]),
 ]
@@ -526,6 +530,9 @@ def menu_entries():
 # Android Auto details, screen aa_advanced. The stable set is installed by main menu 3 (aa-install); the main menu's
 # 5 and 6 confirm / try again Android Auto too. Release cards keep the AA logs and status (support).
 AA_MENU = [("aa-confirm", "aa-confirm", "AA Confirm: AA works (only in the start of the AA trial; 5 does the same)"),
+           # AA 1.0: the output, no trial (also on the settings page); direct is the set's default
+           ("aa-output-direct", "aa-output direct", "AA output: pmcp MOST writer (default, from the next connection)"),
+           ("aa-output-ring", "aa-output ring", "AA output: CarPlay bridge (fallback, from the next connection)"),
            ("aa-retry", "aa-retry", "AA Try again: the next AA connection is a new trial"),
            ("aa-status", "aa-status", "AA status and stream analysis (read-only)"),
            ("aa-log-save", "aa-log-save", "AA save log: copy this start's AA log to the unit (for the log card)"),
@@ -533,9 +540,6 @@ AA_MENU = [("aa-confirm", "aa-confirm", "AA Confirm: AA works (only in the start
            ("aa-remove", "aa-remove", "AA remove (factory Android Auto back)")]
 # experimental builds only: their extra Android Auto software (empty on release cards)
 AA_EXP_MENU = [] if "-exp-" not in PMCP_BASE_VERSION else [
-    ("aa-on-exp", "aa-on-exp", "AA EXPERIMENTAL on: feeder v13, pmcp MOST writer (5. Confirm after the AA trial; 3 = stable)"),
-    ("aa-output-direct", "aa-output direct", "AA TEST output: pmcp direct MOST writer, no CarPlay bridge (next connection)"),
-    ("aa-output-ring", "aa-output ring", "AA output: CarPlay bridge (next connection)"),
     ("aa-capture-60", "aa-capture 60", "AA record: first 60 s of the phone video at each connection (for the log card)"),
     ("aa-capture-off", "aa-capture off", "AA record: off")]
 
