@@ -8,6 +8,7 @@
 #   - state is STOCK/VIDEO/JAVA/PARTIAL (never UNKNOWN), and restore (or nothing, for STOCK) gives the factory tree.
 #   fault_inject.sh SD_BUILD_DIR SHELL
 #   PMCP_FAULT_SCOPE=speedlimit runs native-limit actions with one retained companion package.
+#   PMCP_FAULT_QUICK=1: own chain only, no replay cross-check (daily); PMCP_FAULT_JOBS=N parallel workers (default 6).
 set -u
 SDB=$(cd "${1:?sd build dir}" && pwd); SH=${2:?shell}
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -38,7 +39,8 @@ fresh_unit() {
     awk -v inc="$H/fault_inject.inc" '{print} /^unset LD_PRELOAD$/ && !done {while ((getline l < inc) > 0) print l; done=1}' \
         "$W/sd/pmcp.sh" > "$W/sd/pmcp-fi.sh"
 }
-snapshot() { (cd "$W/unit" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} \; | sort -k2); }
+# one shasum process for the whole tree (same lines as one per file); default: the unit
+snapshot() { (cd "${1:-$W/unit}" && find . -type f ! -path './sdlog/*' -print0 | xargs -0 shasum -a 256 | sort -k2); }
 mode_digest() {
     _mode_file="$W/unit/mnt/persist/pmcp/native-speedlimit-mode"
     if [ -e "$_mode_file" ]; then shasum -a 256 < "$_mode_file" | cut -d' ' -f1; else echo absent; fi
@@ -132,23 +134,18 @@ CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on
 else
 CHAIN=("${OWN[@]}")
 fi
+# quick mode (daily work): the card's own actions only; the full run (earlier cards, replay cross-check) before RC
+[ "${PMCP_FAULT_QUICK:-0}" = 1 ] && CHAIN=("${OWN[@]}")
 if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
     # turnto needs rg in the set (rg writes TurnToInfo since v1.4); street (CurrentPositionInfo trial) does not
     CHAIN=("install map-clean" "rg-system-on" "java-on rg" "java-on sl" "speedlimit-mode turnto" "speedlimit-mode street" \
            "speedlimit-mode off" "java-off sl" "restore")
 fi
-fresh_unit; FACTORY=$(snapshot)
-for ((t=0; t<${#CHAIN[@]}; t++)); do
-    target=${CHAIN[$t]}
-    case "$target" in v13:*|exp:*|x143:*|fx:*) continue ;; esac
-    if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
-        case "$target" in "java-on sl"|"java-off sl"|"speedlimit-mode "*) ;; *) continue ;; esac
-    fi
-    fresh_unit
-    for ((p=0; p<t; p++)); do
-        run ${CHAIN[$p]}; grep -q "_OK" "$W/out" && ! grep -q "PMCP_FAIL" "$W/out" || { echo "prep ${CHAIN[$p]} failed"; cat "$W/out"; exit 99; }; confirm_set
-    done
-    rm -rf "$W/tpl"; cp -Rp "$W/unit" "$W/tpl"
+# one action of the chain: kill it before its 1st, 2nd, ... mutating command and check each result
+one_target() {
+    t=$1; target=${CHAIN[$t]}
+    # the tree before this action: its template from the single chain run (see below)
+    rm -rf "$W/unit" "$W/tpl"; cp -Rp "$TPL/$t" "$W/unit"; cp -Rp "$TPL/$t" "$W/tpl"
     before_boot=$(cat "$W/tpl/mnt/app/carplaymaps/HMI_BOOT" 2>/dev/null)
     before_aa=$(cat "$W/tpl/mnt/app/carplaymaps/aa/AA_BOOT" 2>/dev/null)
     before_mode=$(mode_digest)
@@ -251,6 +248,61 @@ for ((t=0; t<${#CHAIN[@]}; t++)); do
         n=$((n+1))
         [ $n -gt 80 ] && { bad "[$target] more than 80 mutating commands"; break; }
     done
+}
+
+# targets of this run (the earlier cards' actions and fx: only prepare units)
+is_target() {
+    case "${CHAIN[$1]}" in v13:*|exp:*|x143:*|fx:*) return 1 ;; esac
+    if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
+        case "${CHAIN[$1]}" in "java-on sl"|"java-off sl"|"speedlimit-mode "*) ;; *) return 1 ;; esac
+    fi
+    return 0
+}
+TARGETS=()
+for ((t=0; t<${#CHAIN[@]}; t++)); do is_target $t && TARGETS+=($t); done
+LAST=${TARGETS[${#TARGETS[@]}-1]}
+
+# The chain runs once. The tree before each target action is kept as that action's template (cp -Rp: modes, links,
+# empty dirs and /ramdisk included); a kill case starts from it instead of replaying the chain from a factory unit.
+prep() { run ${CHAIN[$1]}; grep -q "_OK" "$W/out" && ! grep -q "PMCP_FAIL" "$W/out" || { echo "prep ${CHAIN[$1]} failed"; cat "$W/out"; exit 99; }; confirm_set; }
+TPL="$W/templates"; mkdir -p "$TPL"
+fresh_unit; FACTORY=$(snapshot)
+for ((p=0; p<=LAST; p++)); do
+    is_target $p && cp -Rp "$W/unit" "$TPL/$p"
+    [ $p -lt $LAST ] && prep $p
+done
+# full mode: a few templates against a replay from a factory unit (first, middle, last target, first after an fx)
+if [ "${PMCP_FAULT_QUICK:-0}" != 1 ]; then
+    _fx=""; for ((p=0; p<=LAST; p++)); do
+        case "${CHAIN[$p]}" in fx:*) _seen=1 ;; *) [ -n "${_seen:-}" ] && is_target $p && { _fx=$p; break; } ;; esac
+    done
+    for t in ${TARGETS[0]} ${TARGETS[${#TARGETS[@]}/2]} $LAST $_fx; do
+        fresh_unit
+        for ((p=0; p<t; p++)); do prep $p; done
+        [ "$(snapshot)" = "$(snapshot "$TPL/$t")" ] && echo "template $t (${CHAIN[$t]}) = replay" \
+            || bad "template $t (${CHAIN[$t]}) differs from a replay of the chain"
+    done
+fi
+
+# kill cases in parallel: each worker has its own work dir and card copy; output is printed in chain order
+JOBS=${PMCP_FAULT_JOBS:-6}
+MAINW=$W
+for ((k=0; k<JOBS; k++)); do
+    (
+        W="$MAINW/w$k"; U="$W/unit/mnt/app"; mkdir -p "$W"; cp -Rp "$MAINW/sd" "$W/sd"
+        FAILS=0; CASES=0; i=0
+        for t in "${TARGETS[@]}"; do
+            [ $((i % JOBS)) = $k ] && one_target $t > "$MAINW/log.$t" 2>&1
+            i=$((i+1))
+        done
+        echo "$CASES $FAILS" > "$W/result"
+    ) &
+done
+wait
+W=$MAINW
+for t in "${TARGETS[@]}"; do cat "$W/log.$t" 2>/dev/null || bad "[${CHAIN[$t]}] no result (worker died)"; done
+for ((k=0; k<JOBS; k++)); do
+    if read _c _f < "$W/w$k/result" 2>/dev/null; then CASES=$((CASES+_c)); FAILS=$((FAILS+_f)); else bad "worker $k gave no result"; fi
 done
 rm -rf "$W"
 echo "FAULT CASES: $CASES, FAILED: $FAILS"

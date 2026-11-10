@@ -7,6 +7,25 @@
 # Each scenario starts from a fresh factory tree. Exit status is the number of failed checks.
 set -u
 SDB=$(cd "${1:?sd build dir}" && pwd); shift
+# Several shells: one run, each shell in its own process and work dir, in parallel. Output is printed per shell, FAIL
+# lines carry the shell name, and the exit status is the sum of all failed checks.
+if [ $# -gt 1 ] && [ -z "${PMCP_TEST_ONE_SHELL:-}" ]; then
+    _P=$(mktemp -d /tmp/pmcp-par.XXXX); _i=0
+    for _s in "$@"; do PMCP_TEST_ONE_SHELL=1 bash "$0" "$SDB" "$_s" > "$_P/$_i.log" 2>&1 & _i=$((_i+1)); done
+    wait
+    _i=0; _sum=0; _skip=0
+    for _s in "$@"; do
+        _n=$(basename "$_s")
+        sed "s#^  FAIL #  FAIL [$_n] #" "$_P/$_i.log" | grep -v '^FAILED CHECKS: \|^SKIPPED '
+        _f=$(sed -n 's/^FAILED CHECKS: //p' "$_P/$_i.log"); [ -n "$_f" ] || { echo "  FAIL [$_n] no result (run died)"; _f=1; }
+        _k=$(sed -n 's/^SKIPPED (earlier cards not present, update tests only): //p' "$_P/$_i.log")
+        _sum=$((_sum + _f)); _skip=$((_skip + ${_k:-0})); _i=$((_i+1))
+    done
+    rm -rf "$_P"
+    [ "$_skip" = 0 ] || echo "SKIPPED (earlier cards not present, update tests only): $_skip"
+    echo "FAILED CHECKS: $_sum"
+    exit $_sum
+fi
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 T=$(cd "$(dirname "$0")" && pwd)   # installer/test (no_printf.inc)
 BK="${PMCP_BACKUP:-$REPO/backup/MU1161}/advanced/MU1161-appimg"
@@ -33,7 +52,8 @@ unit_boot() {
 ok()   { echo "  ok   $*"; }
 bad()  { echo "  FAIL $*"; FAILS=$((FAILS+1)); }
 expect_out() { grep -q -- "$1" "$W/out" && ok "$2" || { bad "$2 (wanted '$1')"; sed 's/^/       | /' "$W/out" | tail -8; }; }
-snapshot() { (cd "$1" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} \; | sort -k2); }
+# one shasum process for the whole tree (same lines as one per file)
+snapshot() { (cd "$1" && find . -type f ! -path './sdlog/*' -print0 | xargs -0 shasum -a 256 | sort -k2); }
 h() { shasum -a 256 < "$1" | cut -d' ' -f1; }
 
 fresh_unit() {
@@ -373,6 +393,10 @@ for SH in "$@"; do
         && ok "screens: pmcp_stream_map_aid > pmcp_advanced > features / carplay / aa_advanced" || bad "screens: $scr"
     feat=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen carplay_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
     case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/log-clear.sh menu/speedlimit-status.sh menu/rg-system-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh ") ok "features_advanced: diagnostics, CarPlay log, speed-limit status only (mode on the page), RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
+    for _m in speedlimit-on speedlimit-cpi speedlimit-off; do
+        [ ! -e "$SDB/pmcp/menu/$_m.sh" ] && ! grep -q "menu/$_m.sh" "$SDB/esd/Launcher-sda0.esd" && ok "no GEM button $_m (mode set on the page)" \
+            || bad "GEM speed-limit mode button $_m still there"
+    done
     cpa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen carplay_advanced/,/^screen aa_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
     [ "$cpa" = "menu/install-map-clean.sh menu/install-card-clean.sh menu/install-url-map-hybrid.sh menu/install-map-clean-l40.sh menu/install-map-square.sh menu/switch-map-clean.sh menu/switch-card-clean.sh menu/switch-url-map-hybrid.sh menu/switch-map-clean-l40.sh menu/switch-map-square.sh menu/switch-map-square-fps40.sh " ] \
         && ok "carplay_advanced: other layouts (install, switch)" || bad "carplay_advanced: $cpa"
