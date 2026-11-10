@@ -352,10 +352,13 @@ check(kl and 'bridge=2 ' in kl[0] and 'wyslane=0 ' in kl[0] and 'zignorowane=2 (
 check(not os.path.exists(P('kf.request')), 'X: request file removed')
 check(acks == 90, 'X: one ACK per frame (%d)' % acks)
 
-# W (v9): the shipped AA 3 / gamma settings (start sync + pacing), shorter: sync then paced frames, nothing lost
+# W (v9): the shipped AA 3 / gamma settings (start sync + pacing), shorter: sync then paced frames, nothing lost.
+# AA 1.0: the set's feeder.conf says direct; these are its bridge settings, used with the fallback output (ring)
 s3 = open(os.path.join(HERE, '..', '..', 'unit', 'feeder-gamma.conf')).read()
+assert 'PMCP_AA_OUTPUT=direct\n' in s3
 d, P, exp, acks, rc = run('W', 'most', n_frames=60, idr_every=100,
-                          conf=s3.replace('SETTLE_MS=5000', 'SETTLE_MS=200').replace('HOLD_MS=3000', 'HOLD_MS=600').replace('REPEAT_MS=500', 'REPEAT_MS=200'))
+                          conf=s3.replace('SETTLE_MS=5000', 'SETTLE_MS=200').replace('HOLD_MS=3000', 'HOLD_MS=600').replace('REPEAT_MS=500', 'REPEAT_MS=200')
+                          .replace('PMCP_AA_OUTPUT=direct\n', 'PMCP_AA_OUTPUT=ring\n'))
 st = open(P('status.txt')).read(); sl = [l for l in st.split('\n') if l.startswith('sync startu')]
 rep = int(sl[0].split('powtorki IDR=')[1].split()[0]) if sl else -1
 ok, nf = frames_ok(bridge_log(P), [exp[0]] * (1 + rep) + exp[1:])
