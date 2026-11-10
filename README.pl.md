@@ -117,8 +117,9 @@ czytnik i paczki Java (`rglu`, `rg`, eksperymentalne `rg-aa` → `rg` z tej kart
 aktualizuje na miejscu znane mu Android Auto z wcześniejszej karty eksperymentalnej, a Android Auto, którego nie
 obsługuje, zastępuje zestawem z tej karty. Przy przejściu z v1.0–v1.3 zrób też nową kartę 2: karty ratunkowe sprzed
 v1.4 nie przywracają sterownika iAP2 z v1.4.
-**Z v1.5.1 z Android Auto:** 3 przenosi na miejscu Android Auto na 1.0 (także z feederów v11–v13 kart eksperymentalnych),
-potem restart, telefon i 5 (albo „Save” na stronie ustawień) w tym starcie.
+**Z v1.5.1:** 2 („already installed”), 3, jeśli używasz Android Auto (przenosi na miejscu Android Auto na 1.0, także
+z feederów v11–v13 kart eksperymentalnych), 4 (strona ustawień z nowym wierszem „Android Auto output”); potem restart,
+telefon i 5 (albo „Save” na stronie ustawień) w tym starcie.
 
 Wcześniej potrzebny jest [M.I.B. w radiu i backup](docs/pl/01-mib-instalacja-backup.md). Instalator na karcie najpierw
 sprawdza każdy plik radia; przy innym firmware zatrzymuje się i niczego nie zmienia.

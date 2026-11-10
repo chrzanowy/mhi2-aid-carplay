@@ -18,7 +18,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
-PMCP_BASE_VERSION = "pmcp-0.5.1-mu1161-791"   # release v1.5.1: new GEM menu, settings page (ui), Android Auto 0.1
+PMCP_BASE_VERSION = "pmcp-0.6.0-mu1161-791"   # release v1.6.0: Android Auto 1.0 (direct MOST output), settings page (ui)
 # Experimental card from the same tree (PMCP_BUILD_EXPERIMENTAL=1): "-exp-" in the version, plus the diagnostics buttons
 # (AA record, AA output switches are in every card since AA 1.0). Same payload otherwise, so it never forces another set.
 if os.environ.get("PMCP_BUILD_EXPERIMENTAL") == "1":

@@ -3,7 +3,10 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
-## Unreleased
+## v1.6.0 (2026-11-11)
+
+Installer version `pmcp-0.6.0-mu1161-791-<build id>`. v1.5.1 stays available as the previous stable release (Android
+Auto 0.1 over the CarPlay bridge) if you need to go back.
 
 **Android Auto 1.0**: the first stable Android Auto on the AID (no longer alpha). The picture goes to the AID through
 pmcp's own MOST writer instead of the CarPlay bridge; the bridge stays as a fallback output.
@@ -12,6 +15,9 @@ pmcp's own MOST writer instead of the CarPlay bridge; the bridge stays as a fall
   (TS mux + MOST writer in `aa/most`), no frame pacing and no bridge queue in between. Tested in the car over several
   drives (up to 20 min per session) with no MOST error, no frame lost and no held ACK. The decoder's lead is kept at
   about 80-130 ms; the start hold is 1.5 s instead of 3 s.
+- **Output switch on the settings page:** App-Connect > Settings > AID navigation configuration > "Android Auto
+  output": "pmcp MOST writer (default)" or "CarPlay bridge (fallback)". Active when this card's Android Auto set is on;
+  it writes the same line as GEM and applies at the next phone connection.
 - **Output switch without a trial.** GEM `aa_advanced`: "AA output: pmcp MOST writer (default, from the next
   connection)" and "AA output: CarPlay bridge (fallback, from the next connection)". The switch is one line in
   `/mnt/persist/pmcp/aa-extra.conf` (`PMCP_AA_OUTPUT=direct|ring`); it changes no file of the set and no confirmation,

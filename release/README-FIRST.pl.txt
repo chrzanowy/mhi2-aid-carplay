@@ -112,7 +112,7 @@ CZĘŚĆ 2 - W AUCIE
   Żeby usunąć wszystko: "8. Remove everything (back to factory files)", potem restart.
   "7. Status (read-only)" pokazuje, co jest zainstalowane.
 
-  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.5.0):
+  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.5.1):
     1. Zrób KARTĘ 1 z tej paczki. W aucie: "1. Check card and unit (read-only)".
        Oczekiwane: PMCP_VERIFY_OK state=JAVA. "7. Status (read-only)" może pokazać
        "Route guidance system: old" i "packages of an earlier card: rglu" - tak ma być.
@@ -123,7 +123,8 @@ CZĘŚĆ 2 - W AUCIE
        eksperymentalnej; wersję, której ta karta nie obsługuje, najpierw usuwa i zastępuje).
     4. "4. Install additional features: ..."  ->  PMCP_FEATURES_ON_OK
        (zastępuje wcześniejsze pliki prowadzenia i paczki, także eksperymentalne rg-aa)
-       Z v1.5.0 przycisk 4 dodaje stronę ustawień (ui), więc kroki 5 i 6 są potrzebne. Tylko
+       Z v1.5.x przycisk 3 daje Android Auto 1.0, a 4 nową stronę ustawień, więc kroki 5 i 6
+       są potrzebne. Tylko
        gdy wszystkie trzy (2, 3 i 4) piszą "already installed" / "everything was already on, nothing
        changed" (karta z tymi samymi funkcjami), nic się nie zmieniło - bez restartu i bez 5.
     5. Tylko jeśli 3 albo 4 coś zainstalowały: restart, ten start jest PRÓBNY. Sprawdź strzałki, pasy, nazwę ulicy (i Android Auto,

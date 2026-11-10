@@ -108,7 +108,7 @@ PART 2 - IN THE CAR
   To remove everything: "8. Remove everything (back to factory files)", then restart.
   "7. Status (read-only)" shows what is installed.
 
-  UPDATING from an earlier version (v1.0 - v1.5.0):
+  UPDATING from an earlier version (v1.0 - v1.5.1):
     1. Make CARD 1 from this package. In the car: "1. Check card and unit (read-only)".
        Expected: PMCP_VERIFY_OK state=JAVA. "7. Status (read-only)" may show
        "Route guidance system: old" and "packages of an earlier card: rglu" - that is expected.
@@ -119,7 +119,8 @@ PART 2 - IN THE CAR
        Android Auto; a version this card does not support is removed first and replaced).
     4. "4. Install additional features: ..."  ->  PMCP_FEATURES_ON_OK
        (it replaces the earlier route guidance files and packages, also an experimental rg-aa)
-       From v1.5.0, 4 adds the settings page (ui), so steps 5 and 6 are needed. Only if 2, 3 and 4
+       From v1.5.x, 3 brings Android Auto 1.0 and 4 the new settings page, so steps 5 and 6
+       are needed. Only if 2, 3 and 4
        all say "already installed" / "everything was already on, nothing changed" (an update
        to a card with the same features), nothing changed - no restart and no 5 needed.
     5. Only if 3 or 4 installed something: restart, this start is a TRIAL. Check the arrows, lanes, street name (and Android Auto,

@@ -116,8 +116,9 @@ changed" (a card with the same features), nothing changed: no restart and no 5 n
 (`rglu`, `rg`, the experimental `rg-aa` → this card's `rg`) by this card's. Button 3 updates an earlier experimental
 card's Android Auto that it knows in place and replaces Android Auto it does not support by this card's. Make a new
 card 2 as well when coming from v1.0-v1.3: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
-**From v1.5.1 with Android Auto:** 3 brings Android Auto 1.0 in place (also from an experimental card's feeder v11-v13),
-then restart, connect the phone and 5 (or "Save" on the settings page) in that start.
+**From v1.5.1:** 2 ("already installed"), 3 if you use Android Auto (brings Android Auto 1.0 in place, also from an
+experimental card's feeder v11-v13), 4 (the settings page with the new "Android Auto output" row); then restart,
+connect the phone and 5 (or "Save" on the settings page) in that start.
 
 Before you start you need [M.I.B. installed on the unit and a backup](docs/en/01-mib-install-backup.md). The installer
 on the card checks every file of your head unit first. On any other firmware it stops and changes nothing.
