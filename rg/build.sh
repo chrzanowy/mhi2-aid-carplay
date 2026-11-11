@@ -23,6 +23,9 @@
 # v1.4.5/v1.4.6 CarPlay guidance fixes: reroute episode with CALC_ROUTE, placeholder arrow, U-turn side, Apple Maps names),
 # tested with every lanes-uturn-asf-m-aa suite (TestArrow/TestRoad with his reroute changes) plus his TestReroute,
 # TestSourceName, TestUturnSide, TestPlaceholder, TestQuietQnx and our TestPmcp146.
+# Since A166 (experimental) the -aa modes also carry com.pmcp.kv.KombiView (rg/kv/: which view the AID shows, logged to
+# /ramdisk/pmcp-kombi-view.log) hooked into three more stock classes by rg/patcher/PatchKombiView.java (mostkombi
+# ChangeDataRate, navigation MapViewerKombiNotifierModel, navsd ActiveRgType).
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # do not write __pycache__ into upstream/tomasz (review 2)
 
@@ -142,6 +145,14 @@ javac -nowarn -cp "$CP" -d "$W/patcher" "$LB/PatchLive.java" "$H/patcher/GuardLi
 java -cp "$W/patcher:$CP" PatchLive "$W/stock" "$W/helpers" "$W/patched"
 G="${MODE%-uturn}"; [ $ASF = no ] || G=lanes-asf   # lanes-uturn: same classes as lanes; -asf-m(-aa): as lanes-asf
 java -cp "$W/patcher:$CP" GuardLive "$W/stock" "$W/patched" "$G"
+if [ $AA = yes ]; then
+    # A166: AID view signals (rg/kv, rg/patcher/PatchKombiView.java), helper compiled into the same jar
+    KVC="de/vw/mib/asl/internal/mostkombi/streamsink/usecases/ChangeDataRate de/vw/mib/asl/internal/navigation/map/kombi/MapViewerKombiNotifierModel $NAV/ActiveRgType"
+    mkdir -p "$W/kvstock"; (cd "$W/kvstock" && for c in $KVC; do unzip -q "$STOCK_JAR" "$c.class"; done)
+    javac --release 8 -nowarn -cp "$STOCK_JAR" -d "$W/patched" "$H/kv/com/pmcp/kv/KombiView.java"
+    javac -nowarn -cp "$CP:$W/patcher" -d "$W/patcher" "$H/patcher/PatchKombiView.java"
+    java -cp "$W/patcher:$CP" PatchKombiView "$W/kvstock" "$W/patched"
+fi
 java -cp "$W/patcher:$CP" Verify "$W/patched" "$STOCK_JAR" $(find "$W/patched" -name '*.class' | sort)
 for f in $(find "$W/patched" -name '*.class'); do [ "$(xxd -s 6 -l 2 -p "$f")" = 002e ] || fail "class version not 46: $f"; done
 for f in $(cd "$W/helpers" && find . -name '*.class'); do [ -f "$W/patched/$f" ] || fail "helper class not packaged: $f"; done
@@ -192,6 +203,10 @@ if [ $MAN = yes ]; then
     grep -q '^MANEUVERS_PASS ' "$W/tests/maneuvers.txt" || fail "TestManeuvers: no MANEUVERS_PASS"; cat "$W/tests/maneuvers.txt"
 fi
 if [ $AA = yes ]; then
+    mkdir -p "$W/tests/kv"; javac -nowarn -cp "$W/pmcp-rg.jar:$STOCK_JAR" -d "$W/tests/kv" "$H/kv/test/TestKombiView.java"
+    java -Xverify:all -cp "$W/tests/kv:$W/pmcp-rg.jar:$STOCK_JAR" com.pmcp.kv.TestKombiView "$W/tests/kv/kombi-view.log" > "$W/tests/kv.txt" \
+        || { cat "$W/tests/kv.txt"; fail "TestKombiView"; }
+    grep -q '^KOMBI_VIEW_PASS' "$W/tests/kv.txt" || fail "TestKombiView: no PASS"; cat "$W/tests/kv.txt"
     java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestAa > "$W/tests/aa.json" || { cat "$W/tests/aa.json"; fail "TestAa"; }
     cat "$W/tests/aa.json"; echo
 fi
