@@ -993,6 +993,7 @@ PEOF
         && card_ok "$OLD7" 9766265d; then
     run aa-on; rc_is 0
     cp "$OLDC/aa-most-feeder-sync" "$AAD/aa-most-feeder"; cp "$OLDC/feeder-gamma.conf" "$AAD/feeder.conf"
+    cp "$OLD10/libgal_hook.so" "$AAD/libgal_hook.so"   # hook g2 bdd76a85 of those cards (this card's may be newer, A166)
     echo "gamma-bdd76a85-5ec1a191-716516eb" > "$AAD/AA_BOOT"
     run status; expect_out "Unit state: JAVA" "card ab9fb348's gamma set: not PARTIAL"; expect_out "Android Auto: old mode=gamma" "status: old gamma"
     run aa-status; expect_out "Android Auto on brings them up to date" "aa-status says what to do"
@@ -1003,7 +1004,8 @@ PEOF
     run status; expect_out "Android Auto: old mode=gamma" "card f2a7ceb5's gamma set (feeder v9): old"
     run aa-on; rc_is 0; [ "$(h "$AAD/aa-most-feeder")" = "$(sed -n 's/^AA_FEEDER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")" ] && grep -q '^PMCP_AA_PACE_GAP_MS=20$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_KF_BRIDGE=0$' "$AAD/feeder.conf" && ok "feeder v9 -> this card's, gap + no focus cycle" || bad "v9 not updated"
     # card 030b7df2 (feeder v10, 2 Mbit/s pacing) -> this card's settings (A-AA34; since AA 1.0 also another feeder)
-    cp "$OLD10/feeder.conf" "$AAD/feeder.conf"; cp "$OLD10/aa-most-feeder" "$AAD/aa-most-feeder"; echo "gamma-bdd76a85-c5f8b0ef-716516eb" > "$AAD/AA_BOOT"
+    cp "$OLD10/feeder.conf" "$AAD/feeder.conf"; cp "$OLD10/aa-most-feeder" "$AAD/aa-most-feeder"; cp "$OLD10/libgal_hook.so" "$AAD/libgal_hook.so"
+    echo "gamma-bdd76a85-c5f8b0ef-716516eb" > "$AAD/AA_BOOT"
     run status; expect_out "Android Auto: old mode=gamma" "card 030b7df2's set (2 Mbit/s): old"
     run aa-on; rc_is 0; grep -q '^PMCP_AA_PACE_KBPS=6000$' "$AAD/feeder.conf" && ok "030b7df2 -> 6 Mbit/s pacing" || bad "030b7df2 settings not updated"
     cp "$OLDG1/libgal_hook-gamma.so" "$AAD/libgal_hook.so"
@@ -1603,7 +1605,12 @@ PEOF
         run160 aa-on; rc_is 0; aa_before=$(snapshot "$W/unit" | grep -e '/carplaymaps/aa/' -e '/apps/gal')
         run status; expect_out "packages of an earlier card: rg" "v1.6.0 rg reported as an earlier card's package"
         grep -q -e "packages of an earlier card: rg ui" -e "earlier card: ui" "$W/out" && bad "v1.6.0 ui taken as an earlier package" || ok "v1.6.0 ui is this card's ui"
-        expect_out "Android Auto: on" "v1.6.0 AA set is this card's"
+        # experimental cards (A166) carry a newer AA set: v1.6.0's AA 1.0 is then an earlier card's set
+        if [ "$(sed -n 's/^AA_FEEDER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")" = 0003c60c132b56990d6020fe1efad9e549397e9542db9f3d51624a8be4d905d3 ]; then
+            expect_out "Android Auto: on" "v1.6.0 AA set is this card's"
+        else
+            expect_out "Android Auto: old mode=gamma" "v1.6.0 AA set is an earlier card's set here"
+        fi
         feat; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "4: java-update replaces the v1.6.0 rg"; expect_out "PMCP_FEATURES_ON_OK" "4 done"
         grep -q "PMCP_FEATURES_RESET_OK" "$W/out" && bad "4 reset the Java set (sl would be lost)" || ok "4 did not reset the Java set"
         jar_replaced pmcp-guidance4.jar pmcp-guidance6.jar rg "pmcp-guidance4.jar gone, pmcp-guidance6.jar in place"
