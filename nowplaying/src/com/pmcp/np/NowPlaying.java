@@ -5,6 +5,7 @@ import de.vw.mib.bap.mqbab2.audiosd.functions.CurrentStationInfo;
 import de.vw.mib.bap.mqbab2.common.api.APIFactory;
 import de.vw.mib.bap.mqbab2.generated.audiosd.serializer.CurrentStationInfo_Status;
 import de.vw.mib.genericevents.ThreadSwitchingTarget;
+import org.dsi.ifc.androidauto2.DSIAndroidAuto2;
 import org.dsi.ifc.carplay.DSICarplay;
 import org.dsi.ifc.carplay.TrackData;
 
@@ -20,6 +21,11 @@ import org.dsi.ifc.carplay.TrackData;
  * does), which then runs CurrentStationInfo.process(-1). Every hook swallows its own errors: a failure here
  * must never break CarPlay or the cluster, it only leaves the stock "Apple CarPlay".
  *
+ * Android Auto (experimental, AA 1.1, audit A171): the same for connection type 3. The stock AndroidAutoTarget
+ * subscribes DSIAndroidAuto2 to attributes {1, 6, 2} only, never ATTR_NOWPLAYINGDATA (3), and CurrentStationInfo
+ * sends only "Android Auto". A fourth hook, attachAa(dsi) after AndroidAutoTarget.initializeDSI's own setNotification,
+ * adds our AaNowPlayingListener for attribute 3; fill() then uses the AA strings for connection type 3.
+ *
  * Java 1.2 clean (no StringBuilder, no string concatenation, no autoboxing, no class literals): the
  * classes are downgraded to class file version 46 for the J9 foun11 VM.
  */
@@ -30,6 +36,7 @@ public final class NowPlaying {
     static final int TYPE_ALBUM = 74;
     /** SmartphoneIntegrationService active connection type of CarPlay (stock switch in setStationInfoForMirrorLink). */
     static final int CONNECTION_CARPLAY = 2;
+    static final int CONNECTION_ANDROIDAUTO = 3;
     static final int ATTR_NOWPLAYINGDATA = 3;
     static final int VALID = 1;
 
@@ -40,6 +47,11 @@ public final class NowPlaying {
     private static CurrentStationInfo station;
     private static DSICarplay attached;
     private static final NowPlayingListener LISTENER = new NowPlayingListener();
+    private static String aaTitle = "";
+    private static String aaArtist = "";
+    private static String aaAlbum = "";
+    private static DSIAndroidAuto2 attachedAa;
+    private static final AaNowPlayingListener AA_LISTENER = new AaNowPlayingListener();
     private static final Runnable REFRESH = new Runnable() {
         public void run() {
             CurrentStationInfo s;
@@ -74,6 +86,24 @@ public final class NowPlaying {
             dsi.setNotification(new int[] {ATTR_NOWPLAYINGDATA}, LISTENER);
         } catch (Throwable t) {
             // no track info, stock "Apple CarPlay"
+        }
+    }
+
+    /** Hook in AndroidAutoTarget.initializeDSI, right after its own setNotification. Idempotent per DSI instance. */
+    public static void attachAa(DSIAndroidAuto2 dsi) {
+        try {
+            if (dsi == null) {
+                return;
+            }
+            synchronized (LOCK) {
+                if (attachedAa == dsi) {
+                    return;
+                }
+                attachedAa = dsi;
+            }
+            dsi.setNotification(new int[] {ATTR_NOWPLAYINGDATA}, AA_LISTENER);
+        } catch (Throwable t) {
+            // no track info, stock "Android Auto"
         }
     }
 
@@ -113,6 +143,28 @@ public final class NowPlaying {
         }
     }
 
+    /** From the Android Auto DSI listener. */
+    static void onAaTrack(org.dsi.ifc.androidauto2.TrackData td, int valid) {
+        String t = "";
+        String ar = "";
+        String al = "";
+        if (td != null && valid == VALID) {
+            t = clean(td.title);
+            ar = clean(td.artist);
+            al = clean(td.album);
+        }
+        boolean changed;
+        synchronized (LOCK) {
+            changed = !t.equals(aaTitle) || !ar.equals(aaArtist) || !al.equals(aaAlbum);
+            aaTitle = t;
+            aaArtist = ar;
+            aaAlbum = al;
+        }
+        if (changed) {
+            refresh();
+        }
+    }
+
     static void refresh() {
         try {
             ThreadSwitchingTarget ts = APIFactory.getAPIFactory().getThreadSwitchingService();
@@ -126,7 +178,7 @@ public final class NowPlaying {
 
     /**
      * Hook at the start of CurrentStationInfo.setStationInfoForMirrorLink. Returns true if it filled the
-     * status (CarPlay active and a title known), false to let the stock code run unchanged.
+     * status (CarPlay or Android Auto active and its title known), false to let the stock code run unchanged.
      */
     public static boolean fill(int connectionType, CurrentStationInfo_Status st) {
         try {
@@ -134,11 +186,17 @@ public final class NowPlaying {
             String ar;
             String al;
             synchronized (LOCK) {
-                t = title;
-                ar = artist;
-                al = album;
+                if (connectionType == CONNECTION_ANDROIDAUTO) {
+                    t = aaTitle;
+                    ar = aaArtist;
+                    al = aaAlbum;
+                } else {
+                    t = title;
+                    ar = artist;
+                    al = album;
+                }
             }
-            if (connectionType != CONNECTION_CARPLAY || t.length() == 0 || st == null) {
+            if ((connectionType != CONNECTION_CARPLAY && connectionType != CONNECTION_ANDROIDAUTO) || t.length() == 0 || st == null) {
                 return false;
             }
             st.primaryInformation.setContent(t);
@@ -172,6 +230,13 @@ public final class NowPlaying {
     static String[] snapshot() {
         synchronized (LOCK) {
             return new String[] {title, artist, album};
+        }
+    }
+
+    /** For host tests only. */
+    static String[] snapshotAa() {
+        synchronized (LOCK) {
+            return new String[] {aaTitle, aaArtist, aaAlbum};
         }
     }
 }

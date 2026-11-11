@@ -6,6 +6,14 @@ Stan: **działa w aucie (MU1161 + AID 791, październik 2026).** JAR: `build/np-
 v2 2026-10-22: wszystkie 4 wywołania helpera osłonięte `buildtools/Guard.java`, kontrola API J9 `RefCheck`;
 v1 `1af4d5e8…761b`).
 
+**Gałąź experimental (AA 1.1, audyt A171):** także tytuł, wykonawca i album z Android Auto (typ połączenia 3). JAR
+`build/np-mu1161-aa11/pmcp-np.jar` (25 007 B, `1f3b0dc0…e8e`), na karcie jako `pmcp-np2.jar` (nowa nazwa pliku, więc
+karta znająca tylko `pmcp-np.jar` 6b638868 nadal rozpozna zestaw jednostki). Fabryczny `AndroidAutoTarget` subskrybuje
+`DSIAndroidAuto2` na atrybuty `{1,6,2}`, bez 3 (`ATTR_NOWPLAYINGDATA`), a `setStationInfoForMirrorLink` wysyła tylko
+„Android Auto”. Czwarty hook, po fabrycznym `dsiAndroidAuto2.setNotification(...)` w `AndroidAutoTarget.initializeDSI`,
+woła `NowPlaying.attachAa(dsiAndroidAuto2)`, który rejestruje `AaNowPlayingListener` na atrybut 3; `fill()` bierze
+napisy Android Auto dla typu 3, a CarPlay dla 2. Test na hoście: `TestNp`. W aucie jeszcze nie sprawdzone.
+
 ## Dlaczego fabrycznie jest tylko „Apple CarPlay”
 
 - Cel ASL CarPlay (`HsmTarget`) subskrybuje atrybuty DSI `{8,7,8,2,9,12}`, **bez 3** (`ATTR_NOWPLAYINGDATA`).

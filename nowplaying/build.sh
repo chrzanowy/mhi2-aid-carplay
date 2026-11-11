@@ -25,7 +25,8 @@ JAR_GOT=$(sha "$STOCK_JAR")
 
 CP="$ASM_DIR/asm-9.7.jar:$ASM_DIR/asm-tree-9.7.jar:$ASM_DIR/asm-analysis-9.7.jar"
 CLASSES="de/vw/mib/asl/internal/carplay/target/HsmTarget
-de/vw/mib/bap/mqbab2/audiosd/functions/CurrentStationInfo"
+de/vw/mib/bap/mqbab2/audiosd/functions/CurrentStationInfo
+de/vw/mib/asl/internal/androidauto/target/AndroidAutoTarget"
 
 [ ! -e "$W" ] || fail "work dir exists: $W"
 mkdir -p "$W"/{stock,helper,out,pbin,report,test}

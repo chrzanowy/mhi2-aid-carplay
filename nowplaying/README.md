@@ -6,6 +6,15 @@ Status: **works in the car (MU1161 + AID 791, October 2026).** JAR: `build/np-mu
 v2 2026-10-22: all 4 helper calls guarded by `buildtools/Guard.java`, J9 API check `RefCheck`;
 v1 `1af4d5e8…761b`).
 
+**Experimental branch (AA 1.1, audit A171):** also the Android Auto title, artist and album (connection type 3).
+JAR `build/np-mu1161-aa11/pmcp-np.jar` (25,007 B, `1f3b0dc0…e8e`), on the card as `pmcp-np2.jar` (a new file name, so a
+card that knows only `pmcp-np.jar` 6b638868 still recognises the unit's set). The stock `AndroidAutoTarget` subscribes
+`DSIAndroidAuto2` to attributes `{1,6,2}`, without 3 (`ATTR_NOWPLAYINGDATA`), and `setStationInfoForMirrorLink` sends
+only "Android Auto". A fourth hook, after the stock `dsiAndroidAuto2.setNotification(...)` in
+`AndroidAutoTarget.initializeDSI`, calls `NowPlaying.attachAa(dsiAndroidAuto2)`, which registers `AaNowPlayingListener`
+for attribute 3; `fill()` uses the Android Auto strings for connection type 3 and CarPlay's for 2. Host test: `TestNp`.
+Not yet seen in the car.
+
 ## Why the factory code shows only "Apple CarPlay"
 
 - The CarPlay ASL target (`HsmTarget`) subscribes to DSI attributes `{8,7,8,2,9,12}`, **without 3** (`ATTR_NOWPLAYINGDATA`).

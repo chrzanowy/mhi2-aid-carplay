@@ -6,7 +6,8 @@ import java.io.*;
 import java.nio.file.*;
 
 /**
- * Package D (track title / artist on the cluster): three hooks into the firmware's own classes.
+ * Package D (track title / artist on the cluster): hooks into the firmware's own classes (CarPlay: HsmTarget,
+ * CurrentStationInfo; since A171, experimental AA 1.1: also AndroidAutoTarget for the Android Auto title).
  * Every hook asserts the exact stock pattern and its count; anything else aborts the build. Every call into our helper
  * is wrapped by Guard.wrapCall (buildtools/Guard.java): if J9 cannot load or run it, the stock path continues.
  *
@@ -17,6 +18,7 @@ public class PatchNp {
     static final String NP = "com/pmcp/np/NowPlaying";
     static final String HSM = "de/vw/mib/asl/internal/carplay/target/HsmTarget";
     static final String CSI = "de/vw/mib/bap/mqbab2/audiosd/functions/CurrentStationInfo";
+    static final String AAT = "de/vw/mib/asl/internal/androidauto/target/AndroidAutoTarget";
     static final String STATUS = "de/vw/mib/bap/mqbab2/generated/audiosd/serializer/CurrentStationInfo_Status";
     static Path in, helper, out;
 
@@ -24,7 +26,8 @@ public class PatchNp {
         in = Paths.get(a[0]); helper = Paths.get(a[1]); out = Paths.get(a[2]);
         patchHsmTarget();
         patchCurrentStationInfo();
-        for (String h : new String[] {NP, NP + "$1", "com/pmcp/np/NowPlayingListener"}) downgradeHelper(h);
+        patchAndroidAutoTarget();
+        for (String h : new String[] {NP, NP + "$1", "com/pmcp/np/NowPlayingListener", "com/pmcp/np/AaNowPlayingListener"}) downgradeHelper(h);
         System.out.println("OK");
     }
 
@@ -118,6 +121,34 @@ public class PatchNp {
         boolean field = false;
         for (FieldNode f : cn.fields) field |= f.name.equals("dsiCarplay") && f.desc.equals("Lorg/dsi/ifc/carplay/DSICarplay;");
         expect(field, "HsmTarget.dsiCarplay field");
+        write(cn);
+    }
+
+    // ------------------------------------------------- 1b. AndroidAutoTarget.initializeDSI (AA 1.1, A171)
+    // After the stock dsiAndroidAuto2.setNotification(DSI_ANDROIDAUTO2_ATTR, dsiAndroidAuto2Listener):
+    //     NowPlaying.attachAa(this.dsiAndroidAuto2);
+    static void patchAndroidAutoTarget() throws IOException, AnalyzerException {
+        ClassNode cn = read(in, AAT);
+        toFactoryVersion(cn);
+        MethodNode m = method(cn, "initializeDSI", "()V");
+        int hits = 0;
+        for (AbstractInsnNode n = m.instructions.getFirst(); n != null; n = n.getNext()) {
+            if (isCall(n, Opcodes.INVOKEINTERFACE, "org/dsi/ifc/androidauto2/DSIAndroidAuto2", "setNotification", "([ILorg/dsi/ifc/base/DSIListener;)V")) {
+                InsnList p = new InsnList();
+                p.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                p.add(new FieldInsnNode(Opcodes.GETFIELD, AAT, "dsiAndroidAuto2", "Lorg/dsi/ifc/androidauto2/DSIAndroidAuto2;"));
+                MethodInsnNode call = new MethodInsnNode(Opcodes.INVOKESTATIC, NP, "attachAa", "(Lorg/dsi/ifc/androidauto2/DSIAndroidAuto2;)V", false);
+                p.add(call);
+                m.instructions.insert(n, p);
+                Guard.wrapCall(AAT, m, call, Guard.popArgsReturnZero(call.desc));
+                n = call;
+                hits++;
+            }
+        }
+        expect(hits == 1, "AndroidAutoTarget.initializeDSI setNotification count " + hits);
+        boolean field = false;
+        for (FieldNode f : cn.fields) field |= f.name.equals("dsiAndroidAuto2") && f.desc.equals("Lorg/dsi/ifc/androidauto2/DSIAndroidAuto2;");
+        expect(field, "AndroidAutoTarget.dsiAndroidAuto2 field");
         write(cn);
     }
 
