@@ -230,6 +230,11 @@ makes a new set → restart → trial start → test → "5. Confirm". "Off ..."
 the log card)"** and, after the log card (card 3) copied them, **"Delete saved logs, CarPlay and AA (after the log card
 copied them)"**.
 
+If the AID map drops back to the VW map for a few seconds about 46 s after a start, press "CP save log" shortly after
+it came back: the log then holds the supervisor's copy of the bridge that ended (`last-bridge.log`). A line
+`MOST write failed: Not enough memory` there means the factory video encoder took the AID video channel during the start
+(the cause tomasz-twardzicki found on MU1367).
+
 ## Cheat sheet
 
 ```

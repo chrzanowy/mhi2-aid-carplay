@@ -1521,6 +1521,11 @@ do_cp_log_save() {
            echo "--- last-boot: `cat "$PERSIST/last-boot" 2>/dev/null`"
            echo "--- boot.log"; cat "$PERSIST/boot.log" 2>/dev/null
            echo "--- carplay-cluster-supervisor.log"; cat "$RAMDISK/carplay-cluster-supervisor.log" 2>/dev/null
+           # the supervisor's copy of the last exited bridge / supervisor run (e.g. "MOST write failed: ..." at boot)
+           for _l_x in last-bridge.log last-supervisor.log; do
+               echo "--- carplaymaps-diagnostics/$_l_x (first 200 lines)"
+               sed -n '1,200p' "$RAMDISK/carplaymaps-diagnostics/$_l_x" 2>/dev/null
+           done
            for _l_x in adapter-status.txt guidance-evidence.txt; do
                echo "--- carplay-route-guidance/$_l_x"; cat "$RAMDISK/carplay-route-guidance/$_l_x" 2>/dev/null
            done

@@ -229,6 +229,11 @@ W `features_advanced` są też przyciski logów do wsparcia: **„CP save log: c
 the log card)”** i, gdy karta logów (karta 3) już je skopiowała, **„Delete saved logs, CarPlay and AA (after the log card
 copied them)”**.
 
+Jeśli mapa na AID wraca na kilka sekund do mapy VW około 46 s po starcie, naciśnij „CP save log” chwilę po jej powrocie:
+log zawiera wtedy kopię supervisora z mostu, który się zakończył (`last-bridge.log`). Linia
+`MOST write failed: Not enough memory` oznacza, że w czasie startu fabryczny enkoder wideo zajął kanał wideo AID
+(przyczyna, którą tomasz-twardzicki znalazł na MU1367).
+
 ## Ściąga
 
 ```
