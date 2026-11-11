@@ -24,6 +24,7 @@ if [ $# -gt 1 ] && [ -z "${PMCP_TEST_ONE_SHELL:-}" ]; then
     rm -rf "$_P"
     [ "$_skip" = 0 ] || echo "SKIPPED (earlier cards not present, update tests only): $_skip"
     echo "FAILED CHECKS: $_sum"
+    [ $_sum -gt 255 ] && exit 255   # an exit status wraps at 256
     exit $_sum
 fi
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -54,7 +55,7 @@ ok()   { echo "  ok   $*"; }
 bad()  { echo "  FAIL $*"; FAILS=$((FAILS+1)); }
 expect_out() { grep -q -- "$1" "$W/out" && ok "$2" || { bad "$2 (wanted '$1')"; sed 's/^/       | /' "$W/out" | tail -8; }; }
 # one shasum process for the whole tree (same lines as one per file)
-snapshot() { (cd "$1" && find . -type f ! -path './sdlog/*' -print0 | xargs -0 shasum -a 256 | sort -k2); }
+snapshot() { (cd "$1" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2); }
 h() { shasum -a 256 < "$1" | cut -d' ' -f1; }
 
 fresh_unit() {
@@ -128,6 +129,18 @@ new_start() { rm -rf "$W/unit/ramdisk"; mkdir -p "$W/unit/ramdisk"; }
 
 confirm_now() { mkdir -p "$W/unit/mnt/persist/pmcp"; read s rest < "$U/carplaymaps/HMI_BOOT"; touch "$W/unit/mnt/persist/pmcp/ok.$s"; }
 rc_is() { [ "$(cat "$W/rc")" = "$1" ] && ok "exit $1" || { bad "exit $(cat "$W/rc"), wanted $1"; sed 's/^/       | /' "$W/out" | tail -5; }; }
+# a scenario on a fresh factory unit; factory = its tree
+start_unit() { fresh_unit; factory=$(snapshot "$W/unit"); }
+# restore, then the exact factory tree (/ramdisk left out: a simulated start writes there); $1 = the label
+restore_exact() {
+    run restore; rc_is 0
+    [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "$1" || bad "$1: tree differs after restore"
+}
+# java-update or 4 replaced an earlier card's JAR: OLD file gone, NEW file holds this card's package PKG; $4 = the label
+jar_replaced() {
+    [ ! -e "$U/eso/hmi/lsd/jars/$1" ] && [ "$(h "$U/eso/hmi/lsd/jars/$2")" = "$(jsha "$3")" ] && ok "$4" \
+        || bad "$4: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
+}
 
 for SH in "$@"; do
     echo "=== shell: $SH"
@@ -827,38 +840,34 @@ PEOF
 
     echo "[23] v1.4.0 card -> this card: button 3's rg-update and java-update, then sl"
     if card_ok "$V140" v1.4.0; then
-    fresh_unit; factory=$(snapshot "$W/unit")
+    start_unit
     run140 install map-square-fps40; rc_is 0; run140 rg-system-on; rc_is 0; run140 java-on nai; rc_is 0; run140 java-on rg; rc_is 0
     confirm_now
     run status; expect_out "packages of an earlier card: rg" "v1.4.0 rg reported as an earlier card's package"
     run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "v1.4.0 driver and reader are this card's"
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "v1.4.0 rg -> this card's rg"
-    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] \
-        && ok "pmcp-guidance.jar gone, pmcp-guidance4.jar in place" || bad "JARs after java-update from v1.4.0"
+    jar_replaced pmcp-guidance.jar pmcp-guidance4.jar rg "pmcp-guidance.jar gone, pmcp-guidance4.jar in place"
     o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance4.jar" ] && ok "one trial start" || bad "boot: $o"
     run java-confirm; rc_is 0
     run java-on sl; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run speedlimit-mode turnto; rc_is 0
-    run restore; rc_is 0
-    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: exact factory tree" || bad "restore after v1.4.0 -> v1.4.1 left changes"
+    restore_exact "restore: exact factory tree"
     fi
 
     echo "[24] v1.4.2 card -> this card: java-update replaces rg (pmcp-guidance2.jar -> pmcp-guidance4.jar), sl and its mode stay"
     if card_ok "$V142" v1.4.2; then
-    fresh_unit; factory=$(snapshot "$W/unit")
+    start_unit
     run142 install map-square-fps40; rc_is 0; run142 rg-system-on; rc_is 0; run142 java-on nai; rc_is 0; run142 java-on rg; rc_is 0
     run142 java-on sl; rc_is 0; unit_boot > /dev/null; run142 java-confirm; rc_is 0
     run142 speedlimit-mode turnto; rc_is 0; expect_out "PMCP_SPEEDLIMIT_MODE_OK mode=turnto" "v1.4.2 card saves turnto"
     run status; expect_out "packages of an earlier card: rg" "v1.4.2 rg reported as an earlier card's package"
     run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "v1.4.2 driver and reader are this card's"
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "v1.4.2 rg -> this card's rg"
-    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance2.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance4.jar")" = "$(jsha rg)" ] \
-        && ok "pmcp-guidance2.jar gone, pmcp-guidance4.jar in place" || bad "JARs after java-update from v1.4.2"
+    jar_replaced pmcp-guidance2.jar pmcp-guidance4.jar rg "pmcp-guidance2.jar gone, pmcp-guidance4.jar in place"
     o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance4.jar*pmcp-sl2.jar) ok "one trial start with the new rg and sl" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0
     [ "$(cat "$SLM" 2>/dev/null)" = turnto ] && ok "speed-limit mode kept across the rg update" || bad "speed-limit mode lost"
-    run restore; rc_is 0
-    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: exact factory tree" || bad "restore after v1.4.2 -> v1.4.3 left changes"
+    restore_exact "restore: exact factory tree"
     fi
 
     echo "[25] experimental card f2a7ceb5 (AA on, rg-aa) -> button 3 of this card: AA stays, rg-aa -> rg (pmcp-guidance4.jar)"
@@ -1382,7 +1391,7 @@ PEOF
     # a card from before the gem menu (v1.4.2 release; likewise v1.5.0) does not know ui and cannot reset an unknown set:
     # it sees PARTIAL and changes nothing; "Off ui" on this card first, then that card sees a normal Java set
     if card_ok "$V142" v1.4.2; then
-    fresh_unit; factory=$(snapshot "$W/unit")
+    start_unit
     run install map-square-fps40; rc_is 0; run java-on nai; rc_is 0; run java-on ui; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run142 status; expect_out "Unit state: PARTIAL" "v1.4.2 card: a set with ui is PARTIAL"
     before=$(snapshot "$W/unit")
@@ -1527,22 +1536,45 @@ PEOF
     V151P="${PMCP_V151_SD:-$SDB/../sd-754c9d82}/pmcp/pmcp.sh"
     run151() { PMCP_TEST_ROOT="$W/unit" $SH "$V151P" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
     if card_ok "$V151P" 754c9d82; then
-        fresh_unit; factory=$(snapshot "$W/unit")
+        start_unit
         run151 map-install map-square-fps40; rc_is 0; run151 rg-system-on; rc_is 0
         for p in nai np rg zoom dn sl ui; do run151 java-on $p; rc_is 0; done
         new_start; unit_boot > /dev/null; run151 java-confirm; rc_is 0
         run151 speedlimit-mode turnto; rc_is 0
         run status; expect_out "packages of an earlier card: ui" "v1.5.1 ui reported as an earlier card's package"
+        # single packages wait for java-update while the set holds an earlier card's package (nothing changes)
+        before=$(snapshot "$W/unit")
+        run java-off ui; rc_is 1; expect_out "JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST" "v1.5.1 set: Off ui waits for java-update"
+        run java-on np; rc_is 1; expect_out "JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST" "v1.5.1 set: a single On waits for java-update"
+        [ "$before" = "$(snapshot "$W/unit")" ] && ok "v1.5.1 set: refused single packages changed nothing" || bad "refused single package changed files"
         feat; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "4: java-update replaces the v1.5.1 ui"; expect_out "PMCP_FEATURES_ON_OK" "4 done"
         grep -q "PMCP_FEATURES_RESET_OK" "$W/out" && bad "4 reset the Java set (sl would be lost)" || ok "4 did not reset the Java set"
-        [ ! -e "$U/eso/hmi/lsd/jars/pmcp-ui.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-ui2.jar")" = "$(jsha ui)" ] \
-            && ok "pmcp-ui.jar gone, pmcp-ui2.jar in place" || bad "ui JARs after 4: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
+        jar_replaced pmcp-ui.jar pmcp-ui2.jar ui "pmcp-ui.jar gone, pmcp-ui2.jar in place"
         case "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" in *"+$(jid sl)+"*"$UI") ok "set keeps sl, new ui" ;; *) bad "set: $(cat "$U/carplaymaps/HMI_BOOT")" ;; esac
         new_start; o=$(unit_boot); case "$o" in "boot=trial "*pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "one trial start with sl and the new ui" ;; *) bad "boot: $o" ;; esac
         run java-confirm; rc_is 0
         [ "$(cat "$W/unit/mnt/persist/pmcp/native-speedlimit-mode" 2>/dev/null)" = turnto ] && ok "speed-limit mode kept" || bad "speed-limit mode lost"
         run status; expect_out "Unit state: JAVA" "state JAVA"; grep -q "earlier card" "$W/out" && bad "earlier package left" || ok "no earlier package left"
-        run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: exact factory tree" || bad "restore after v1.5.1 -> this card left changes"
+        restore_exact "restore: exact factory tree"
+    fi
+
+    echo "[49] v1.5.0 release card (features, sl in turnto mode, no ui) -> main menu 4: ui added, sl and its mode stay"
+    V150P="${PMCP_V150_SD:-$SDB/../release-v1.5.0-67f9d05b/sd}/pmcp/pmcp.sh"
+    run150() { PMCP_TEST_ROOT="$W/unit" $SH "$V150P" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
+    if card_ok "$V150P" 67f9d05b; then
+        start_unit
+        run150 install map-square-fps40; rc_is 0; run150 rg-system-on; rc_is 0
+        for p in nai np rg zoom dn sl; do run150 java-on $p; rc_is 0; done
+        new_start; unit_boot > /dev/null; run150 java-confirm; rc_is 0
+        run150 speedlimit-mode turnto; rc_is 0
+        feat; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "v1.5.0 unit: 4 done"
+        grep -q "PMCP_FEATURES_RESET_OK" "$W/out" && bad "v1.5.0 unit: 4 reset the Java set (sl would be lost)" || ok "v1.5.0 unit: 4 did not reset the Java set"
+        case "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" in *"+$(jid sl)+"*"$UI") ok "v1.5.0 unit: set keeps sl, ui added" ;; *) bad "v1.5.0 unit set: $(cat "$U/carplaymaps/HMI_BOOT")" ;; esac
+        new_start; o=$(unit_boot); case "$o" in "boot=trial "*pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "v1.5.0 unit: one trial start with sl and ui" ;; *) bad "boot: $o" ;; esac
+        run java-confirm; rc_is 0
+        [ "$(cat "$W/unit/mnt/persist/pmcp/native-speedlimit-mode" 2>/dev/null)" = turnto ] && ok "v1.5.0 unit: speed-limit mode kept" || bad "v1.5.0 unit: speed-limit mode lost"
+        run status; expect_out "Unit state: JAVA" "v1.5.0 unit: state JAVA"; grep -q "earlier card\|unused JAR" "$W/out" && bad "v1.5.0 unit: earlier package left" || ok "v1.5.0 unit: no earlier package left"
+        restore_exact "v1.5.0 unit: restore gives the exact factory tree"
     fi
 
 done
@@ -1550,4 +1582,5 @@ done
 rm -rf "$W"
 [ "$SKIPS" = 0 ] || echo "SKIPPED (earlier cards not present, update tests only): $SKIPS"
 echo "FAILED CHECKS: $FAILS"
+[ $FAILS -gt 255 ] && exit 255   # an exit status wraps at 256
 exit $FAILS

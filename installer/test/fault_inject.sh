@@ -41,7 +41,7 @@ fresh_unit() {
         "$W/sd/pmcp.sh" > "$W/sd/pmcp-fi.sh"
 }
 # one shasum process for the whole tree (same lines as one per file); default: the unit
-snapshot() { (cd "${1:-$W/unit}" && find . -type f ! -path './sdlog/*' -print0 | xargs -0 shasum -a 256 | sort -k2); }
+snapshot() { (cd "${1:-$W/unit}" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2); }
 mode_digest() {
     _mode_file="$W/unit/mnt/persist/pmcp/native-speedlimit-mode"
     if [ -e "$_mode_file" ]; then shasum -a 256 < "$_mode_file" | cut -d' ' -f1; else echo absent; fi
@@ -52,10 +52,12 @@ V13="${PMCP_V13_SD:-$SDB/../sd-v1.3.0}/pmcp/pmcp.sh"
 EXP="${PMCP_EXP_SD:-$SDB/../sd-ab9fb348}/pmcp/pmcp.sh"
 # "x143:ACTION": the experimental card 84472aa9 (v1.4.3 + Android Auto, rg-aa in pmcp-guidance-aa2.jar), likewise
 EXP143="${PMCP_EXP143_SD:-$SDB/../sd-84472aa9}/pmcp/pmcp.sh"
+# "v151:ACTION": the v1.5.1 release card (ui e11bd8d3 in pmcp-ui.jar, which this card replaces with pmcp-ui2.jar)
+V151="${PMCP_V151_SD:-$SDB/../sd-754c9d82}/pmcp/pmcp.sh"
 # Earlier cards only prepare units for the update chains. Missing (a build from install.sh): those chains are skipped
 # and named; PMCP_REQUIRE_OLD_CARDS=1 (release runs) makes a missing earlier card an error.
 OLDCARDS=yes
-for c in "$V13" "$EXP" "$EXP143"; do
+for c in "$V13" "$EXP" "$EXP143" "$V151"; do
     [ -f "$c" ] && continue
     [ "${PMCP_REQUIRE_OLD_CARDS:-0}" = 1 ] && { echo "earlier card missing: $c"; exit 99; }
     echo "skip: earlier card not present ($c): the update chains with earlier cards are skipped"; OLDCARDS=no
@@ -63,6 +65,7 @@ done
 run() { case "$1" in v13:*) _a=${1#v13:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$V13" $_a "$@" > "$W/out" 2>&1 ;;
                      exp:*) _a=${1#exp:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP" $_a "$@" > "$W/out" 2>&1 ;;
                      x143:*) _a=${1#x143:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP143" $_a "$@" > "$W/out" 2>&1 ;;
+                     v151:*) _a=${1#v151:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$V151" $_a "$@" > "$W/out" 2>&1 ;;
                      fx:*) fx "${1#fx:}" > "$W/out" 2>&1 ;;
                      *) PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1 ;; esac; }
 runfi() { rm -f "$W/cnt"; PMCP_KILL_AT=$1 PMCP_FI_CNT=$W/cnt PMCP_FI_LOG=$W/filog PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp-fi.sh" "${@:2}" > "$W/outfi" 2>&1; }
@@ -139,6 +142,8 @@ CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on
        "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore" \
        "exp:install map-clean" "exp:aa-on gamma" "aa-on" "restore" \
        "x143:install map-square-fps40" "x143:rg-system-on" "x143:java-on nai" "x143:java-on rg-aa" "x143:aa-on" "java-update" "aa-on" "restore" \
+       "v151:map-install map-square-fps40" "v151:rg-system-on" "v151:java-on nai" "v151:java-on sl" "v151:java-on ui" \
+       "java-update" "restore" \
        "${MAIN[@]}" "${XAA[@]}")
 else
 CHAIN=("${OWN[@]}")
@@ -215,6 +220,15 @@ one_target() {
                 || bad "[$target] kill@$n ($killed): rg-update again did not finish: $(grep PMCP_FAIL "$W/out")"
         fi
         if [ "$target" = java-update ]; then
+            # an earlier card's JAR left behind, no longer listed by HMI_BOOT: status names it as unused
+            _stray=""
+            for _j in "$U"/eso/hmi/lsd/jars/pmcp-*.jar; do
+                [ -e "$_j" ] && ! grep -q " ${_j##*/}" "$U/carplaymaps/HMI_BOOT" 2>/dev/null && _stray="$_stray ${_j##*/}"
+            done
+            if [ -n "$_stray" ]; then
+                run status; grep -q "unused JAR files (not loaded):.*${_stray##* }" "$W/out" \
+                    || bad "[$target] kill@$n ($killed): status does not name the unused JAR(s)$_stray"
+            fi
             # an interrupted Java update is finished by running it again
             run java-update; grep -q "PMCP_JAVA_UPDATE_OK\|JAVA_UPDATE_ALREADY_CURRENT" "$W/out" && run status && grep -q "Unit state: JAVA" "$W/out" \
                 && ! grep -q "earlier card\|unused JAR" "$W/out" \
@@ -261,7 +275,7 @@ one_target() {
 
 # targets of this run (the earlier cards' actions and fx: only prepare units)
 is_target() {
-    case "${CHAIN[$1]}" in v13:*|exp:*|x143:*|fx:*) return 1 ;; esac
+    case "${CHAIN[$1]}" in v13:*|exp:*|x143:*|v151:*|fx:*) return 1 ;; esac
     if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
         case "${CHAIN[$1]}" in "java-on sl"|"java-off sl"|"speedlimit-mode "*) ;; *) return 1 ;; esac
     fi
@@ -315,4 +329,5 @@ for ((k=0; k<JOBS; k++)); do
 done
 rm -rf "$W"
 echo "FAULT CASES: $CASES, FAILED: $FAILS"
+[ $FAILS -gt 255 ] && exit 255   # an exit status wraps at 256
 exit $FAILS
