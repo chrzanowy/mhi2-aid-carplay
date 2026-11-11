@@ -9,8 +9,15 @@ BR="${PMCP_TOMASZ_BRIDGE:-$WS/upstream/tomasz/MU1427/route-guidance/bridge}"
 W=$(mktemp -d /tmp/pmcp-rg-test.XXXXXX)
 cc -O1 -g -Wall -Wextra -Werror -std=gnu99 -pthread -I"$H" "$H/pmcp_rg.c" "$H/test/rg_test.c" -o "$W/rg_test"
 mkdir "$W/rg" "$W/classes"
-GAL_PMCP_RG=1 GAL_PMCP_RG_STALE_MS=3000 GAL_PMCP_RG_END_MS=9000 GAL_PMCP_RG_DIR="$W/rg" GAL_PMCP_RG_STATUS="$W/rg.txt" "$W/rg_test"
+GAL_PMCP_RG=1 GAL_PMCP_RG_STALE_MS=3000 GAL_PMCP_RG_END_MS=9000 GAL_PMCP_RG_DIR="$W/rg" GAL_PMCP_RG_STATUS="$W/rg.txt" \
+    GAL_PMCP_RG_RAW="$W/raw.txt" "$W/rg_test"
 echo "--- status file"; cat "$W/rg.txt"
+# A165: the raw dump has the navigation messages as protobuf trees, 0x8006 only when it changed
+echo "--- raw dump"; cat "$W/raw.txt"
+n6=$(grep -c ' 8006 len=' "$W/raw.txt" || true); n3=$(grep -c ' 8003 len=' "$W/raw.txt" || true)
+grep -q '^t=[0-9]*\.[0-9]s 8006 len=[0-9]* | 1:{1:{1:' "$W/raw.txt" && [ "$n6" -ge 1 ] && [ "$n3" -ge 1 ] \
+    && grep -q '^surowe: linie=' "$W/rg.txt" || { echo "FAIL: raw dump (8006=$n6 8003=$n3)"; exit 1; }
+echo "ok    raw dump: 0x8006=$n6 0x8003=$n3 lines, nested fields decoded"
 javac -nowarn -d "$W/classes" "$BR/LiveModel.java" "$BR/MailboxReader.java" "$H/test/TestAaRg.java" 2>&1 | grep -v "^Note:" || true
 java -cp "$W/classes" com.cpmap.rgi.TestAaRg "$W/rg"
 # Optional: the same steps through the staged rg classes (rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa leaves them in

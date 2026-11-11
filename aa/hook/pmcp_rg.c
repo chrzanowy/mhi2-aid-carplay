@@ -20,12 +20,18 @@
  * Unknown NavigationType (M2): a new step index with no manoeuvre, so a following distance never lands on the
  * previous arrow.
  *   GAL_PMCP_RG_STATUS (default /ramdisk/pmcp-aa-rg.txt)      counters and the last manoeuvres, for pmcp aa-status
+ *   GAL_PMCP_RG_RAW (default /ramdisk/pmcp-aa-rg-raw.txt, "0" = off)  experimental (A165): the navigation messages as a
+ *                                                             protobuf tree, one line each (0x8006 when it changes,
+ *                                                             0x8003 always, 0x8007 at most every 5 s), to see which
+ *                                                             fields (road, lanes, destination/ETA) Google Maps sends;
+ *                                                             at 64 KB the file becomes <file>.1 (2 x 64 KB at most)
  * Only when GAL_PMCP_RG=1. pmcp_rg_message() runs on gal's reader thread and only copies values under a mutex; all
  * file work is on this module's own thread.
  */
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,6 +74,19 @@ static unsigned g_stale_ms = 10000u, g_end_ms = 60000u;
 static int g_paused;                  /* route repeats stopped: no navigation from the phone */
 static unsigned long g_pauses, g_silent_ends;
 static unsigned g_unk_last;           /* NavigationType of the current unknown step (g_cur_t == -1) */
+
+/* raw navigation dump (A165): copies queued on gal's reader thread, formatted and written on the writer thread */
+#define RAW_SLOTS   16u
+#define RAW_MSG_MAX 1024u
+#define RAW_FILE_MAX 65536L
+typedef struct { uint64_t t; unsigned id, len, full; uint8_t d[RAW_MSG_MAX]; } raw_msg;
+static raw_msg g_raw[RAW_SLOTS];
+static unsigned g_raw_head, g_raw_n;
+static unsigned long g_raw_lines, g_raw_dropped, g_raw_same;
+static char g_raw_path[128];
+static uint8_t g_raw_last6[RAW_MSG_MAX];
+static unsigned g_raw_last6_len;
+static uint64_t g_raw_last7_ms;
 
 static uint64_t now_ms(void)
 {
@@ -363,6 +382,117 @@ static size_t build(void)
     return 32u + used;
 }
 
+/* ---- raw navigation dump (A165) ---- */
+static void raw_queue(unsigned id, const uint8_t *d, unsigned len)
+{
+    raw_msg *m;
+    uint64_t t = now_ms();
+    unsigned n = len < RAW_MSG_MAX ? len : RAW_MSG_MAX;
+    if (id != 0x8003u && id != 0x8006u && id != 0x8007u) return;
+    if (id == 0x8006u) {
+        if (n == g_raw_last6_len && memcmp(d, g_raw_last6, n) == 0) { g_raw_same++; return; }
+        memcpy(g_raw_last6, d, n); g_raw_last6_len = n;
+    }
+    if (id == 0x8007u) {
+        if (g_raw_last7_ms && t - g_raw_last7_ms < 5000u) return;
+        g_raw_last7_ms = t;
+    }
+    if (g_raw_n >= RAW_SLOTS) { g_raw_dropped++; return; }
+    m = &g_raw[(g_raw_head + g_raw_n) % RAW_SLOTS];
+    m->t = t; m->id = id; m->len = n; m->full = len;
+    memcpy(m->d, d, n);
+    g_raw_n++;
+    g_dirty = 1;
+}
+
+typedef struct { char *b; size_t n, cap; } sbuf;
+static void sb_put(sbuf *o, const char *fmt, ...)
+{
+    va_list ap;
+    int k;
+    if (o->n + 1u >= o->cap) return;
+    va_start(ap, fmt);
+    k = vsnprintf(o->b + o->n, o->cap - o->n, fmt, ap);
+    va_end(ap);
+    if (k < 0) return;
+    o->n = (size_t)k < o->cap - o->n ? o->n + (size_t)k : o->cap - 1u;
+}
+
+/* Is the whole buffer a well-formed message (every tag valid, every length inside)? */
+static int pb_valid(const uint8_t *p, const uint8_t *e, int depth)
+{
+    pb s, d;
+    unsigned f, w;
+    if (p == e) return 0;
+    s.p = p; s.e = e;
+    while (s.p < s.e) {
+        if (!pb_tag(&s, &f, &w) || f == 0u || f > 64u) return 0;
+        if (w == 0u) { const uint8_t *q = s.p; (void)pb_var(&s); if (s.p == q || (s.p[-1] & 0x80u)) return 0; }
+        else if (w == 2u) { if (!pb_sub(&s, &d)) return 0; (void)depth; }
+        else if (w == 1u) { if (s.e - s.p < 8) return 0; s.p += 8; }
+        else if (w == 5u) { if (s.e - s.p < 4) return 0; s.p += 4; }
+        else return 0;
+    }
+    return 1;
+}
+
+static int printable(const uint8_t *p, const uint8_t *e)
+{
+    if (p == e) return 0;
+    for (; p < e; ++p) if (*p < 0x20u || *p == 0x7fu || *p == '"' || *p == '\\') return 0;
+    return 1;
+}
+
+/* field:value pairs; length-delimited = "text" when printable, {nested} when it parses, else hex */
+static void pb_dump(sbuf *o, const uint8_t *p, const uint8_t *e, int depth)
+{
+    pb s, d;
+    unsigned f, w;
+    int first = 1;
+    s.p = p; s.e = e;
+    while (pb_tag(&s, &f, &w)) {
+        sb_put(o, first ? "%u:" : " %u:", f);
+        first = 0;
+        if (w == 0u) sb_put(o, "%llu", (unsigned long long)pb_var(&s));
+        else if (w == 2u) {
+            const uint8_t *q;
+            if (!pb_sub(&s, &d)) { sb_put(o, "?"); break; }
+            if (printable(d.p, d.e)) sb_put(o, "\"%.*s\"", (int)(d.e - d.p), (const char *)d.p);
+            else if (depth < 8 && pb_valid(d.p, d.e, depth)) { sb_put(o, "{"); pb_dump(o, d.p, d.e, depth + 1); sb_put(o, "}"); }
+            else { sb_put(o, "x"); for (q = d.p; q < d.e && q < d.p + 48; ++q) sb_put(o, "%02x", *q); if (q < d.e) sb_put(o, ".."); }
+        } else if (w == 1u) { sb_put(o, "f64"); pb_skip(&s, w); }
+        else if (w == 5u) { sb_put(o, "f32"); pb_skip(&s, w); }
+        else { sb_put(o, "?w%u", w); break; }
+    }
+}
+
+/* Writer thread, g_m held: everything queued goes to the file (the lock is held only for a few lines a second). */
+static void raw_flush(void)
+{
+    static char line[RAW_MSG_MAX * 3u + 256u];
+    FILE *f;
+    struct stat st;
+    if (!g_raw_n) return;
+    if (stat(g_raw_path, &st) == 0 && st.st_size >= RAW_FILE_MAX) {
+        char old[160];
+        snprintf(old, sizeof old, "%s.1", g_raw_path);
+        (void)rename(g_raw_path, old);
+    }
+    f = fopen(g_raw_path, "a");
+    while (g_raw_n) {
+        raw_msg *m = &g_raw[g_raw_head];
+        sbuf o;
+        o.b = line; o.n = 0; o.cap = sizeof line;
+        sb_put(&o, "t=%lu.%lus %04x len=%u%s | ", (unsigned long)((m->t - g_t0) / 1000u),
+               (unsigned long)((m->t - g_t0) % 1000u / 100u), m->id, m->full, m->full > m->len ? " (uciete)" : "");
+        pb_dump(&o, m->d, m->d + m->len, 0);
+        if (f != NULL) { fputs(line, f); fputc('\n', f); g_raw_lines++; }
+        g_raw_head = (g_raw_head + 1u) % RAW_SLOTS;
+        g_raw_n--;
+    }
+    if (f != NULL) fclose(f);
+}
+
 static void write_status(void)
 {
     char s[1024];
@@ -379,6 +509,9 @@ static void write_status(void)
                   g_events, g_writes, g_werr, g_meters);
     n += snprintf(s + n, sizeof s - (size_t)n, "cisza telefonu: ostatnia nawigacja %lds temu, pauzy=%lu koniec_po_ciszy=%lu%s\n",
                   g_nav_ms ? (long)((now_ms() - g_nav_ms) / 1000u) : -1L, g_pauses, g_silent_ends, g_paused ? " (pauza)" : "");
+    if (g_raw_path[0])
+        n += snprintf(s + n, sizeof s - (size_t)n, "surowe: linie=%lu pominiete_bez_zmian=%lu zgubione=%lu plik=%s\n",
+                      g_raw_lines, g_raw_same, g_raw_dropped, g_raw_path);
     for (i = 0; i < g_last_n && n < (int)sizeof s - 100; ++i) n += snprintf(s + n, sizeof s - (size_t)n, "manewr %s\n", g_last[i]);
     {
         char tmp[200];
@@ -423,6 +556,7 @@ static void *writer(void *arg)
             if (write_file(g_dir, "latest.bin", g_img, n, NULL, 0) == 0) g_writes++; else g_werr++;
             last_write = t;
         }
+        if (g_raw_n) raw_flush();
         if (t - last_status >= 1000u) { write_status(); last_status = t; }
     }
     return NULL;
@@ -443,6 +577,8 @@ static int start(void)
     v = getenv("GAL_PMCP_RG_END_MS");
     if (v) { unsigned long x = strtoul(v, NULL, 10); if (x >= 2000u && x <= 600000u) g_end_ms = (unsigned)x; }
     if (g_end_ms <= g_stale_ms) g_end_ms = g_stale_ms + 1000u;
+    v = getenv("GAL_PMCP_RG_RAW");
+    snprintf(g_raw_path, sizeof g_raw_path, "%s", v == NULL ? "/ramdisk/pmcp-aa-rg-raw.txt" : (*v == '/' ? v : ""));
     v = getenv("GAL_PMCP_RG_STATUS");
     snprintf(g_status, sizeof g_status, "%s", v && *v == '/' ? v : "/ramdisk/pmcp-aa-rg.txt");
     if (mkdir(g_dir, 0755) != 0 && errno != EEXIST) { g_on = 0; return 0; }
@@ -477,6 +613,7 @@ void pmcp_rg_message(const unsigned char *msg, unsigned len)
             if (g_guiding && g_index) { if (g_cur_t >= 0) maneuver_event(); route_event(1); }
         }
     }
+    if (g_raw_path[0]) raw_queue(id, msg + 2, len - 2u);
     if (id == 0x8006u) { g_n6++; on_state(s); }
     else if (id == 0x8007u) { g_n7++; on_position(s); }
     else if (id == 0x8003u) { g_n3++; on_status(s); }
