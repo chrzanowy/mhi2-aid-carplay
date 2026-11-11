@@ -1079,7 +1079,12 @@ do_aa_status() {
     fi
     [ "$AAMODE" = gammax ] && say "  EXPERIMENTAL set (aa_advanced); main menu 3 goes back to the stable set"
     [ -s "$RAMDISK/pmcp-aa-last" ] && say "Last gal start: `cat "$RAMDISK/pmcp-aa-last"`"
-    [ -s "$PERSIST/aa-extra.conf" ] && say "AA switches: `grep '^PMCP_AA_' "$PERSIST/aa-extra.conf" | tr '\n' ' '`"
+    # one line from awk (gawk on the unit; no tr there: "tr: cannot execute", seen on the unit 2026-11-11), outside
+    # double quotes: ksh misparses double quotes in a backtick command inside a double-quoted string
+    if [ -s "$PERSIST/aa-extra.conf" ]; then
+        _s_x=`awk '/^PMCP_AA_/ { printf "%s ", $0 }' "$PERSIST/aa-extra.conf" 2>/dev/null`
+        say "AA switches: $_s_x"
+    fi
     [ -s "$PERSIST/aa-stream.h264" ] && say "Recorded phone video: `ls -l "$PERSIST/aa-stream.h264" 2>/dev/null | awk '{print $5}'` bytes"
     aa_nav_counts
     say "Navigation messages logged in this start: 0x8006=$_c_6 0x8007=$_c_7"
@@ -1515,7 +1520,8 @@ do_cp_log_save() {
     if ! { echo "pmcp $PMCP_VERSION cp-log-save `date 2>/dev/null`"
            echo "--- state: $STATE (map $MAPOK, Java $JAVAPART, route guidance $RGSYS, Android Auto $AASYS)"
            [ -n "$STATE_WHY" ] && echo "    $STATE_WHY"
-           echo "--- installed: `cat "$ROOT/PMCP_VERSION" 2>/dev/null` variant `cat "$ROOT/VARIANT" 2>/dev/null`"
+           # the card that last wrote the CarPlay map stream (2 with the same core.so answers "already installed" and keeps it)
+           echo "--- map stream installed by card: `cat "$ROOT/PMCP_VERSION" 2>/dev/null` variant `cat "$ROOT/VARIANT" 2>/dev/null`"
            echo "--- HMI_BOOT: `cat "$ROOT/HMI_BOOT" 2>/dev/null`"
            echo "--- markers: `ls "$PERSIST" 2>/dev/null`"
            echo "--- last-boot: `cat "$PERSIST/last-boot" 2>/dev/null`"

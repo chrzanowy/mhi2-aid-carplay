@@ -77,7 +77,9 @@ fresh_unit() {
     grep -q '^printf() {' "$W/sd/pmcp.sh" || { echo "no_printf.inc not applied"; exit 99; }
 }
 
-run() { PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
+# every run of this card's pmcp.sh: a command missing on the unit (no_printf.inc) is recorded, checked once per shell
+run() { PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; noexec "$*"; }
+noexec() { grep "cannot execute" "$W/out" | sed "s|^|$1: |" >> "$W/noexec"; }
 # earlier cards, run against the same fake unit: the v1.3.0 release and the last experimental card (Android Auto)
 V13D="${PMCP_V13_SD:-$SDB/../sd-v1.3.0}/pmcp"
 V13="$V13D/pmcp.sh"
@@ -144,6 +146,7 @@ jar_replaced() {
 
 for SH in "$@"; do
     echo "=== shell: $SH"
+    rm -f "$W/noexec"
     U="$W/unit/mnt/app"
 
     if [ "${PMCP_TEST_SCOPE:-all}" != speedlimit ]; then
@@ -546,10 +549,11 @@ for SH in "$@"; do
     # feat: main menu 4 (the real menu script); allon: what the old button 3 did, now 2 then 4 (map, then features)
     feat() {
         sed -e "s#/bin/ksh \$PMCP#$SH $W/sd/pmcp.sh#" "$W/sd/menu/features-on.sh" > "$W/features-on.sh"
-        PMCP_TEST_ROOT="$W/unit" $SH "$W/features-on.sh" > "$W/out" 2>&1; echo $? > "$W/rc"
+        PMCP_TEST_ROOT="$W/unit" $SH "$W/features-on.sh" > "$W/out" 2>&1; echo $? > "$W/rc"; noexec "4 (features-on.sh)"
     }
     allon() {
         PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" map-install map-square-fps40 > "$W/out2" 2>&1; _rc2=$?
+        grep "cannot execute" "$W/out2" | sed "s/^/map-install: /" >> "$W/noexec"
         feat; cat "$W/out2" "$W/out" > "$W/out3"; mv "$W/out3" "$W/out"
         [ $_rc2 = 0 ] || echo $_rc2 > "$W/rc"
     }
@@ -1070,7 +1074,7 @@ PEOF
     [ -e "$U/carplaymaps/logs/other-mod.log" ] && ok "another mod's logs/ left alone" || bad "another mod's logs deleted"
     rm -rf "$U/carplaymaps/logs"; mv "$W/pv.keep" "$U/carplaymaps/PMCP_VERSION"
     # A152: the GEM button log on the unit ($PERSIST/gem.log; the SD card is read-only in GEM)
-    rung() { PMCP_TEST_GEMLOG= PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
+    rung() { PMCP_TEST_GEMLOG= PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; noexec "$*"; }
     mkdir -p "$P"; rm -f "$P"/gem.log*; rung aa-status; rc_is 0
     head -1 "$P/gem.log" | grep -q "^=== .* aa-status " && grep -q "^Unit state: VIDEO$" "$P/gem.log" && ok "gem.log: header and the button's output" || bad "gem.log: $(head -3 "$P/gem.log")"
     rm -f "$RD/pmcp-gal-hook.log"; rung aa-log-save; rc_is 1; grep -q "^PMCP_FAIL=AA_LOG_EMPTY" "$P/gem.log" && ok "gem.log: a FAIL is logged" || bad "gem.log without the FAIL"
@@ -1457,7 +1461,7 @@ PEOF
         && ok "(a) direct again: only aa-extra.conf" || bad "(a) direct: $(aaf)"
     run aa-output bogus; rc_is 1; expect_out "AA_OUTPUT_MUST_BE_direct_OR_ring" "aa-output: unknown value refused"
     grep -qx 'PMCP_AA_OUTPUT=direct' "$P/aa-extra.conf" && ok "refused value: file unchanged" || bad "aa-extra.conf changed"
-    run aa-status; expect_out "AA switches: PMCP_AA_OUTPUT=direct" "aa-status shows the switch"
+    run aa-status; expect_out "^AA switches: PMCP_AA_OUTPUT=direct $" "aa-status shows the switch (no tr on the unit)"
     if [ $EXPCARD = yes ]; then
         run aa-capture 60; rc_is 0; grep -qx 'PMCP_AA_CAPTURE_S=60' "$P/aa-extra.conf" && grep -qx 'PMCP_AA_OUTPUT=direct' "$P/aa-extra.conf" \
             && ok "experimental card: recording on, output kept" || bad "aa-extra.conf: $(cat "$P/aa-extra.conf")"
@@ -1611,6 +1615,8 @@ PEOF
         restore_exact "restore: exact factory tree"
     fi
 
+    [ -s "$W/noexec" ] && { bad "pmcp.sh called a command the unit does not have ($(wc -l < "$W/noexec" | tr -d ' ') runs)"; sort -u "$W/noexec" | head -5 | sed 's/^/       | /'; } \
+        || ok "no run of this card's pmcp.sh called a command missing on the unit (printf, tr, cut)"
 done
 
 rm -rf "$W"

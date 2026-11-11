@@ -31,6 +31,11 @@ build mode `lanes-uturn-asf-m-aa-r`). Host tests only: neither he nor we have tr
 - **Update:** main menu 4 replaces `rg` in place (`pmcp-guidance4.jar` → `pmcp-guidance5.jar`) with one trial start and
   one confirmation; `sl`, `ui`, the speed-limit mode and Android Auto stay. Host tests: [48] v1.5.1, [49] v1.5.0 and new [50] v1.6.0
   units.
+- **Fix (since v1.6.0): "AA status" on the unit printed "tr: cannot execute"** and an empty "AA switches" line: the
+  unit has no `tr`. The line now comes from `awk`. The installer tests replace `tr` and `cut` like `printf` (PR #5) and
+  fail when any run of `pmcp.sh` calls a command the unit does not have. The CarPlay log line "installed:" is now
+  "map stream installed by card:": it names the card that last wrote the map stream, which may be older than the card
+  in the slot.
 - **Not taken:** compressed album artwork; his map stream default of 27 fps (our core runs the car-tested 40 fps with an
   IDR every 5 frames, `map-square-fps40`; 30 fps is `map-square`); the v1.5.1-e boot-time MOST reclaim (a rebuilt
   bridge; we ship mathsls' MU1161 bridge binary).
