@@ -134,6 +134,14 @@ tomasz-twardzicki jako liczone zmiany na naszych źródłach. Jego `GuidanceEvid
 `TestSourceName`, `TestUturnSide`, `TestPlaceholder`, `TestQuietQnx`) są skopiowane bez zmian do `rg/lanes/v146/`
 i przypięte hashem. Ani u niego („no vehicle result”), ani u nas jeszcze nie sprawdzone w aucie.
 
+**Gałąź experimental, AA 1.1 (audyt A171):** w trybie `lanes-uturn-asf-m-aa-r` budowanie uruchamia też
+`rg/lanes/aa11.py` (po `v146.py`). Hook AA wysyła teraz nazwę drogi, pasy oraz dystans i czas do celu z Google Maps;
+LiveBridge publikuje je przy Android Auto tylko wtedy, gdy `com.pmcp.kv.KombiView.mapShown()` = 0, czyli AID nie
+pokazuje mapy AA (datapool 1110045, który w jeździe 2026-11-11 śledził każde przełączenie widoku; nieznany widok też
+ukrywa). Ukryte: pusty TurnToInfo, brak pasów, DistanceToDestination / TimeToDestination nieważne; strzałka i dystans
+do manewru zostają. Zmiana widoku wysyła te cztery funkcje ponownie przy następnym takcie 250 ms. Test:
+`rg/lanes/TestAa11.java` (`AA11_PASS`). Plik na karcie `pmcp-guidance7.jar`.
+
 - **Przeliczanie trasy.** Przeliczenie przychodzi jako stany trasy 1, 5, 0, 3, 1 w około pół sekundy, potem nowa lista
   zaczyna się od kroku startu z 0 m. Dotąd to była nowa trasa: dystans, pasek, ulica i przyjazd znikały. Teraz licznik
   pokazuje symbol VW „wyznaczanie trasy” (`CALC_ROUTE`, element 9), a dystans, pasek, ulica i przyjazd zostają, aż

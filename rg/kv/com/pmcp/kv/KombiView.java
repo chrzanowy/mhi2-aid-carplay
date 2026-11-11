@@ -11,6 +11,8 @@ package com.pmcp.kv;
  *   ActiveRgType.setGetProperty(entity)                              the cluster's own ActiveRgType request
  * Each call is one line in /ramdisk/pmcp-kombi-view.log (500 lines, then .1), so a drive shows which of them follows
  * the driver's view switches. Nothing here throws; J9 CDC 1.1 API only (StringBuffer, no StringBuilder).
+ * Drive of 2026-11-11 (A167): 1110045 follows every view switch; the data rate stays 2 (once 1 for 36 s) and is only
+ * re-sent about 1 s before a switch. So mapShown() is 1110045; rg's AA 1.1 gate (rg/lanes/aa11.py) reads it.
  */
 public final class KombiView {
     static final String LOG = "/ramdisk/pmcp-kombi-view.log";
@@ -42,10 +44,10 @@ public final class KombiView {
         }
     }
 
-    /** 1 = the AID shows the map (data rate full), 0 = it does not, -1 = no data rate seen yet. */
+    /** 1 = the AID shows the map (1110045 visible), 0 = it does not, -1 = not reported yet. */
     public static int mapShown() {
-        int r = rate;
-        return r < 0 ? -1 : (r == 2 ? 1 : 0);
+        int v = visible;
+        return v < 0 ? -1 : (v != 0 ? 1 : 0);
     }
 
     public static int dataRate() { return rate; }

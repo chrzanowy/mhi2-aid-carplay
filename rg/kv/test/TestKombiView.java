@@ -17,14 +17,17 @@ public final class TestKombiView {
     public static void main(String[] a) throws Exception {
         String p = a[0];
         KombiView.logPath = p;
-        check(KombiView.mapShown() == -1, "no data rate yet: unknown");
+        check(KombiView.mapShown() == -1, "nothing reported yet: unknown");
         KombiView.onDataRate(2, 1);
-        check(KombiView.mapShown() == 1, "rate 2: map shown");
+        check(KombiView.mapShown() == -1, "data rate alone does not decide (A167)");
         KombiView.onMapVisibility(1);
+        check(KombiView.mapShown() == 1, "1110045 visible: map shown");
         KombiView.onDataRate(0, 1);
-        check(KombiView.mapShown() == 0, "rate 0: no map");
+        check(KombiView.mapShown() == 1, "data rate 0 does not change it");
+        KombiView.onMapVisibility(0);
+        check(KombiView.mapShown() == 0, "1110045 invisible: no map");
         KombiView.onDataRate(1, 1);
-        check(KombiView.mapShown() == 0, "rate 1 (reduced): no map");
+        KombiView.onMapVisibility(1);
         KombiView.onRgTypeSetGet(new de.vw.mib.bap.mqbab2.generated.navsd.serializer.ActiveRgType_SetGet());
         KombiView.onRgTypeSetGet("not an entity");
         String s = read(p);
@@ -36,8 +39,8 @@ public final class TestKombiView {
         int nCur = cur.split("\n").length, nOld = old.split("\n").length;
         check(old.length() > 0 && nOld == KombiView.MAX_LINES && nCur <= 20, "rotation at " + KombiView.MAX_LINES + " lines (" + nOld + "/" + nCur + ")");
         KombiView.logPath = "/nonexistent-dir/x.log";
-        KombiView.onDataRate(2, 1);
-        check(KombiView.mapShown() == 1, "unwritable log: state still kept, nothing thrown");
+        KombiView.onMapVisibility(0);
+        check(KombiView.mapShown() == 0, "unwritable log: state still kept, nothing thrown");
         System.out.println(fails == 0 ? "KOMBI_VIEW_PASS" : "KOMBI_VIEW_FAIL " + fails);
         if (fails != 0) System.exit(1);
     }

@@ -137,6 +137,14 @@ Java of v1.4.6-e `d680311`) as counted edits on our sources. His `GuidanceEviden
 `TestSourceName`, `TestUturnSide`, `TestPlaceholder`, `TestQuietQnx`) are copied unchanged into `rg/lanes/v146/` and
 pinned. Not vehicle-tested upstream (his notes: "no vehicle result") nor here yet.
 
+**Experimental branch, AA 1.1 (audit A171):** in mode `lanes-uturn-asf-m-aa-r` the build also runs `rg/lanes/aa11.py`
+(after `v146.py`). The AA hook now sends Google Maps' road name, lanes and destination distance / time; LiveBridge
+publishes them with Android Auto only while `com.pmcp.kv.KombiView.mapShown()` is 0, i.e. the AID does not show the AA
+map (datapool 1110045, which followed every view switch on the 2026-11-11 drive; an unknown view hides them). Hidden:
+TurnToInfo empty, no lanes, DistanceToDestination / TimeToDestination invalid; the arrow and the distance to the turn
+stay. A view change re-sends the four functions at the next 250 ms tick. LiveBridge compiles against KombiView, which
+the AA block packages into the same jar. Test: `rg/lanes/TestAa11.java` (`AA11_PASS`). Card file `pmcp-guidance7.jar`.
+
 - **Reroute.** A reroute arrives as route states 1, 5, 0, 3, 1 within about half a second, then the new list starts at a
   start-of-route step with 0 m. Before, that was a new trip: distance, bar, street and arrival were lost. Now the VW
   "calculating route" symbol (`CALC_ROUTE`, main element 9) shows and distance, bar, street and arrival keep their values

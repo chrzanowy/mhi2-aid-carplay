@@ -26,6 +26,8 @@
 # Since A166 (experimental) the -aa modes also carry com.pmcp.kv.KombiView (rg/kv/: which view the AID shows, logged to
 # /ramdisk/pmcp-kombi-view.log) hooked into three more stock classes by rg/patcher/PatchKombiView.java (mostkombi
 # ChangeDataRate, navigation MapViewerKombiNotifierModel, navsd ActiveRgType).
+# Since A171 (experimental, AA 1.1) -aa-r also runs rg/lanes/aa11.py: with Android Auto, road name, lanes and destination
+# distance / time only while KombiView says the AID does not show the AA map (TestAa11).
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # do not write __pycache__ into upstream/tomasz (review 2)
 
@@ -129,6 +131,9 @@ if [ "$MODE" != base ]; then
         python3 -I "$H/lanes/v146.py" "$LB" "$H/lanes" || fail "v146.py"
         cp "$H/lanes/TestPmcp146.java" "$LB/TestPmcp146.java"
         ID=pmcp-mu1161-rg-lanes-asfm-aa-r-1; WHAT="$WHAT + MU1367 v1.4.5/v1.4.6 reroute, placeholder, U-turn side, Apple names"
+        # AA 1.1 (experimental, A171): AA road name, lanes, destination only while the AID does not show the AA map
+        python3 -I "$H/lanes/aa11.py" "$LB" "$H/lanes" || fail "aa11.py"
+        ID=pmcp-mu1161-rg-lanes-asfm-aa-r-aa11-1; WHAT="$WHAT + AA 1.1 road, lanes, destination off the AA map"
     fi
 fi
 
@@ -138,7 +143,11 @@ CLASSES="ManeuverDescriptor DistanceToNextManeuver RGStatus LaneGuidance Distanc
 (cd "$W/stock" && for c in $CLASSES; do
     unzip -q "$STOCK_JAR" "$NAV/$c.class"; done)
 echo 'package com.cpmap.rgi; public final class BuildInfo { public static final String ID="'"$ID"'"; public static final boolean RELEASE=true; }' > "$W/generated/BuildInfo.java"
-javac --release 8 -nowarn -cp "$STOCK_JAR" -d "$W/helpers" \
+# AA 1.1 gate (aa11.py): LiveBridge calls com.pmcp.kv.KombiView, compiled into the jar further down; here only on the
+# class path of the helpers (PatchLive packages com/cpmap/rgi helpers only)
+HCP="$STOCK_JAR"
+if [ $R146 = yes ]; then mkdir -p "$W/kvcp"; javac --release 8 -nowarn -cp "$STOCK_JAR" -d "$W/kvcp" "$H/kv/com/pmcp/kv/KombiView.java"; HCP="$STOCK_JAR:$W/kvcp"; fi
+javac --release 8 -nowarn -cp "$HCP" -d "$W/helpers" \
     "$LB/LiveModel.java" "$LB/JournalReader.java" "$LB/MailboxReader.java" "$LB/LiveBridge.java" $EXTRA "$W/generated/BuildInfo.java"
 javac -nowarn -cp "$CP" -d "$W/patcher" "$LB/PatchLive.java" "$H/patcher/GuardLive.java" "$BT/Guard.java" "$BT/RefCheck.java" \
     "$H/../hmiextras/patcher/Verify.java"
@@ -170,7 +179,7 @@ EOF
 java -cp "$W/patcher:$CP" RefCheck "$STOCK_JAR" "$W/pmcp-rg.jar"
 javac -nowarn -cp "$W/patched:$STOCK_JAR" -d "$W/tests" "$LB/TestLive.java" ${EXTRA:+"$TL"} \
     $([ $AA = yes ] && echo "$LB/TestAa.java") \
-    $([ $R146 = yes ] && echo "$LB/TestReroute.java $LB/TestSourceName.java $LB/TestUturnSide.java $LB/TestPlaceholder.java $LB/TestQuietQnx.java $LB/TestPmcp146.java") $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
+    $([ $R146 = yes ] && echo "$LB/TestAa11.java $LB/TestReroute.java $LB/TestSourceName.java $LB/TestUturnSide.java $LB/TestPlaceholder.java $LB/TestQuietQnx.java $LB/TestPmcp146.java") $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
     $([ $MAN = yes ] && echo "$LB/TestManeuvers.java")
 java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestLive > "$W/tests/result.json" || { cat "$W/tests/result.json"; fail "TestLive"; }
 cat "$W/tests/result.json"; echo
@@ -212,7 +221,7 @@ if [ $AA = yes ]; then
 fi
 if [ $R146 = yes ]; then
     # each in its own JVM (static evidence counters and LiveBridge.INSTANCE start fresh)
-    for t in TestReroute:REROUTE_PASS TestSourceName:SOURCE_NAME_PASS TestUturnSide:UTURN_SIDE_PASS TestPlaceholder:PLACEHOLDER_PASS \
+    for t in TestAa11:AA11_PASS TestReroute:REROUTE_PASS TestSourceName:SOURCE_NAME_PASS TestUturnSide:UTURN_SIDE_PASS TestPlaceholder:PLACEHOLDER_PASS \
              TestQuietQnx:QUIET_FACTORY_J9_PASS TestPmcp146:PMCP146_PASS; do
         c=${t%%:*}; m=${t#*:}
         java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.$c > "$W/tests/$c.txt" 2>&1 || { cat "$W/tests/$c.txt"; fail "$c"; }
