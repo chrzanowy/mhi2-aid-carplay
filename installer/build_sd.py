@@ -46,8 +46,10 @@ JAVA_PACKAGES = [("nai", "nai: AID map stays while the iPhone navigates (NavActi
 # rg = everything for route guidance in one package: Tomasz's port + his lanes, our VW U-turn lanes, his MU1367
 # v1.4.3 distance bar / street name / feed recovery, the maneuver fallbacks, the quiet-route hold (v1.4.3) and, since
 # v1.5.0, the VW arrows from Android Auto (rg/build.sh lanes-uturn-asf-m-aa: lanes-uturn-asf-m + rg/lanes/aa.py; with
-# connection 3 it reads the AA hook's mailbox /ramdisk/pmcp-aa-rg, CarPlay unchanged). The rg and rglu of v1.3, v1.4.x's
-# rg and the experimental cards' rg-aa are replaced by java-update (JAVA_OLD below).
+# connection 3 it reads the AA hook's mailbox /ramdisk/pmcp-aa-rg, CarPlay unchanged) and, since v1.6.1, tomasz-twardzicki's
+# MU1367 v1.4.5/v1.4.6 CarPlay guidance fixes (rg/build.sh lanes-uturn-asf-m-aa-r: + rg/lanes/v146.py: reroute with
+# CALC_ROUTE, placeholder arrow, U-turn side, Apple Maps names). The rg and rglu of v1.3, v1.4.x's and v1.5.0-v1.6.0's rg
+# and the experimental cards' rg-aa are replaced by java-update (JAVA_OLD below).
 # Tried and not shipped (docs/en/14-fast-start-audit.md): day/night v2 and the cluster day/night module (no effect on
 # Google Maps), AID fast start kf..kf4.
 # No two packages replace the same class (checked in main).
@@ -86,10 +88,10 @@ PAYLOAD = {
             "dbd031ecb28a2ec91c4704e133f4e2126cf1fe11498f673bc2e07fc0b1aaa7ab", 13285, "jars/NavActiveIgnore.jar"),
     "JAR_np": (PROJ / "build/np-mu1161-v2/pmcp-np.jar",
                "6b638868e65a6e573117cbf249850bb29e7b9aac3cd0502c2830652411f1dc23", 17928, "jars/pmcp-np.jar"),
-    # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa (the experimental cards' rg-aa 01221496 plus the 10 s AA quiet-route hold
-    # and the source-switch guard); a file name no earlier card used (java-update keeps the old set intact)
-    "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/pmcp-rg.jar",
-               "4e32e7f7e2af8613b264998911a278b50d4ebf0a4b5d0c6245089e782d6236ee", 53514, "jars/pmcp-guidance4.jar"),
+    # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa-r (v1.6.0's rg 4e32e7f7 plus rg/lanes/v146.py, tomasz-twardzicki MU1367
+    # v1.4.5/v1.4.6); a file name no earlier card used (java-update keeps the old set intact)
+    "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-161/pmcp-rg.jar",
+               "6258ab36a5a6bbde6e9e923455eaf4a953f9a4792821d212705333bd305ddc53", 55771, "jars/pmcp-guidance5.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
                  "046f48210dbee3177fbaa2a25f69154b56055f59b074fced1a0202700dd78d7b", 4740, "jars/pmcp-zoom.jar"),
     "JAR_dn": (PROJ / "build/extras-mu1161-v2/pmcp-dn.jar",
@@ -105,9 +107,9 @@ PAYLOAD = {
     "JAR_ui": (PROJ / "build/ui-mu1161/pmcp-ui.jar",
                "5fea8d94bdb45b6556e3a7eec660326a88aa485b4539408f75796e4d814bc395", 29485, "jars/pmcp-ui2.jar"),
     # Tomasz's driver patch + our log gate: his RGI receive log only with /dev/shmem/pmcp-rgi-debug (rg/driver/)
-    "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/ipod-drvr-iap2-gated.so",
+    "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-161/ipod-drvr-iap2-gated.so",
                   "519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3", 743272, "rg/ipod-drvr-iap2.so"),
-    "RG_CFG": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-150/iap2.cfg",
+    "RG_CFG": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-161/iap2.cfg",
                "c61407d9c6cd0d2529afedad0c9a120d5da5a504739e273bbb3dbea1e0b9b491", 6079, "rg/iap2.cfg"),
     # rgi-observer pmcp-r1 (rg/reader/, prebuilt in the repository): a stuck driver read costs one invalid record, not the reader
     "RG_READER": (PROJ / "rg/reader/prebuilt/rgi-observer",
@@ -289,6 +291,9 @@ JAVA_OLD = [
     # (main menu 4) replaces it in place and keeps sl and its mode (without this row the v1.5.1 set is unknown and 4
     # resets the whole Java set, dropping sl)
     ("ui", "e11bd8d3e93a7f2671d9ae8b5e354a428c5c8f17d66f0f8b97b9a88cc14a17b1", "93b1347fac382331e0900c73ac331a22259b7681", 26657, "pmcp-ui.jar", "ui"),
+    # v1.5.0, v1.5.1 and v1.6.0 rg (rg/build.sh lanes-uturn-asf-m-aa, before rg/lanes/v146.py): this card's rg is
+    # pmcp-guidance5.jar, so java-update (main menu 4) replaces it in place and keeps sl, ui and the speed-limit mode
+    ("rg", "4e32e7f7e2af8613b264998911a278b50d4ebf0a4b5d0c6245089e782d6236ee", "c14f3a68ffff673697d13985749a85adbdb1e2b4", 53514, "pmcp-guidance4.jar", "rg"),
 ]
 for name in VARIANTS:
     PAYLOAD["CORE_" + name] = (TUNING / name / "core.so", None, 75099, "core/%s/core.so" % name)
