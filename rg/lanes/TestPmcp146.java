@@ -57,6 +57,24 @@ public final class TestPmcp146 {
         feed.add(0x5204,TestLanes.instruction(7,TestLanes.lane(0,2,180,180)));f=feed.read();
         check(f.lanes.length==1&&f.lanes[0].direction==146,"left-hand traffic: right U-turn lane");
         f=feed.state(5,7,true);check(f.active&&f.main==9&&f.lanes.length==0,"reroute: CALC_ROUTE, no old lanes");
-        System.out.println("PMCP146_PASS checks="+checks+" aa_signed_uturn=1 placeholder_only_without_maneuver=1 aa_no_placeholder=1");
+        // A reroute wait that ends without a real distance (5 s quiet, 20 s bound) must not show the old route's held
+        // distance on our start-of-route fallback arrow: model and AID output.
+        for(int end=0;end<2;end++){
+            String how=end==0?"quiet":"20 s bound";
+            TestReroute.model=new LiveModel();TestReroute.now=1000;TestQuietQnx.sequence=0;TestQuietQnx.events=new byte[16][];
+            TestReroute.guide(1,2,300);TestReroute.reroute();f=TestReroute.send(0x5201,TestReroute.full(1,0,0,5100,620),5);
+            check(f.main==9&&f.meters==300,how+": held during the reroute");
+            if(end==0){TestReroute.model.quiet();f=TestReroute.model.frame();}
+            else f=TestReroute.send(0x5201,TestReroute.full(1,0,0,5100,620),LiveModel.RECOVER_MS);
+            check(f.active&&f.main==13&&f.direction==0&&f.maneuverType==11,how+": start-of-route arrow");
+            check(f.meters==-1&&!f.validDistance&&ArrowProgress.remaining(f,f.changed)==-1,how+": old distance and bar dropped");
+            TestLive.connection=2;LiveBridge.factoryContext();TestLive.clock=f.changed;
+            b=TestLive.bridge();b.incoming=f;b.journalAt=TestLive.clock;b.lastTick=TestLive.clock-100;b.floor=0;b.mode=2;b.tick(TestLive.clock);
+            check(b.owned&&LiveBridge.descriptor(out)&&out.maneuver_1.mainElement==13,how+": AID straight arrow");
+            check(LiveBridge.distance(d)&&!d.validityInformation.distanceToNextManeuverValid&&d.bargraphInfo.bargraphOnOff==0,how+": AID shows no old distance, no bar");
+            f=TestReroute.send(0x5201,TestReroute.full(1,0,40,5100,620),100);
+            check(f.main==13&&f.meters==40&&f.validDistance,how+": the next real distance shows");
+        }
+        System.out.println("PMCP146_PASS checks="+checks+" aa_signed_uturn=1 placeholder_only_without_maneuver=1 aa_no_placeholder=1 reroute_end_drops_old_distance=1");
     }
 }

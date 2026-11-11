@@ -13,8 +13,10 @@ pinned in build.sh; the few test lines our edits change on purpose are patched h
 1. Reroute (v1.4.5): a reroute arrives as route states 1,5,0,3,1 within about 0.5 s, then the new list starts at a
    start-route maneuver reporting 0 m. That was taken as a new trip (counters, bar, road and arrival lost). Now it is one
    episode: the factory CALC_ROUTE symbol (main 9) is shown and distance, bar, road and arrival keep their values until
-   the phone reports a real distance again; at most 20 s (RECOVER_MS) or 5 s of phone silence (the reader's STALE
-   record, model.quiet()). A stop inside a reroute ends guidance 1.5 s later (STOP_GRACE_MS) or at that silence. A route
+   the phone reports a real distance again; after the phone is back to guiding (state 1) at most 20 s (RECOVER_MS) or
+   5 s of phone silence (the reader's STALE record, model.quiet()); pmcp: such an end drops the held distance, which
+   belongs to the old route (our start-of-route fallback would show it). States 3/5 without a return to 1 are held
+   like any quiet route (HOLD_MS, 180 s), as in his code. A stop inside a reroute ends guidance 1.5 s later (STOP_GRACE_MS) or at that silence. A route
    end, new destination, another app, disconnect and OEM navigation still clear at once.
 2. Placeholder arrow (v1.4.5): an active route without any maneuver yet shows the straight DIRECTION_TO_DESTINATION
    symbol (main 2) without a distance. pmcp: only when no maneuver is known at all (frame maneuverType < 0) and not for
@@ -104,11 +106,13 @@ patch("LiveModel.java", [
      "    /** The phone has been silent for 5 s: stop waiting for what it has not sent. */\n"
      "    public void quiet() {\n"
      "        if(stopAt>=0)endStop();\n"
-     "        else if(rerouting && guiding(state))rerouting=false;\n"
+     "        // pmcp: a wait that ends without a real distance drops the held one: it belonged to the old route and our\n"
+     "        // start-of-route fallback (maneuvers.py, main 13) would show it (his bridge hides a distance on main 0 only).\n"
+     "        else if(rerouting && guiding(state)){rerouting=false;distance=-1;}\n"
      "    }\n"
      "    private void expire(long now) {\n"
      "        if(stopAt>=0 && (now<stopAt || now-stopAt>=STOP_GRACE_MS))endStop();\n"
-     "        else if(rerouting && recoverAt>=0 && (now<recoverAt || now-recoverAt>=RECOVER_MS))rerouting=false;\n"
+     "        else if(rerouting && recoverAt>=0 && (now<recoverAt || now-recoverAt>=RECOVER_MS)){rerouting=false;distance=-1;}\n"
      "    }\n"
      "    public void invalidate() { clearCache(); drivingSide=-1; state=-1; source=destination=null; seen=0; changed=-1; epoch++; }\n",
      "clearCache/quiet/expire/invalidate", 1),
@@ -275,13 +279,15 @@ patch("LiveBridge.java", [
 
 # ---- his tests on our sources: only the lines our deliberate differences change ----
 # TestReroute: after the 20 s bound / the quiet end the new route's start maneuver (type 11 without angle) shows; his
+# strict map leaves it empty (main 0, his placeholder, distance hidden by his bridge), ours shows straight (13, 0) and the
+# old route's held distance is dropped (pmcp), so it has no distance until the phone sends one.
 # strict map leaves it empty (main 0, his placeholder), our start-of-route fallback (maneuvers.py) shows straight (13, 0).
 patch("TestReroute.java", [
     ('check(f.main==0&&f.meters==300,"after the bound the phone\'s own maneuver shows (no angle: placeholder)");',
-     'check(f.main==13&&f.direction==0&&f.meters==300,"after the bound the phone\'s own maneuver shows (pmcp: start-of-route fallback, straight)");',
+     'check(f.main==13&&f.direction==0&&f.meters==-1&&!f.validDistance,"after the bound the phone\'s own maneuver shows (pmcp: start-of-route fallback, straight, old distance dropped)");',
      "bound", 1),
     ('check(f.active&&f.main==0,"quiet ends the wait");',
-     'check(f.active&&f.main==13&&f.direction==0,"quiet ends the wait (pmcp: start-of-route fallback)");', "quiet", 1),
+     'check(f.active&&f.main==13&&f.direction==0&&f.meters==-1,"quiet ends the wait (pmcp: start-of-route fallback, old distance dropped)");', "quiet", 1),
 ])
 # TestUturnSide / TestPlaceholder / TestSourceName / TestQuietQnx run unchanged.
 

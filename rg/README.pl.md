@@ -137,7 +137,10 @@ i przypięte hashem. Ani u niego („no vehicle result”), ani u nas jeszcze ni
 - **Przeliczanie trasy.** Przeliczenie przychodzi jako stany trasy 1, 5, 0, 3, 1 w około pół sekundy, potem nowa lista
   zaczyna się od kroku startu z 0 m. Dotąd to była nowa trasa: dystans, pasek, ulica i przyjazd znikały. Teraz licznik
   pokazuje symbol VW „wyznaczanie trasy” (`CALC_ROUTE`, element 9), a dystans, pasek, ulica i przyjazd zostają, aż
-  telefon poda prawdziwy dystans, najwyżej 20 s albo 5 s ciszy telefonu. Stop w trakcie przeliczania kończy prowadzenie
+  telefon poda prawdziwy dystans. Po powrocie telefonu do prowadzenia (stan 1) to czekanie trwa najwyżej 20 s albo 5 s
+  ciszy telefonu, potem przytrzymany dystans znika (pmcp: inaczej nasza strzałka startu pokazałaby dystans starej
+  trasy). Telefon, który zostaje w stanie 3/5, jest trzymany jak każda cicha trasa, do 180 s (`HOLD_MS`, jak u Tomasza).
+  Stop w trakcie przeliczania kończy prowadzenie
   po 1,5 s. Koniec trasy, nowy cel, inna aplikacja, rozłączenie i nawigacja VW dalej czyszczą od razu.
 - **Strzałka zastępcza.** Aktywna trasa bez żadnego manewru pokazuje prostą strzałkę `DIRECTION_TO_DESTINATION`
   (element 2) bez dystansu. Nasza różnica: tylko gdy nie ma żadnego znanego manewru i nie przy Android Auto. Znany manewr,

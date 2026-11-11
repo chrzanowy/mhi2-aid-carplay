@@ -10,8 +10,10 @@ build mode `lanes-uturn-asf-m-aa-r`). Host tests only: neither he nor we have tr
 
 - **Reroute.** When the phone recalculates the route (route states 1, 5, 0, 3, 1, then a start step at 0 m), the AID
   shows the VW "calculating route" symbol and keeps the distance, the distance bar, the street and the arrival data until
-  the phone reports a real distance again (at most 20 s, or 5 s without a phone message). Before, every reroute looked
-  like a new trip and the countdown started over. A stop during a reroute ends guidance 1.5 s later; route end, a new
+  the phone reports a real distance again. Once the phone is back to guiding, that wait is at most 20 s or 5 s without
+  a phone message; then the new route's arrow shows without the old distance. While the phone stays in "calculating"
+  (states 3/5) without going back to guiding, the symbol is held like any quiet route, up to 180 s. Before, every
+  reroute looked like a new trip and the countdown started over. A stop during a reroute ends guidance 1.5 s later; route end, a new
   destination, another app, disconnect and VW navigation still end it at once.
 - **Apple Maps on a Polish phone.** Apple Maps can alternate its name ("Apple Maps" / "Mapy Apple") within one route.
   Each change was taken as another app and cleared the stored manoeuvres and lanes, so arrows and lanes came back only a

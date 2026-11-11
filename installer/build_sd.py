@@ -91,7 +91,7 @@ PAYLOAD = {
     # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa-r (v1.6.0's rg 4e32e7f7 plus rg/lanes/v146.py, tomasz-twardzicki MU1367
     # v1.4.5/v1.4.6); a file name no earlier card used (java-update keeps the old set intact)
     "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-161/pmcp-rg.jar",
-               "6258ab36a5a6bbde6e9e923455eaf4a953f9a4792821d212705333bd305ddc53", 55771, "jars/pmcp-guidance5.jar"),
+               "70f714fbaf3efb85bf3235f72971f638c822a117838589bfdf46281037c38fa4", 55780, "jars/pmcp-guidance5.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
                  "046f48210dbee3177fbaa2a25f69154b56055f59b074fced1a0202700dd78d7b", 4740, "jars/pmcp-zoom.jar"),
     "JAR_dn": (PROJ / "build/extras-mu1161-v2/pmcp-dn.jar",

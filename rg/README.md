@@ -140,7 +140,10 @@ pinned. Not vehicle-tested upstream (his notes: "no vehicle result") nor here ye
 - **Reroute.** A reroute arrives as route states 1, 5, 0, 3, 1 within about half a second, then the new list starts at a
   start-of-route step with 0 m. Before, that was a new trip: distance, bar, street and arrival were lost. Now the VW
   "calculating route" symbol (`CALC_ROUTE`, main element 9) shows and distance, bar, street and arrival keep their values
-  until the phone reports a real distance again, at most 20 s or 5 s of phone silence. A stop inside a reroute ends
+  until the phone reports a real distance again. After the phone is back to guiding (state 1) that wait is at most 20 s
+  or 5 s of phone silence, and then the held distance is dropped (pmcp: our start-of-route arrow would otherwise show
+  the old route's distance). A phone that stays in state 3/5 is held like any quiet route, up to 180 s (`HOLD_MS`, as
+  in Tomasz's code). A stop inside a reroute ends
   guidance 1.5 s later. Route end, a new destination, another app, disconnect and VW navigation still clear at once.
 - **Placeholder arrow.** An active route without any manoeuvre yet shows the straight `DIRECTION_TO_DESTINATION` arrow
   (main element 2) without a distance. Our difference: only when no manoeuvre is known at all, and not with Android Auto.
