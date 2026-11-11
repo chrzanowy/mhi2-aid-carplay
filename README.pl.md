@@ -26,6 +26,7 @@ W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy proj
 | Strzałka na starcie trasy i przy skrętach na rondzie (zastępcza tam, gdzie ścisłe mapowanie nie daje żadnej) | działa |
 | Pasek odległości przed manewrem (odliczanie VW) i nazwa bieżącej ulicy | działa |
 | Natywne pasy ruchu VW, także pasy do zawracania (gdy aplikacja w telefonie wysyła pasy) | działa |
+| Przeliczanie trasy zachowuje dystans, pasek, ulicę i przyjazd z symbolem VW „wyznaczanie trasy”; Mapy Apple na telefonie po polsku nie gubią strzałek i pasów (tomasz-twardzicki MU1367 v1.4.5/v1.4.6) | nowe, jeszcze nie sprawdzone w aucie ([szczegóły](rg/README.pl.md#przeliczanie-trasy-strzałka-zastępcza-strona-zawracania-nazwy-map-apple-v161-mu1367-v145v146)) |
 | Prowadzenie przetrwa zawieszony odczyt sterownika iAP2 (czytnik restartuje swój proces roboczy zamiast się kończyć) | w aucie od 2026-11-03; odzyskiwanie sprawdzone na komputerze |
 | Przybliżanie mapy strzałkami na kierownicy | działa |
 | Tytuł i wykonawca utworu z CarPlay na AID | działa |
@@ -163,7 +164,7 @@ workspace/
 | Wejście | Źródło | Przypięte |
 |---|---|---|
 | bazowy `core.so` (profil MU1102/791, sha256 `00b48a8f…`) | paczka omonob w M.I.B. | commit `3a2526a3` |
-| natywne prowadzenie, miejsca łatek | tomasz-twardzicki/MHI2-Carplay-Maps | commit `024dd159` (MU1427), `7925a83` (pasy), `1d69473` (pasek odległości, ulica, odzyskiwanie) |
+| natywne prowadzenie, miejsca łatek | tomasz-twardzicki/MHI2-Carplay-Maps | commit `024dd159` (MU1427), `7925a83` (pasy), `1d69473` (pasek odległości, ulica, odzyskiwanie), tagi `MU1367-v1.4.5`/`MU1367-v1.4.6` (przeliczanie trasy, strona zawracania, nazwy Map Apple) |
 | tablica manewrów dla zastępczych strzałek | harman-f/mhi2_altscreen_carplay (`MibrRgiManeuvers.java`) | commit `c01bbdc` |
 | paczka referencyjna MU1161/791 | mathsls/MHI2-Carplay-Maps | commit `cdd576b0` |
 | konwerter JXE → JAR | luka-dev/jxe2jar | commit `9eeb45bb` |
@@ -243,7 +244,8 @@ Ten projekt nie powstałby bez:
   `core.so` (liczba klatek, klatki kluczowe, URL, safe area), klasy NavActiveIgnore i rozwiązanie natywnego prowadzenia
   (łańcuch łatek sterownika, most HMI, czytnik RGI), które `rg/` przenosi na MU1161: MU1427 v1.2.0 (strzałki, dystans,
   ETA, ścisłe mapowanie manewrów `LiveModel.map`), pasy ruchu z MU1367 v1.4.0 oraz pasek odległości, nazwa ulicy
-  i odzyskiwanie strumienia z MU1367 v1.4.3 oraz podtrzymanie trasy Apple Maps z MU1367 v1.4.4 (nasze v1.4.3).
+  i odzyskiwanie strumienia z MU1367 v1.4.3 oraz podtrzymanie trasy Apple Maps z MU1367 v1.4.4 (nasze v1.4.3),
+  a także przeliczanie trasy, strzałkę zastępczą, stronę zawracania i nazwy Map Apple z MU1367 v1.4.5/v1.4.6 (nasze v1.6.1).
 - **[mathsls/MHI2-Carplay-Maps](https://github.com/mathsls/MHI2-Carplay-Maps)**: pierwszy build dla MU1161 + AID 791.
   Z niego pochodzą miejsca rozmiaru fizycznego i układ wariantu `map-square`.
 - **[ZzYunOvO/MHI2-Carplay-Maps](https://github.com/ZzYunOvO/MHI2-Carplay-Maps)**: zestaw narzędzi, na którym opierają

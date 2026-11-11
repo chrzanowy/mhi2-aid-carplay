@@ -26,6 +26,7 @@ This repository holds only what is specific to this head unit. It builds on the 
 | Arrow at the start of a route and at roundabout turns (fallback where the strict mapping gives none) | works |
 | Distance bar before the manoeuvre (VW countdown bargraph) and the current street name | works |
 | Native VW lane guidance, including U-turn lanes (when the phone app sends lanes) | works |
+| Reroute keeps distance, bar, street and arrival with the VW "calculating route" symbol; Apple Maps with a Polish phone keeps its arrows and lanes (tomasz-twardzicki MU1367 v1.4.5/v1.4.6) | new, not yet tried in the car ([details](rg/README.md#reroute-placeholder-arrow-u-turn-side-apple-maps-names-v161-mu1367-v145v146)) |
 | Guidance feed survives a stuck iAP2 driver read (the reader restarts its worker instead of ending) | in the car since 2026-11-03; recovery tested on the host |
 | Map zoom with the steering-wheel arrows | works |
 | CarPlay track title and artist on the AID | works |
@@ -180,7 +181,7 @@ workspace/
 | Input | Source | Pinned |
 |---|---|---|
 | base `core.so` (MU1102/791 profile, sha256 `00b48a8f…`) | omonob payload as shipped in M.I.B. | commit `3a2526a3` |
-| route guidance, patch sites | tomasz-twardzicki/MHI2-Carplay-Maps | commit `024dd159` (MU1427), `7925a83` (lanes), `1d69473` (distance bar, street, feed recovery) |
+| route guidance, patch sites | tomasz-twardzicki/MHI2-Carplay-Maps | commit `024dd159` (MU1427), `7925a83` (lanes), `1d69473` (distance bar, street, feed recovery), tags `MU1367-v1.4.5`/`MU1367-v1.4.6` (reroute, U-turn side, Apple Maps names) |
 | maneuver table for the arrow fallbacks | harman-f/mhi2_altscreen_carplay (`MibrRgiManeuvers.java`) | commit `c01bbdc` |
 | MU1161/791 reference payload | mathsls/MHI2-Carplay-Maps | commit `cdd576b0` |
 | JXE → JAR converter | luka-dev/jxe2jar | commit `9eeb45bb` |
@@ -262,7 +263,8 @@ This project would not exist without:
   sites (frame rate, key frames, URL, safe area), NavActiveIgnore classes, and the native route guidance solution
   (driver patch chain, HMI bridge, RGI reader) that `rg/` ports to MU1161: MU1427 v1.2.0 (arrows, distance, ETA, the
   strict maneuver mapping `LiveModel.map`), MU1367 v1.4.0 lane guidance, and MU1367 v1.4.3 distance bar, street name and
-  feed recovery, and the MU1367 v1.4.4 quiet-route hold for Apple Maps (v1.4.3).
+  feed recovery, the MU1367 v1.4.4 quiet-route hold for Apple Maps (v1.4.3), and the MU1367 v1.4.5/v1.4.6 reroute
+  handling, placeholder arrow, U-turn side and Apple Maps name fixes (v1.6.1).
 - **[mathsls/MHI2-Carplay-Maps](https://github.com/mathsls/MHI2-Carplay-Maps)**: the first MU1161 + AID 791 build. The
   physical-size sites and the layout used by `map-square` come from it.
 - **[ZzYunOvO/MHI2-Carplay-Maps](https://github.com/ZzYunOvO/MHI2-Carplay-Maps)**: the toolbox that the mathsls and

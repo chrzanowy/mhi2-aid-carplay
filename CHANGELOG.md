@@ -3,6 +3,42 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
+## Unreleased
+
+CarPlay route guidance fixes from tomasz-twardzicki's MU1367 v1.4.5 and v1.4.6 (package `rg`, `rg/lanes/v146.py`,
+build mode `lanes-uturn-asf-m-aa-r`). Host tests only: neither he nor we have tried them in a car yet.
+
+- **Reroute.** When the phone recalculates the route (route states 1, 5, 0, 3, 1, then a start step at 0 m), the AID
+  shows the VW "calculating route" symbol and keeps the distance, the distance bar, the street and the arrival data until
+  the phone reports a real distance again (at most 20 s, or 5 s without a phone message). Before, every reroute looked
+  like a new trip and the countdown started over. A stop during a reroute ends guidance 1.5 s later; route end, a new
+  destination, another app, disconnect and VW navigation still end it at once.
+- **Apple Maps on a Polish phone.** Apple Maps can alternate its name ("Apple Maps" / "Mapy Apple") within one route.
+  Each change was taken as another app and cleared the stored manoeuvres and lanes, so arrows and lanes came back only a
+  few turns later. Names containing the word "Apple" are now the same app. `guidance-evidence.txt` (in the CarPlay log
+  and "RG last maneuver") adds `route_clears` and `source_flips` (no road or destination text).
+- **U-turn arrow side.** A U-turn at exactly 180° carries no side. The main arrow now follows the driving side the phone
+  sends (right-hand traffic: left U-turn, matching the U-turn lane), and a 180° lane becomes the right U-turn only in
+  left-hand traffic. Android Auto arrows are unchanged (our hook sends the side in the angle's sign).
+- **Placeholder arrow.** An active CarPlay route without any manoeuvre yet shows the straight VW "direction to
+  destination" arrow (no distance) instead of an empty arrow field. Our start-of-route and roundabout fallbacks stay as
+  they were; a known manoeuvre we do not map (highway change, roundabout exit without angle) stays empty.
+- **CarPlay log** (GEM "CP save log") also saves the first 200 lines of the supervisor's copy of the last exited map
+  bridge and supervisor run (`/ramdisk/carplaymaps-diagnostics/last-bridge.log`, `last-supervisor.log`), to see whether
+  the map drop about 46 s after start is the bridge's "MOST write failed: Not enough memory" that Tomasz found on MU1367.
+- **Update:** main menu 4 replaces `rg` in place (`pmcp-guidance4.jar` → `pmcp-guidance5.jar`) with one trial start and
+  one confirmation; `sl`, `ui`, the speed-limit mode and Android Auto stay. Host tests: [48] v1.5.1 and new [49] v1.6.0
+  units.
+- **Not taken:** compressed album artwork; his map stream default of 27 fps (our core runs the car-tested 40 fps with an
+  IDR every 5 frames, `map-square-fps40`; 30 fps is `map-square`); the v1.5.1-e boot-time MOST reclaim (a rebuilt
+  bridge; we ship mathsls' MU1161 bridge binary).
+
+### Credits for this release
+
+- **tomasz-twardzicki** (MHI2-Carplay-Maps, GPL-3.0): reroute handling and placeholder arrow (MU1367 v1.4.5,
+  `6610cbb`), U-turn side and Apple Maps names with their evidence fields (MU1367 v1.4.6, `d680311`), and the tests
+  `TestReroute`, `TestSourceName`, `TestUturnSide`, `TestPlaceholder`, `TestQuietQnx`.
+
 ## v1.6.0 (2026-11-11)
 
 Installer version `pmcp-0.6.0-mu1161-791-<build id>`. v1.5.1 stays available as the previous stable release (Android
