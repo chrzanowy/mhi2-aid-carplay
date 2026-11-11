@@ -54,6 +54,18 @@ build mode `lanes-uturn-asf-m-aa-r`). Host tests only: neither he nor we have tr
 - Diagnostics for the next Android Auto features (road name, lanes, distance and arrival time only while the AID does
   not show the map): the AA hook writes the raw navigation messages to `/ramdisk/pmcp-aa-rg-raw.txt`, rg writes which
   view the AID shows to `/ramdisk/pmcp-kombi-view.log`; "AA save log" copies both.
+- **Android Auto 1.1 (experimental):** Google Maps' road name, lanes, distance to the destination and time to the
+  destination on the cluster, as with CarPlay, but only while the AID does not show the Android Auto map: Google Maps
+  draws them in its own picture, so with the map on the AID they stay hidden and the AID shows them only in its
+  arrow / trip views. The AID's view comes from the HMI's own "cockpit map visible" signal (datapool 1110045), which
+  followed every view switch on a test drive; the cluster's stream data rate did not. The arrow and the distance to the
+  next turn stay in every view, as in 1.0.
+  - AA hook (`aa/hook/pmcp_rg.c`): the road name (`road_info`), the lanes and the destination's distance / time from
+    Google Maps' navigation messages go into the rg mailbox as the iAP2 keys CarPlay uses (field numbers from
+    kkrvch's mib-std2-kombibridge, confirmed by the raw dump). A road name that is not valid UTF-8 is sent empty.
+  - rg (`rg/lanes/aa11.py`, `pmcp-guidance7.jar`): the gate; a view change re-sends the four values within 250 ms.
+  - Song title on the cluster for Android Auto too (`pmcp-np2.jar`): the stock Android Auto target never subscribes
+    to the phone's now-playing data; a fourth hook adds our own listener, as for CarPlay.
 
 ## v1.6.0 (2026-11-11)
 
