@@ -58,6 +58,11 @@ feeder starts no `altscreen-most-bridge` and makes no ring:
   `PMCP_AA_SYNC_HOLD_MS`=3000 stays for the bridge); the MOST events also note phone gaps of 1.5 s or more and a 3 s
   stall with the ACK and queue state at that moment, and every ACK hold on/off; the full status of the last 3 sessions
   is kept as `<status>-prev1..3` (GEM "AA save log" copies them); the session line has the gaps and ACK counts.
+- v15 (A165, after tomasz-twardzicki's MU1367 v1.5.1-e): while the radio boots, the factory video encoder takes isoTX2
+  by itself and the next write fails (ENOMEM on MU1367). Direct used to give MOST back for the rest of the session. Now
+  a write error or a 5 s refused block in the first `PMCP_AA_RECLAIM_S` of uptime (180, 0 = off) takes MOST back, at
+  most `PMCP_AA_RECLAIM_MAX` times (3): dmdt release again, the same open and devctl sequence, the discontinuity flag
+  on the next AU, then SPS/PPS and the last IDR again. The status line `ponowne przejecie MOST:` counts it.
 
 Diagnostics in both outputs: the guardian keeps the bridge's first 30 lines (devctl read-backs) besides the last ones;
 `PMCP_AA_CAPTURE_S=N` (default 0) records the phone's access units for N s to `PMCP_AA_CAPTURE_PATH` (environment only,
@@ -78,8 +83,8 @@ python3 -I aa/most/test/run_mux_test.py bridge-stage0/golden /tmp/pmcp-aa/mux   
 ```
 
 The direct test simulates isoTX2 with bridge-stage0's `host_mlb.c` (rate, EAGAIN or blocking, short writes, stalls,
-EIO, devctl statuses) and decodes the TS with bridge-stage0's `ts_analyse.py` (both copied unchanged to
-`aa/most/test/`).
+EIO, devctl statuses) and decodes the TS with bridge-stage0's `ts_analyse.py` (both copied to `aa/most/test/`;
+`host_mlb.c` since v15 also takes `HOST_MLB_FAIL_ERRNO` / `HOST_MLB_FAIL_REPEAT` and appends on a reopen).
 
 Test: a full `most` session (dmdt order, avcC, 60/60 AVCC frames, continuous seq, increasing time, ACK per frame), SIGKILL
 of the feeder mid-run (the watchdog hands MOST back, no bridge left behind), `analyze` mode (no dmdt and no ring, correct summary),

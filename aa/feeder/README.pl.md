@@ -57,6 +57,11 @@ uruchamia `altscreen-most-bridge` i nie tworzy ringu:
   z feeder.conf zostaje dla bridge'a); zdarzenia MOST notują też przerwy telefonu od 1,5 s i 3 s ciszy ze stanem ACK i
   kolejki w tej chwili oraz każde wstrzymanie/puszczenie ACK; pełny status 3 ostatnich sesji zostaje jako
   `<status>-prev1..3` (GEM „AA save log” je kopiuje); linia sesji ma przerwy i liczbę ACK.
+- v15 (A165, za MU1367 v1.5.1-e tomasz-twardzicki): przy starcie radia fabryczny enkoder sam zabiera isoTX2 i następny
+  zapis się nie udaje (na MU1367 ENOMEM). Direct oddawał wtedy MOST do końca sesji. Teraz błąd zapisu albo blok
+  odrzucany 5 s w pierwszych `PMCP_AA_RECLAIM_S` od startu radia (180, 0 = wyłączone) przejmuje MOST ponownie, najwyżej
+  `PMCP_AA_RECLAIM_MAX` razy (3): znowu dmdt, ta sama sekwencja open i devctl, znacznik nieciągłości na następnym AU,
+  potem SPS/PPS i ostatnie IDR jeszcze raz. Liczy to linia statusu `ponowne przejecie MOST:`.
 
 Diagnostyka w obu wyjściach: strażnik trzyma pierwsze 30 linii bridge'a (odczyty devctl) obok ostatnich;
 `PMCP_AA_CAPTURE_S=N` (domyślnie 0) nagrywa jednostki dostępu z telefonu przez N s do `PMCP_AA_CAPTURE_PATH` (tylko ze
@@ -77,8 +82,8 @@ python3 -I aa/most/test/run_mux_test.py bridge-stage0/golden /tmp/pmcp-aa/mux   
 ```
 
 Test direct symuluje isoTX2 plikiem `host_mlb.c` z bridge-stage0 (tempo, EAGAIN albo blokowanie, krótkie zapisy, przestoje,
-EIO, statusy devctl) i dekoduje TS analizatorem `ts_analyse.py` z bridge-stage0 (oba skopiowane bez zmian do
-`aa/most/test/`).
+EIO, statusy devctl) i dekoduje TS analizatorem `ts_analyse.py` z bridge-stage0 (oba skopiowane do `aa/most/test/`;
+`host_mlb.c` od v15 przyjmuje też `HOST_MLB_FAIL_ERRNO` / `HOST_MLB_FAIL_REPEAT` i przy ponownym open dopisuje).
 
 Test: pełna sesja `most` (kolejność dmdt, avcC, 60/60 klatek AVCC, ciągłe seq, rosnący czas, ACK na klatkę), SIGKILL
 feedera w trakcie (strażnik oddaje MOST, bridge nie zostaje), tryb `analyze` (brak dmdt i ringu, poprawne podsumowanie),

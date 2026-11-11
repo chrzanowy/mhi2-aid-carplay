@@ -13,7 +13,9 @@
  * HOST_MLB_PARTIAL=1 accepts the whole TS packets that fit (short writes).
  * HOST_MLB_STALL_AT_BLOCK=N + HOST_MLB_STALL_MS=M: after N accepted writes
  * the FIFO stops draining for M ms (a slow MOST episode).
- * HOST_MLB_FAIL_AT_BLOCK=N: write N+1 returns -1/EIO.
+ * HOST_MLB_FAIL_AT_BLOCK=N: write N+1 returns -1/EIO (HOST_MLB_FAIL_ERRNO, e.g. 12 = ENOMEM as after the factory
+ * encoder took isoTX2); HOST_MLB_FAIL_REPEAT=R fails again R writes after each failure (0 = once).
+ * A second open of the same path appends (device file and log), as a reopen after a reclaim.
  * devctl readback values: HOST_MLB_IFACE, HOST_MLB_PKTSIZE, HOST_MLB_BLKCOUNT
  * (default 0: the real values on MU1161 are not known, CONTRACT.md U2);
  * statuses HOST_MLB_FLUSH_STATUS (e.g. 25 = ENOTTY as on MU1440) and
@@ -42,6 +44,9 @@ static int g_partial;
 static long g_stall_at = -1;
 static uint64_t g_stall_us;
 static long g_fail_at = -1;
+static long g_fail_repeat;
+static int g_fail_errno = EIO;
+static int g_opens;
 static int g_started;
 static double g_level;
 static uint64_t g_level_t;
@@ -96,12 +101,14 @@ int host_open64(const char *path, int flags, ...)
 {
     char log_path[1024];
     const char *mode = env_or("HOST_MLB_MODE", "eagain");
-    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int again = g_opens++ > 0;
+    int fd = open(path, O_WRONLY | O_CREAT | (again ? O_APPEND : O_TRUNC), 0644);
     int saved = errno;
     if (fd < 0) return -1;
     snprintf(log_path, sizeof(log_path), "%s.log", path);
-    g_log_fd = open(env_or("HOST_MLB_LOG", log_path),
-                    O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 0644);
+    if (g_log_fd < 0)
+        g_log_fd = open(env_or("HOST_MLB_LOG", log_path),
+                        O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 0644);
     g_t0_us = now_us();
     g_rate_bytes_per_us = (double)env_long("HOST_MLB_BPS", 12288000L) / 8.0 / 1e6;
     g_depth = (double)env_long("HOST_MLB_DEPTH", 2L * 12032L);
@@ -109,7 +116,11 @@ int host_open64(const char *path, int flags, ...)
     g_partial = env_long("HOST_MLB_PARTIAL", 0) != 0;
     g_stall_at = env_long("HOST_MLB_STALL_AT_BLOCK", -1);
     g_stall_us = (uint64_t)env_long("HOST_MLB_STALL_MS", 0) * 1000ULL;
-    g_fail_at = env_long("HOST_MLB_FAIL_AT_BLOCK", -1);
+    if (!again) {
+        g_fail_at = env_long("HOST_MLB_FAIL_AT_BLOCK", -1);
+        g_fail_repeat = env_long("HOST_MLB_FAIL_REPEAT", 0);
+        g_fail_errno = (int)env_long("HOST_MLB_FAIL_ERRNO", EIO);
+    }
     g_mlb_fd = fd;
     log_line("open path=%s flags=0x%x nonblock=%d model bps=%ld depth=%.0f mode=%s partial=%d stall_at=%ld stall_ms=%llu",
              path, flags, (flags & O_NONBLOCK) != 0, env_long("HOST_MLB_BPS", 12288000L),
@@ -190,9 +201,11 @@ ssize_t host_write(int fd, const void *data, size_t size)
     if (fd != g_mlb_fd || fd < 0) return write(fd, data, size);
     pthread_mutex_lock(&g_lock);
     if (g_fail_at >= 0 && (long)g_writes == g_fail_at) {
+        int e = g_fail_errno;
+        g_fail_at = g_fail_repeat > 0 ? g_fail_at + g_fail_repeat : -1;
         pthread_mutex_unlock(&g_lock);
-        log_line("write n=%lu size=%zu ret=-1 errno=EIO (injected)", g_writes, size);
-        errno = EIO;
+        log_line("write n=%lu size=%zu ret=-1 errno=%d%s (injected)", g_writes, size, e, e == EIO ? " EIO" : "");
+        errno = e;
         return -1;
     }
     for (;;) {

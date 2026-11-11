@@ -75,16 +75,36 @@ static int read_u32(int fd, uint32_t dcmd, uint32_t *v)
     return devctl(fd, (int)dcmd, v, sizeof *v, NULL);
 }
 
+static int open_dev(most_writer_t *w, int flags);
+
 int most_open(most_writer_t *w, const most_cfg_t *cfg)
 {
-    uint32_t packets = TS_BLOCK_PACKETS;
     int flags = O_WRONLY | (cfg->wait == MOST_WAIT_BLOCK ? 0 : O_NONBLOCK);
     memset(w, 0, sizeof *w);
     w->cfg = *cfg;
     w->fd = -1;
     w->dev.iface_rc = w->dev.packet_rc = w->dev.block_rc = w->dev.flush_rc = w->dev.start_rc = -1;
     if (pthread_mutex_init(&w->lock, NULL) != 0) { w->dev.open_errno = ENOMEM; return -1; }
-    w->fd = DEV_OPEN(cfg->dev, flags);
+    return open_dev(w, flags);
+}
+
+int most_reopen(most_writer_t *w)
+{
+    int flags = O_WRONLY | (w->cfg.wait == MOST_WAIT_BLOCK ? 0 : O_NONBLOCK);
+    if (w->thread_on || w->fd >= 0) return -1;      /* most_stop first */
+    pthread_mutex_lock(&w->lock);
+    w->st.failed = 0; w->st.fail_errno = 0; w->st.fail_what[0] = 0; w->st.done = 0; w->st.in_write_since = 0;
+    w->st.reopens++;
+    pthread_mutex_unlock(&w->lock);
+    memset(&w->dev, 0, sizeof w->dev);
+    w->dev.iface_rc = w->dev.packet_rc = w->dev.block_rc = w->dev.flush_rc = w->dev.start_rc = -1;
+    return open_dev(w, flags);
+}
+
+static int open_dev(most_writer_t *w, int flags)
+{
+    uint32_t packets = TS_BLOCK_PACKETS;
+    w->fd = DEV_OPEN(w->cfg.dev, flags);
     if (w->fd < 0) { w->dev.open_errno = errno; return -1; }
     w->dev.iface_rc = read_u32(w->fd, MOST_DCMD_INTERFACE, &w->dev.iface);
     w->dev.packet_rc = read_u32(w->fd, MOST_DCMD_PACKETSIZE, &w->dev.packet_size);

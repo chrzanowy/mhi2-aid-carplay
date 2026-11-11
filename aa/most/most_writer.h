@@ -61,6 +61,7 @@ typedef struct {
     uint64_t first_block_us;                 /* first accepted block, us after the start devctl */
     uint64_t in_write_since;                 /* monotonic us when the current write began, 0 = not writing */
     int poll_off;                            /* auto: poll found useless, sleeping instead */
+    unsigned reopens;                        /* v15: most_reopen attempts */
     int failed, fail_errno, done;
     char fail_what[64];
 } most_stats_t;
@@ -81,6 +82,9 @@ typedef struct {
 uint64_t most_now_us(void);
 /* Opens the device and runs the devctl sequence. 0 = started; -1 = no MOST (fd closed, dev says why). */
 int most_open(most_writer_t *w, const most_cfg_t *cfg);
+/* v15 (MOST reclaim): after most_stop, opens the device again with the same cfg and the same devctl sequence; the
+ * statistics are kept, the failure is cleared. 0 = started (then most_start); -1 = no MOST (dev says why). */
+int most_reopen(most_writer_t *w);
 /* Starts the writer thread on mux. 0 = ok. */
 int most_start(most_writer_t *w, ts_mux_t *mux);
 /* Lets the queue drain for up to drain_ms, stops the thread (waits up to 1 s) and closes the device. */

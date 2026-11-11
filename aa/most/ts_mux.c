@@ -368,6 +368,11 @@ static void pes_copy(ts_mux_t *m, uint8_t *dst, uint32_t n)
     }
 }
 
+void ts_mux_discontinuity(ts_mux_t *m)
+{
+    m->disc_next = 1;
+}
+
 /* One video packet of the current AU, packetized as the bridge's enqueue_pes(). */
 static void video_packet(ts_mux_t *m, uint8_t p[TS_PACKET])
 {
@@ -389,7 +394,8 @@ static void video_packet(ts_mux_t *m, uint8_t p[TS_PACKET])
             uint8_t flags = 0;
             if (first) {
                 if (m->cur.keyframe) flags |= 0x40u;
-                if (!m->sent_first && m->cfg.discontinuity_first) flags |= 0x80u;
+                if ((!m->sent_first && m->cfg.discontinuity_first) || m->disc_next) flags |= 0x80u;
+                m->disc_next = 0;
             }
             p[5] = flags;
         }

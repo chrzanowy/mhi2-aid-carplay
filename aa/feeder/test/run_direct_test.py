@@ -166,7 +166,8 @@ def run(case, plan, env_add=None, window=8, fps=30.0, golden_times=False, conf='
     conn.close()
     try: feeder.wait(timeout=10)
     except subprocess.TimeoutExpired: feeder.kill(); feeder.wait()
-    wait_for(lambda: len(dmdt_lines(P)) >= 4, 5)
+    # v15: a reclaim logs a second release, so 4 lines can come before the restore; the guardian's marker goes last
+    wait_for(lambda: len(dmdt_lines(P)) >= 4 and not os.path.exists(P('pmcp-aa-guard.pid')), 5)
     with open(P('input/frames.jsonl'), 'w') as f:
         f.write(json.dumps(dict(event='avcC', ring_seq=1, sps=sps.hex(), pps=pps.hex())) + '\n')
         for x in frames: f.write(json.dumps(x) + '\n')
@@ -246,7 +247,7 @@ STEADY = [(1, 1, 20000, 20000, False), (149, 0, 1500, 6000, False)]
 r = analyse(run('steady', plan_synth(STEADY)))
 common(r, 'steady', 150, lead_min=4500)
 st = r.status
-check(st.startswith('PMCP AA FEEDER v14 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
+check(st.startswith('PMCP AA FEEDER v15 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
 for p in ('kolejka direct:', 'ACK wstrzymane:', 'zapis MOST:', 'czas zapisu bloku:', 'PTS-PCR (90kHz):', 'devctl: interfejs=0 (status 0)',
           'MOST poczatek 01: ', 'AU direct:'):
     check(any(l.startswith(p) for l in st.split('\n')), 'steady: status line %r' % p)
@@ -321,6 +322,47 @@ check('close fd' in open(r.P('mlb.ts.log')).read(), 'eio: isoTX2 closed')
 check(r.rc == 0 and r.dmdt == RESTORE, 'eio: exit 0, dmdt %r' % r.dmdt)
 check('MOST oddane: blad zapisu errno=5' in r.status, 'eio: event logged')
 
+# 7b. v15 (A165): ENOMEM early after boot (the factory encoder took isoTX2): MOST taken back once, the session goes on
+#     with our picture: dmdt release again, the device reopened with the same devctl sequence, SPS/PPS + last IDR again.
+#     The host's uptime is far over 180 s, so the window is set huge here; the eio case above is the "too late" one.
+RECLAIM_ENV = {'HOST_MLB_FAIL_AT_BLOCK': '150', 'HOST_MLB_FAIL_ERRNO': '12', 'PMCP_AA_RECLAIM_S': '4000000000'}
+r = run('reclaim', plan_synth([(1, 1, 20000, 20000, False), (119, 0, 1500, 6000, False)], seed=15), env_add=RECLAIM_ENV)
+rl = line(r.status, 'ponowne przejecie MOST:')
+mlog = open(r.P('mlb.ts.log')).read()
+check(r.dmdt_before_close == ['dc 72', 'sc 4 72', 'dc 72', 'sc 4 72'], 'reclaim: dmdt release again, no restore while running %r'
+      % r.dmdt_before_close)
+check(r.dmdt == ['dc 72', 'sc 4 72', 'dc 72', 'sc 4 72', 'dc 70 33', 'sc 4 70'], 'reclaim: one restore at the end %r' % r.dmdt)
+check(num(rl, 'proby') == 1 and num(rl, 'nieudane') == 0 and num(rl, 'IDR_ponownie') == 1, 'reclaim: counted %r' % rl)
+check('MOST zabrane (blad zapisu errno=12)' in r.status and 'MOST znowu nasze' in r.status and 'IDR ponownie: tak' in r.status,
+      'reclaim: events logged')
+check('przejety ponownie (direct)' in r.status_before_close and 'MOST oddane' not in r.status_before_close,
+      'reclaim: MOST still ours after it')
+check(mlog.count('open path=') == 2 and mlog.count('code=0x80040509') == 2 and mlog.count('close fd') == 2,
+      'reclaim: device reopened with the start devctl, closed twice')
+check(mlog.split('errno=12', 1)[-1].count('ret=12032') > 50, 'reclaim: blocks written after the reopen')
+check(r.acks == 120 and r.other == 0 and r.rc == 0, 'reclaim: every frame ACKed, no IDR request, exit 0 (%d %d %s)'
+      % (r.acks, r.other, r.rc))
+
+# 7c. the third failure with PMCP_AA_RECLAIM_MAX=2: two reclaims, then MOST given back as before
+r = run('reclaim-max', plan_synth([(1, 1, 20000, 20000, False), (149, 0, 1500, 6000, False)], seed=16),
+        env_add=dict(RECLAIM_ENV, HOST_MLB_FAIL_AT_BLOCK='100', HOST_MLB_FAIL_REPEAT='100', PMCP_AA_RECLAIM_MAX='2'))
+rl = line(r.status, 'ponowne przejecie MOST:')
+check(num(rl, 'proby') == 2 and num(rl, 'IDR_ponownie') == 2, 'reclaim-max: two reclaims %r' % rl)
+check(r.dmdt == ['dc 72', 'sc 4 72'] * 3 + ['dc 70 33', 'sc 4 70'], 'reclaim-max: then given back %r' % r.dmdt)
+check('bez ponownego przejecia' in r.status and 'MOST oddane (blad zapisu errno=12)' in r.status,
+      'reclaim-max: the third one goes the old way')
+check(r.acks == 150 and r.rc == 0, 'reclaim-max: every frame ACKed, exit 0 (%d %s)' % (r.acks, r.rc))
+
+# 7d. PMCP_AA_RECLAIM_S=0 turns it off; a short write is never reclaimed
+r = run('reclaim-off', plan_synth([(1, 1, 20000, 20000, False), (59, 0, 1500, 6000, False)], seed=17),
+        env_add=dict(RECLAIM_ENV, PMCP_AA_RECLAIM_S='0'))
+check(r.dmdt_before_close == RESTORE and num(line(r.status, 'ponowne przejecie MOST:'), 'proby') == 0,
+      'reclaim-off: MOST given back at once %r' % r.dmdt_before_close)
+r = run('reclaim-short', plan_synth([(1, 1, 20000, 20000, False), (59, 0, 1500, 6000, False)], seed=18),
+        env_add={'HOST_MLB_PARTIAL': '1', 'PMCP_AA_RECLAIM_S': '4000000000'})
+check(r.dmdt_before_close == RESTORE and num(line(r.status, 'ponowne przejecie MOST:'), 'proby') == 0,
+      'reclaim-short: a short write is not reclaimed %r' % r.dmdt_before_close)
+
 # 8. short write (the driver takes part of a block): reported, MOST given back
 r = analyse(run('short-write', plan_synth(STEADY, seed=13), env_add={'HOST_MLB_PARTIAL': '1'}))
 check('krotki zapis' in r.status_before_close and r.dmdt_before_close == RESTORE, 'short-write: reported, MOST given back %r'
@@ -384,7 +426,7 @@ check('przerwa od telefonu 3' in r.status or 'przerwa od telefonu 4' in r.status
 bl = [l for l in r.status.split('\n') if 'brak klatek 3 s' in l]
 check(len(bl) == 2 and 'ACK czeka 0 (wstrzymane nie)' in bl[-1] and 'kolejka 0 pakietow/0 AU' in bl[-1], 'gap: stall noted with ACK/queue state %s' % bl)
 pv = [open(SPATH + '-prev%d' % k).read() if os.path.exists(SPATH + '-prev%d' % k) else '' for k in (1, 2, 3)]
-check(all(x.startswith('PMCP AA FEEDER v14') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
+check(all(x.startswith('PMCP AA FEEDER v15') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
 check([num(line(x, 'klatki='), 'klatki') for x in pv] == [30, 30, 30] and pv[0] != pv[1] != pv[2], 'prev: prev1..3 are separate sessions')
 sess = [l for l in open(os.path.join(OUT, 'prev3', 'pmcp-aa-sessions.txt')).read().split('\n') if l]
 check(len(sess) == 1 and '>3s=1' in sess[0] and 'ACK=30' in sess[0]
@@ -421,7 +463,7 @@ r = run('ring-explicit', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 
         env_add={'PMCP_AA_OUTPUT': 'ring', 'FAKE_BRIDGE_PRINT': '1', 'PMCP_AA_CAPTURE_S': '1',
                  'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'ring.h264')})
 check(not os.path.exists(r.P('mlb.ts')) and os.path.exists(r.P('bridge.jsonl')) and r.acks == 40, 'ring-explicit: ring + bridge, no isoTX2')
-check(r.status.startswith('PMCP AA FEEDER v14 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
+check(r.status.startswith('PMCP AA FEEDER v15 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
 bt = open(r.P('pmcp-aa-bridge.txt')).read() if os.path.exists(r.P('pmcp-aa-bridge.txt')) else ''
 check('bridge poczatek 01: bridge: start status=0 packets=64' in bt and 'bridge poczatek 02: bridge: latency-reset' in bt,
       'ring-explicit: guardian keeps the first bridge lines')
@@ -436,7 +478,7 @@ r = run('extra-switch', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 6
         conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=ring\n', env_add={'PMCP_AA_OUTPUT': None, 'PMCP_AA_MODE': None,
         'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'extra.h264')},
         extra='PMCP_AA_OUTPUT=direct\nPMCP_AA_CAPTURE_S=1\nPMCP_AA_MODE=analyze\nPMCP_AA_CAPTURE_PATH=/tmp/x\n')
-check(r.status.startswith('PMCP AA FEEDER v14 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
+check(r.status.startswith('PMCP AA FEEDER v15 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
 check(os.path.exists(os.path.join(OUT, 'capture-files', 'extra.h264')) and 'nagranie: zapisane' in r.status,
       'extra-switch: capture switched on there, path key there ignored')
 check(r.acks == 40, 'extra-switch: every frame (%d)' % r.acks)

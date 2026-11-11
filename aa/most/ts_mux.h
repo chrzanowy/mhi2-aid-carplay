@@ -121,6 +121,7 @@ typedef struct {
     uint64_t cur_total, cur_pos;
     uint32_t cur_packet;      /* packets of the current AU built so far */
     int sent_first;           /* the first AU of the session went out */
+    int disc_next;            /* v15 (MOST reclaim): the next AU started carries the discontinuity flag */
     int have_origin;
     uint64_t origin_pts, origin_t_us, last_pts;
     ts_mux_stats_t st;
@@ -130,6 +131,8 @@ typedef struct {
 int ts_mux_init(ts_mux_t *m, uint32_t pool_bytes, uint32_t max_entries, const ts_mux_cfg_t *cfg);
 void ts_mux_free(ts_mux_t *m);
 void ts_mux_default_cfg(ts_mux_cfg_t *cfg);
+/* The next AU whose first packet is built carries the discontinuity flag (0x80): after the writer reopened the device. */
+void ts_mux_discontinuity(ts_mux_t *m);
 
 /* Producer. Both return 0, or -1 when the pool or the entry table has no room now (the caller retries later;
  * nothing is dropped), or -2 when the data can never fit / is invalid. */

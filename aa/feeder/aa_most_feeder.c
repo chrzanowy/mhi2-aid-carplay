@@ -114,6 +114,15 @@
  * blanks/CR ignored); any other value in aa-extra.conf or feeder.conf is ignored and counted in the status, so a bad switch
  * (the on-unit UI page writes it without a trial) always gives the default from feeder.conf (AA 1.0: direct).
  *
+ * v15 (A165, after tomasz-twardzicki MU1367 v1.5.1-e): while the radio boots the factory video encoder takes isoTX2 by
+ * itself about 15 s after it was released and the next write fails (ENOMEM on MU1367). Direct used to give MOST back
+ * for the rest of the session (no cluster map until a reconnect). Now a write error with errno set, or a block refused
+ * (EAGAIN) for PMCP_AA_MOST_STALL_MS, in the first PMCP_AA_RECLAIM_S of uptime (default 180, 0 = off) takes MOST back
+ * instead, at most PMCP_AA_RECLAIM_MAX times (default 3): device closed, dmdt dc 72 + sc 4 72 again, 500 ms, the same
+ * open and devctl sequence, the next AU with the discontinuity flag, then SPS/PPS and the last IDR again (the phone
+ * sends one about every 60 s and asking breaks its session), so the picture comes back with brief artifacts at most.
+ * A short write, a write stuck in the driver, a failed reclaim or anything later goes the old way.
+ *
  * Modes (PMCP_AA_MODE): "analyze" (default) only reads, ACKs and writes a summary; the cluster keeps
  * the VW map. "most" also takes the MOST channel over. The summary is rewritten once a second to
  * PMCP_AA_STATUS (default /ramdisk/pmcp-aa-feeder.txt); nothing grows without bound.
@@ -149,7 +158,7 @@
 #include "../most/ts_mux.h"
 #include "../most/most_writer.h"
 
-#define FEEDER_VERSION "14"
+#define FEEDER_VERSION "15"
 
 #define RING_MAGIC      0x43505247u
 #define RING_VERSION    1u
@@ -268,12 +277,15 @@ static const char *const CONF_KEYS[] = { "PMCP_AA_MODE", "PMCP_AA_RATE_KBPS", "P
                                          "PMCP_AA_QUEUE_KB", "PMCP_AA_MOST_WAIT", "PMCP_AA_MOST_STALL_MS", "PMCP_AA_MOST_SLEEP_US",
                                          "PMCP_AA_LEAD_MS", "PMCP_AA_LEAD_MIN_MS", "PMCP_AA_LEAD_MAX_MS",
                                          "PMCP_AA_DISC_FIRST", "PMCP_AA_CAPTURE_S",
-                                         "PMCP_AA_DIRECT_SYNC_HOLD_MS", NULL };
+                                         "PMCP_AA_DIRECT_SYNC_HOLD_MS",
+                                         /* v15 */
+                                         "PMCP_AA_RECLAIM_S", "PMCP_AA_RECLAIM_MAX", NULL };
 
 /* v11: GEM switches (pmcp.sh aa-output / aa-capture) write a second, unpinned file on /mnt/persist: only these keys,
  * never a path, read before the pinned settings so the switch wins over them (the environment still wins). */
 static const char *const EXTRA_KEYS[] = { "PMCP_AA_OUTPUT", "PMCP_AA_CAPTURE_S", NULL };
 
+static unsigned long g_reclaim_s, g_reclaim_max;   /* v15: PMCP_AA_RECLAIM_S / _MAX (direct only) */
 static unsigned long g_output_ignored;    /* v14: PMCP_AA_OUTPUT lines with a value other than direct/ring */
 static char g_output_from[16] = "domyslne";
 
@@ -337,6 +349,7 @@ typedef struct {
     unsigned long big_n, big_log_s[BIG_LOG_MAX], big_log_kb[BIG_LOG_MAX];
     /* v11 direct output */
     unsigned long hold_n, hold_ms_max, hold_ms_sum, acks_held, ack_forced, put_waits, put_wait_ms_max, put_err;
+    unsigned long reclaims, reclaim_fail, reclaim_idr, reclaim_last_s;   /* v15 */
     uint64_t wr_max_logged;
     int poll_off_logged, first_block_logged;
     /* v11 capture: 0 off, 1 recording (from the first frame), 2 being written, 3 written (cap_rc 0 or errno) */
@@ -1330,6 +1343,8 @@ static void direct_lost(const char *why)
     g_most_failed = 1;
 }
 
+static int direct_reclaim(uint64_t t, const most_stats_t *ms, const char *why);
+
 /* Main loop: the writer's health, and the events worth keeping. */
 static void direct_check(uint64_t t)
 {
@@ -1357,6 +1372,7 @@ static void direct_check(uint64_t t)
     if (ms.failed || ms.done) {
         char why[80];
         snprintf(why, sizeof why, "%s", ms.failed ? ms.fail_what : "zapis zakonczony");
+        if (ms.failed && direct_reclaim(t, &ms, why)) return;     /* v15 */
         direct_lost(why);
         return;
     }
@@ -1405,6 +1421,8 @@ static void write_status_direct(FILE *f)
                 (unsigned long long)w.poll_ready_false, (unsigned long long)w.sleeps, g_mw_cfg.first_sleep_us,
                 (unsigned long long)w.long_sleeps, (unsigned long long)w.short_writes,
                 (unsigned long long)w.slow_writes, most_wait_name(g_mw_cfg.wait), w.poll_off ? " (poll wylaczony)" : "");
+        fprintf(f, "ponowne przejecie MOST: proby=%lu nieudane=%lu IDR_ponownie=%lu ostatnie=%lus (okno %lus od startu radia, maks %lu)\n",
+                S.reclaims, S.reclaim_fail, S.reclaim_idr, S.reclaim_last_s, g_reclaim_s, g_reclaim_max);
         fprintf(f, "czas zapisu bloku: <5ms=%llu <10ms=%llu <30ms=%llu <50ms=%llu <100ms=%llu >=100ms=%llu max=%lluus sr=%lluus\n",
                 (unsigned long long)w.hist[0], (unsigned long long)w.hist[1], (unsigned long long)w.hist[2],
                 (unsigned long long)w.hist[3], (unsigned long long)w.hist[4], (unsigned long long)w.hist[5],
@@ -1564,6 +1582,7 @@ static void cap_au(const uint8_t *p, const nal_t *nals, unsigned cnt, uint64_t t
 
 static uint8_t g_sync_idr_ring[AU_MAX];
 static uint8_t *g_sync_idr = g_sync_idr_ring;   /* the session's first IDR as ring data (v11 direct: AU_BUF_MAX) */
+static unsigned g_sync_idr_cap = AU_MAX;       /* v15: its size; direct keeps the latest IDR there after the hold */
 static unsigned g_sync_idr_len;
 static unsigned g_sync_idr_ack;                /* its input size, for the held ACK */
 static uint64_t g_sync_until, g_sync_next, g_sync_t0;
@@ -1740,6 +1759,51 @@ static void sync_poll(uint64_t t)
     }
 }
 
+/* ---------------------------------------------------------------- MOST reclaim (v15) */
+
+/* The writer failed with errno set early after boot: take isoTX2 back as the guardian's takeover did. 1 = writing
+ * again; 0 = give MOST back (direct_lost). Runs on the main loop: input waits ~1-2 s, the ACK hold covers the queue. */
+static int direct_reclaim(uint64_t t, const most_stats_t *ms, const char *why)
+{
+    unsigned long up_s = (unsigned long)(t / 1000000u);   /* CLOCK_MONOTONIC: time since boot on QNX */
+    int rc;
+    if (g_reclaim_s == 0u || ms->fail_errno == 0) return 0;     /* a write error or a 5 s EAGAIN stall */
+    if (up_s >= g_reclaim_s || S.reclaims >= g_reclaim_max) {
+        ev_log("MOST: bez ponownego przejecia (%lus od startu radia, proby %lu/%lu)", up_s, S.reclaims, g_reclaim_max);
+        return 0;
+    }
+    S.reclaims++;
+    S.reclaim_last_s = up_s;
+    ev_log("MOST zabrane (%s) %lus od startu radia: przejmuje ponownie, proba %lu/%lu", why, up_s, S.reclaims,
+           g_reclaim_max);
+    most_stop(&g_mw, 0u);
+    rc = dmdt("dc", "72", NULL);
+    if (rc == 0) rc = dmdt("sc", "4", "72");
+    sleep_ms(500);
+    if (rc != 0 || most_reopen(&g_mw) != 0) {
+        ev_log("ponowne przejecie nieudane: dmdt=%d open errno=%d start=%d", rc, g_mw.dev.open_errno, g_mw.dev.start_rc);
+        S.reclaim_fail++;
+        return 0;
+    }
+    ts_mux_discontinuity(&g_mux);
+    if (most_start(&g_mw, &g_mux) != 0) {
+        most_stop(&g_mw, 0u);
+        ev_log("ponowne przejecie nieudane: watek zapisu errno=%d", errno);
+        S.reclaim_fail++;
+        return 0;
+    }
+    g_avcc_dirty = 1;
+    send_avcc();                                  /* SPS/PPS first, then the picture to decode from */
+    if (g_sync_idr_len != 0u && S.sync_state != 1u) {
+        out_frame(g_sync_idr, g_sync_idr_len, (uint32_t)++g_frame_no);
+        S.reclaim_idr++;
+    }
+    snprintf(S.most_state, sizeof S.most_state, "przejety ponownie (direct)");
+    ev_log("MOST znowu nasze po %lums (IDR ponownie: %s)", (unsigned long)((now_us() - t) / 1000u),
+           g_sync_idr_len != 0u && S.sync_state != 1u ? "tak" : "nie");
+    return 1;
+}
+
 /* Milliseconds until the next sync event, or -1. */
 static int sync_timeout_ms(uint64_t t)
 {
@@ -1850,6 +1914,9 @@ static void handle_au(const uint8_t *p, unsigned n)
     } else {
         if (n > S.max_p) S.max_p = n;
         S.sum_p += n; S.p_count++;
+    }
+    if (is_idr && g_direct_on && S.sync_state != 1u && out <= g_sync_idr_cap) {   /* v15: for a MOST reclaim */
+        memcpy(g_sync_idr, g_au, out); g_sync_idr_len = out;
     }
     if (S.sync_state == 1u) {                     /* start hold: the frame and its ACK wait */
         if (sync_hold_frame(g_au, out, n)) return;
@@ -2045,6 +2112,9 @@ int main(int argc, char **argv)
         g_mw_cfg.wait = strcmp(wait, "poll") == 0 ? MOST_WAIT_POLL : strcmp(wait, "sleep") == 0 ? MOST_WAIT_SLEEP :
                         strcmp(wait, "block") == 0 ? MOST_WAIT_BLOCK : MOST_WAIT_AUTO;
         g_mw_cfg.stall_ms = (unsigned)env_ul("PMCP_AA_MOST_STALL_MS", 5000ul, 500ul, 60000ul);
+        /* v15: reclaim window in seconds of uptime (0 = off; the host tests set a huge one) and attempts */
+        g_reclaim_s = env_ul("PMCP_AA_RECLAIM_S", 180ul, 0ul, 4000000000ul);
+        g_reclaim_max = env_ul("PMCP_AA_RECLAIM_MAX", 3ul, 0ul, 10ul);
         /* v12: first sleep after an accepted block; one 12032-byte block is ~7.9 ms of MOST (A147: write sr 7884 us) */
         g_mw_cfg.first_sleep_us = (unsigned)env_ul("PMCP_AA_MOST_SLEEP_US", 6500ul, 0ul, 7500ul);
         /* v12: no v10 pacing here. It only existed to keep the mathsls bridge under its 1024-packet latency-reset;
@@ -2054,7 +2124,7 @@ int main(int argc, char **argv)
         /* frames up to the input buffer instead of the ring's 256 KB slot; allocated only in this mode */
         {
             uint8_t *a = (uint8_t *)malloc(AU_BUF_MAX), *b = (uint8_t *)malloc(AU_BUF_MAX);
-            if (a != NULL && b != NULL) { g_au = a; g_sync_idr = b; } else { free(a); free(b); }
+            if (a != NULL && b != NULL) { g_au = a; g_sync_idr = b; g_sync_idr_cap = AU_BUF_MAX; } else { free(a); free(b); }
         }
     }
     g_cap_s = env_ul("PMCP_AA_CAPTURE_S", 0ul, 0ul, 600ul);                       /* v11: 0 = no capture */
