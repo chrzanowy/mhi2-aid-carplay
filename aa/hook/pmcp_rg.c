@@ -5,8 +5,14 @@
  * angle), 0x8007 NavigationCurrentPosition (metres to that step) and 0x8003 NavigationStatus. Here they become the
  * synthetic iAP2 route guidance events tomasz-twardzicki's rg bridge decodes (LiveModel.java, MailboxReader.java,
  * upstream/tomasz 024dd159 MU1427/route-guidance): 0x5202 manoeuvre {components [0x10], index, type, side, junction,
- * angle} and 0x5201 route {components [0x10], state, order [index], manoeuvre distance}. No ETA / remaining distance
- * keys: those stay in the AA picture.
+ * angle} and 0x5201 route {components [0x10], state, order [index], manoeuvre distance}.
+ * AA 1.1 (experimental, A171): also the road name (0x8006 step.road_info.road_names[0] -> 0x5201 key 3), the lanes
+ * (step.lanes -> 0x5204 {components, index, lane {position, status, angle..., highlight}} with 0x5201 keys 16/18),
+ * and the destination's distance and time (0x8007 dest.distance.meters / dest.time_to_arrival_seconds -> 0x5201
+ * keys 7 / 6). Field numbers: kkrvch mib-std2-kombibridge navproto.h (open-android-auto schema), confirmed by the
+ * raw dump of 2026-11-11 (A167). Whether the cockpit shows them is decided by rg (hidden while the AID shows the AA
+ * map: Google Maps draws them there itself). A road name that is not strict UTF-8 is sent empty, as LiveModel would
+ * reject the whole snapshot.
  *
  * Files (own directory, never the CarPlay reader's /ramdisk/carplay-route-guidance):
  *   GAL_PMCP_RG_DIR (default /ramdisk/pmcp-aa-rg)/latest.bin  RGM1 mailbox, kind 1 snapshot of an RGI1 image, written
@@ -44,9 +50,12 @@
 
 #define RG_SNAP     33088u
 #define RG_SLOTS    16u
-#define RG_EV_MAX   64u
+#define RG_EV_MAX   1024u
 #define RG_LAST     5u
 #define RG_UNK      8u
+#define RG_ROAD_MAX 200u              /* bytes; LiveModel takes 256, RoadName shows 75 */
+#define RG_LANES    16u               /* LiveModel's limit */
+#define RG_LANE_DIRS 6u               /* directions kept per lane (16 lanes stay inside RG_EV_MAX) */
 
 typedef struct { uint32_t seq; uint16_t id, len; uint8_t d[RG_EV_MAX]; } rg_ev;
 
@@ -75,6 +84,14 @@ static int g_paused;                  /* route repeats stopped: no navigation fr
 static unsigned long g_pauses, g_silent_ends;
 static unsigned g_unk_last;           /* NavigationType of the current unknown step (g_cur_t == -1) */
 
+/* AA 1.1: road, lanes and destination of the current step */
+typedef struct { unsigned n; uint8_t shape[RG_LANE_DIRS], hl[RG_LANE_DIRS]; } rg_lane;
+static char g_road[RG_ROAD_MAX + 1u];
+static unsigned g_road_len;
+static rg_lane g_lanes[RG_LANES];
+static unsigned g_lane_n;
+static long g_dest_m = -1, g_dest_s = -1;
+static unsigned long g_lane_events, g_road_bad;
 /* raw navigation dump (A165): copies queued on gal's reader thread, formatted and written on the writer thread */
 #define RAW_SLOTS   16u
 #define RAW_MSG_MAX 1024u
@@ -167,21 +184,91 @@ static void push_event(unsigned id, const tw *o)
 
 static void route_event(int state)
 {
-    uint8_t b[RG_EV_MAX]; tw o = { b, 0, sizeof b, 0 };
+    static uint8_t b[RG_EV_MAX];                 /* static: callers hold g_m; keeps gal's thread stack small */
+    tw o = { b, 0, sizeof b, 0 };
     tlv_u(&o, 0, 0x10, 2);
     tlv_u(&o, 1, (uint32_t)state, 1);
     g_state_sent = state == 1;
     if (state == 1 && g_index) {
+        tlv(&o, 3, (const uint8_t *)g_road, g_road_len);          /* always: an empty road clears the old one */
+        if (g_dest_s >= 0) {
+            uint8_t s8[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+            uint32_t v = (uint32_t)g_dest_s;
+            s8[4] = (uint8_t)(v >> 24); s8[5] = (uint8_t)(v >> 16); s8[6] = (uint8_t)(v >> 8); s8[7] = (uint8_t)v;
+            tlv(&o, 6, s8, 8);
+        }
+        if (g_dest_m >= 0) tlv_u(&o, 7, (uint32_t)g_dest_m, 4);
         tlv_u(&o, 13, g_index, 2);
         if (g_meters >= 0) tlv_u(&o, 10, (uint32_t)g_meters, 4);
+        tlv_u(&o, 16, g_index, 2);
+        tlv_u(&o, 18, g_lane_n ? 1u : 0u, 1);
     }
     push_event(0x5201, &o);
     g_route_ms = now_ms();
 }
 
+/* AA LaneDirection.shape -> iAP2 lane angle (degrees, negative = left); 0x7fff = unknown, not sent */
+static int lane_angle(unsigned shape)
+{
+    static const short a[10] = { 0x7fff, 0, -45, 45, -90, 90, -135, 135, -180, 179 };   /* 179: rg (uturn.py) reads exactly 180 as a left U-turn */
+    return shape < 10u ? a[shape] : 0x7fff;
+}
+
+/* 0x5204 lane guidance for the current index: one nested lane per AA lane, left to right */
+static void lane_event(void)
+{
+    static uint8_t b[RG_EV_MAX];                 /* static: callers hold g_m; keeps gal's thread stack small */
+    tw o = { b, 0, sizeof b, 0 };
+    unsigned i, k;
+    tlv_u(&o, 0, 0x10, 2);
+    tlv_u(&o, 1, g_index, 2);
+    for (i = 0; i < g_lane_n; ++i) {
+        static uint8_t lb[128];
+        tw l = { lb, 0, sizeof lb, 0 };
+        int hi = 0x7fff;
+        for (k = 0; k < g_lanes[i].n; ++k) if (g_lanes[i].hl[k] && lane_angle(g_lanes[i].shape[k]) != 0x7fff) { hi = lane_angle(g_lanes[i].shape[k]); break; }
+        tlv_u(&l, 0, i, 2);
+        tlv_u(&l, 1, hi != 0x7fff ? 2u : 0u, 1);                 /* 2 preferred (highlighted), 0 not */
+        for (k = 0; k < g_lanes[i].n; ++k) {
+            int an = lane_angle(g_lanes[i].shape[k]);
+            if (an != 0x7fff) tlv_u(&l, 2, (uint32_t)(uint16_t)(int16_t)an, 2);
+        }
+        if (hi != 0x7fff) tlv_u(&l, 3, (uint32_t)(uint16_t)(int16_t)hi, 2);
+        if (l.full) { o.full = 1; break; }
+        tlv(&o, 2, lb, l.n);
+    }
+    if (o.full) return;
+    push_event(0x5204, &o);
+    g_lane_events++;
+}
+
+/* LiveModel.text: strict UTF-8, no controls (tab/LF/CR allowed), no C1, no surrogates, nothing above U+10FFFF */
+static int utf8_ok(const uint8_t *p, unsigned n)
+{
+    const uint8_t *e = p + n;
+    while (p < e) {
+        unsigned c = *p++, cnt = 0, v = c, min = 0, i;
+        if (c >= 0xc2u && c <= 0xdfu) { cnt = 1; v = c & 31u; min = 128; }
+        else if (c >= 0xe0u && c <= 0xefu) { cnt = 2; v = c & 15u; min = 2048; }
+        else if (c >= 0xf0u && c <= 0xf4u) { cnt = 3; v = c & 7u; min = 65536; }
+        else if (c >= 128u) return 0;
+        if ((unsigned)(e - p) < cnt) return 0;
+        for (i = 0; i < cnt; ++i) { c = *p++; if ((c & 192u) != 128u) return 0; v = (v << 6) | (c & 63u); }
+        if (v < min || v > 0x10ffffu || (v >= 0xd800u && v <= 0xdfffu)) return 0;
+        if ((v < 32u && v != 9u && v != 10u && v != 13u) || (v >= 127u && v < 160u)) return 0;
+    }
+    return 1;
+}
+
+static void clear_step_data(void)
+{
+    g_road_len = 0; g_road[0] = 0; g_lane_n = 0; g_dest_m = -1; g_dest_s = -1;
+}
+
 static void maneuver_event(void)
 {
-    uint8_t b[RG_EV_MAX]; tw o = { b, 0, sizeof b, 0 };
+    static uint8_t b[RG_EV_MAX];                 /* static: callers hold g_m; keeps gal's thread stack small */
+    tw o = { b, 0, sizeof b, 0 };
     tlv_u(&o, 0, 0x10, 2);
     tlv_u(&o, 1, g_index, 2);
     tlv_u(&o, 3, (uint32_t)g_cur_t, 1);
@@ -237,16 +324,74 @@ static const char *type_name(int t)
     }
 }
 
+/* NavigationLane { repeated LaneDirection dir = 1 }, LaneDirection { shape = 1; is_highlighted = 2 } */
+static void parse_lane(pb l, rg_lane *out)
+{
+    unsigned f, w, df, dw;
+    pb d;
+    out->n = 0;
+    while (pb_tag(&l, &f, &w)) {
+        unsigned shape = 0, hl = 0;
+        if (!(f == 1u && w == 2u)) { pb_skip(&l, w); continue; }
+        if (!pb_sub(&l, &d)) break;
+        while (pb_tag(&d, &df, &dw)) {
+            if (dw != 0u) { pb_skip(&d, dw); continue; }
+            if (df == 1u) shape = (unsigned)pb_var(&d);
+            else if (df == 2u) hl = pb_var(&d) != 0u;
+            else (void)pb_var(&d);
+        }
+        if (out->n < RG_LANE_DIRS && shape <= 255u) { out->shape[out->n] = (uint8_t)shape; out->hl[out->n] = (uint8_t)hl; out->n++; }
+    }
+}
+
+/* Road / lanes of the step just parsed differ from what was sent: store them, report what changed (1 road, 2 lanes) */
+static unsigned take_step_data(const char *road, unsigned road_len, const rg_lane *lanes, unsigned lane_n)
+{
+    unsigned what = 0;
+    if (road_len != g_road_len || memcmp(road, g_road, road_len) != 0) {
+        memcpy(g_road, road, road_len); g_road[road_len] = 0; g_road_len = road_len; what |= 1u;
+    }
+    if (lane_n != g_lane_n || memcmp(lanes, g_lanes, sizeof g_lanes[0] * lane_n) != 0) {
+        memcpy(g_lanes, lanes, sizeof g_lanes[0] * lane_n); g_lane_n = lane_n; what |= 2u;
+    }
+    return what;
+}
+
 static void on_state(pb s)
 {
-    unsigned f, w, sf, sw, mf, mw, nt = 0, ex = 0, an = 0;
+    unsigned f, w, sf, sw, mf, mw, nt = 0, ex = 0, an = 0, lane_n = 0, road_len = 0, what;
     int have = 0, t, j, side, a, has_a;
-    pb step, man;
+    pb step, man, ri;
+    static rg_lane lanes[RG_LANES];
+    char road[RG_ROAD_MAX + 1u];
+    memset(lanes, 0, sizeof lanes);
     while (!have && pb_tag(&s, &f, &w)) {
         if (!(f == 1u && w == 2u)) { pb_skip(&s, w); continue; }
         if (!pb_sub(&s, &step)) break;
         have = 1;
         while (pb_tag(&step, &sf, &sw)) {
+            if (sf == 3u && sw == 2u) {                      /* NavigationLane, repeated */
+                pb l;
+                if (!pb_sub(&step, &l)) break;
+                if (lane_n < RG_LANES) parse_lane(l, &lanes[lane_n++]);
+                continue;
+            }
+            if (sf == 4u && sw == 2u) {                      /* NavigationRoadInfo { repeated string road_names = 1 } */
+                unsigned rf, rw;
+                pb nm;
+                if (!pb_sub(&step, &ri)) break;
+                while (road_len == 0u && pb_tag(&ri, &rf, &rw)) {
+                    if (!(rf == 1u && rw == 2u)) { pb_skip(&ri, rw); continue; }
+                    if (!pb_sub(&ri, &nm)) break;
+                    {
+                        unsigned n = (unsigned)(nm.e - nm.p);
+                        if (n > RG_ROAD_MAX) { n = RG_ROAD_MAX; while (n > 0u && (nm.p[n] & 0xc0u) == 0x80u) n--; }
+                        if (utf8_ok(nm.p, n)) { memcpy(road, nm.p, n); road_len = n; }
+                        else g_road_bad++;
+                    }
+                }
+                continue;
+            }
             if (!(sf == 1u && sw == 2u)) { pb_skip(&step, sw); continue; }
             if (!pb_sub(&step, &man)) break;
             while (pb_tag(&man, &mf, &mw)) {
@@ -259,12 +404,25 @@ static void on_state(pb s)
         }
     }
     if (!have) return;
+    road[road_len] = 0;
+    {
+        /* lanes with no known direction at all show nothing: drop the list */
+        unsigned i, any = 0;
+        unsigned k;
+        for (i = 0; i < lane_n; ++i) for (k = 0; k < lanes[i].n; ++k) if (lane_angle(lanes[i].shape[k]) != 0x7fff) any = 1;
+        if (!any) lane_n = 0;
+    }
     if (!pmcp_rg_map(nt, ex, an, &t, &j, &side, &a, &has_a)) {
         unsigned i;
         g_unknown++;
         for (i = 0; i < g_unk_n && g_unk[i] != nt; ++i) {}
         if (i == g_unk_n && g_unk_n < RG_UNK) g_unk[g_unk_n++] = nt;
-        if (g_cur_t == -1 && g_index && g_unk_last == nt) return;     /* the same unknown step again */
+        if (g_cur_t == -1 && g_index && g_unk_last == nt) {           /* the same unknown step again */
+            what = take_step_data(road, road_len, lanes, lane_n);
+            if (what & 2u) { if (g_lane_n) lane_event(); }
+            if (what) route_event(1);
+            return;
+        }
         /* a new step without a manoeuvre: the route points at an index with no 0x5202, so the bridge shows no
          * arrow and the distance that follows is not attached to the previous one */
         g_cur_t = -1; g_unk_last = nt;
@@ -276,12 +434,20 @@ static void on_state(pb s)
                      (unsigned long)((now_ms() - g_t0) / 1000u), nt, ex, an);
         }
         g_guiding = 1;
+        (void)take_step_data(road, road_len, lanes, lane_n);
         if (!g_state_sent) { unsigned keep = g_index; g_index = 0; route_event(1); g_index = keep; }
+        if (g_lane_n) lane_event();
         route_event(1);
         return;
     }
     g_known++;
-    if (t == g_cur_t && j == g_cur_j && side == g_cur_side && a == g_cur_a && has_a == g_cur_has_a && g_index) return;
+    if (t == g_cur_t && j == g_cur_j && side == g_cur_side && a == g_cur_a && has_a == g_cur_has_a && g_index) {
+        /* the same manoeuvre: only a new road name or new lanes go out (AA 1.1) */
+        what = take_step_data(road, road_len, lanes, lane_n);
+        if (what & 2u) { if (g_lane_n) lane_event(); }
+        if (what) route_event(1);
+        return;
+    }
     g_cur_t = t; g_cur_j = j; g_cur_side = side; g_cur_a = a; g_cur_has_a = has_a;
     g_index = g_index >= 65535u ? 1u : g_index + 1u;
     g_meters = -1;                                    /* a new step: its distance comes with 0x8007 */
@@ -293,32 +459,55 @@ static void on_state(pb s)
     g_guiding = 1;
     /* LiveModel.apply caches a 0x5202 only while the route state is active, and a state change from inactive clears
      * the cache: the state first, then the manoeuvre, then the route event that points at it */
+    (void)take_step_data(road, road_len, lanes, lane_n);
     if (!g_state_sent) { unsigned keep = g_index; g_index = 0; route_event(1); g_index = keep; }
     maneuver_event();
+    if (g_lane_n) lane_event();
     route_event(1);
 }
 
+/* NavigationDistance { meters = 1; display = 2; units = 3 } -> metres, -1 when absent */
+static long distance_m(pb n)
+{
+    unsigned nf, nw;
+    long m = -1;
+    while (pb_tag(&n, &nf, &nw)) {
+        if (nf == 1u && nw == 0u) { uint64_t v = pb_var(&n); if (v <= 20000000u) m = (long)v; }
+        else pb_skip(&n, nw);
+    }
+    return m;
+}
+
+/* NavigationCurrentPosition { step = 1 { distance = 1 }; dest = 2 { distance = 1; eta = 2; time_to_arrival_seconds = 3 } } */
 static void on_position(pb s)
 {
-    unsigned f, w, df, dw, nf, nw;
+    unsigned f, w, df, dw;
     pb d, n;
-    long m = -1;
+    long m = -1, dm = -1, ds = -1;
+    int have_dest = 0, dest_changed;
     while (pb_tag(&s, &f, &w)) {
-        if (!(f == 1u && w == 2u)) { pb_skip(&s, w); continue; }
+        if (!((f == 1u || f == 2u) && w == 2u)) { pb_skip(&s, w); continue; }
         if (!pb_sub(&s, &d)) break;
+        if (f == 2u) have_dest = 1;
         while (pb_tag(&d, &df, &dw)) {
             if (df == 1u && dw == 2u) {
                 if (!pb_sub(&d, &n)) break;
-                while (pb_tag(&n, &nf, &nw)) {
-                    if (nf == 1u && nw == 0u) { uint64_t v = pb_var(&n); if (v <= 20000000u) m = (long)v; }
-                    else pb_skip(&n, nw);
-                }
+                if (f == 1u) m = distance_m(n); else dm = distance_m(n);
+            } else if (f == 2u && df == 3u && dw == 0u) {
+                uint64_t v = pb_var(&d);
+                if (v <= 359940u) ds = (long)v;              /* LiveModel's bound: 99 h 59 min */
             } else pb_skip(&d, dw);
         }
-        break;
     }
-    if (m < 0 || !g_guiding || !g_index) return;
-    if (m == g_meters && now_ms() - g_route_ms < 2500u) return;
+    dest_changed = 0;
+    if (have_dest && (dm != g_dest_m || ds != g_dest_s)) { g_dest_m = dm; g_dest_s = ds; dest_changed = 1; }
+    if (!g_guiding || !g_index) return;
+    if (m < 0) {
+        /* no step distance (Google Maps sends none on some steps): the destination still goes out, at most every 1 s */
+        if (dest_changed && now_ms() - g_route_ms >= 1000u) route_event(1);
+        return;
+    }
+    if (m == g_meters && !(dest_changed && now_ms() - g_route_ms >= 1000u) && now_ms() - g_route_ms < 2500u) return;
     g_meters = m;
     route_event(1);
 }
@@ -332,6 +521,7 @@ static void on_status(pb s)
             if (v == 1u || v == 3u) { g_guiding = 1; }
             else if (g_guiding || g_index) {
                 g_guiding = 0; g_index = 0; g_cur_t = -1; g_meters = -1; g_paused = 0;
+                clear_step_data();
                 route_event(0);
             }
             return;
@@ -495,7 +685,7 @@ static void raw_flush(void)
 
 static void write_status(void)
 {
-    char s[1024];
+    char s[1536];
     int n;
     unsigned i;
     n = snprintf(s, sizeof s, "RG AA: komunikaty 0x8003=%lu 0x8006=%lu 0x8007=%lu prowadzenie=%s\n"
@@ -512,6 +702,8 @@ static void write_status(void)
     if (g_raw_path[0])
         n += snprintf(s + n, sizeof s - (size_t)n, "surowe: linie=%lu pominiete_bez_zmian=%lu zgubione=%lu plik=%s\n",
                       g_raw_lines, g_raw_same, g_raw_dropped, g_raw_path);
+    n += snprintf(s + n, sizeof s - (size_t)n, "AA 1.1: droga='%.60s' pasy=%u zdarzenia_pasow=%lu zle_nazwy=%lu cel=%ldm/%lds\n",
+                  g_road, g_lane_n, g_lane_events, g_road_bad, g_dest_m, g_dest_s);
     for (i = 0; i < g_last_n && n < (int)sizeof s - 100; ++i) n += snprintf(s + n, sizeof s - (size_t)n, "manewr %s\n", g_last[i]);
     {
         char tmp[200];
@@ -542,6 +734,7 @@ static void *writer(void *arg)
             uint64_t quiet = t - g_nav_ms;
             if (quiet >= g_end_ms) {
                 g_guiding = 0; g_index = 0; g_cur_t = -1; g_meters = -1; g_paused = 0;
+                clear_step_data();
                 g_silent_ends++;
                 route_event(0);
             } else if (quiet >= g_stale_ms) {
@@ -610,7 +803,7 @@ void pmcp_rg_message(const unsigned char *msg, unsigned len)
         if (g_paused) {
             /* the phone navigates again: the current manoeuvre and the route event once more */
             g_paused = 0;
-            if (g_guiding && g_index) { if (g_cur_t >= 0) maneuver_event(); route_event(1); }
+            if (g_guiding && g_index) { if (g_cur_t >= 0) maneuver_event(); if (g_lane_n) lane_event(); route_event(1); }
         }
     }
     if (g_raw_path[0]) raw_queue(id, msg + 2, len - 2u);

@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include "pmcp_rg.h"
 
-static unsigned char m[256];
+static unsigned char m[1024];
 static unsigned n;
 static void var(unsigned long v) { while (v >= 0x80) { m[n++] = (unsigned char)(v | 0x80); v >>= 7; } m[n++] = (unsigned char)v; }
 static void sleep_ms(int ms) { struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L }; nanosleep(&ts, 0); }
@@ -32,6 +32,49 @@ static void position(unsigned long meters)
     n = 0; m[n++] = 0x80; m[n++] = 0x07;
     var(0x0a); var(dn + 2u);
     var(0x0a); var(dn); for (i = 0; i < dn; ++i) m[n++] = d[i];
+    pmcp_rg_message(m, n);
+}
+
+/* AA 1.1: a step with road name and lanes, a position with the destination. Byte builder: b_* write into bb. */
+typedef struct { unsigned char d[512]; unsigned n; } bb;
+static void b_var(bb *b, unsigned long v) { while (v >= 0x80) { b->d[b->n++] = (unsigned char)(v | 0x80); v >>= 7; } b->d[b->n++] = (unsigned char)v; }
+static void b_key(bb *b, unsigned f, unsigned w) { b_var(b, (unsigned long)(f << 3 | w)); }
+static void b_u(bb *b, unsigned f, unsigned long v) { b_key(b, f, 0); b_var(b, v); }
+static void b_bytes(bb *b, unsigned f, const unsigned char *p, unsigned len) { b_key(b, f, 2); b_var(b, len); memcpy(b->d + b->n, p, len); b->n += len; }
+static void b_sub(bb *b, unsigned f, const bb *s) { b_bytes(b, f, s->d, s->n); }
+/* lanes: "1.,5*" = lane 1 straight / lane 2 normal right highlighted; ',' separates lanes, '*' = highlighted, digit = shape */
+static void state_full(unsigned nt, const char *road, unsigned road_len, const char *lanes)
+{
+    bb man = { {0}, 0 }, step = { {0}, 0 }, top = { {0}, 0 }, ri = { {0}, 0 }, txt = { {0}, 0 };
+    const char *p = lanes;
+    b_u(&man, 1, nt);
+    b_sub(&step, 1, &man);
+    b_bytes(&txt, 1, (const unsigned char *)"x", 1); b_sub(&step, 2, &txt);
+    while (p && *p) {
+        bb lane = { {0}, 0 };
+        while (*p && *p != ',') {
+            bb dir = { {0}, 0 };
+            b_u(&dir, 1, (unsigned long)(*p - '0')); p++;
+            if (*p == '*') { b_u(&dir, 2, 1); p++; }
+            b_sub(&lane, 1, &dir);
+        }
+        if (*p == ',') p++;
+        b_sub(&step, 3, &lane);
+    }
+    if (road) { b_bytes(&ri, 1, (const unsigned char *)road, road_len); b_sub(&step, 4, &ri); }
+    b_sub(&top, 1, &step);
+    n = 0; m[n++] = 0x80; m[n++] = 0x06; memcpy(m + n, top.d, top.n); n += top.n;
+    pmcp_rg_message(m, n);
+}
+static void position_full(unsigned long meters, unsigned long dest_m, unsigned long dest_s)
+{
+    bb sd = { {0}, 0 }, sdist = { {0}, 0 }, dd = { {0}, 0 }, ddist = { {0}, 0 }, top = { {0}, 0 };
+    b_u(&sdist, 1, meters); b_bytes(&sdist, 2, (const unsigned char *)"1", 1); b_u(&sdist, 3, 1);
+    b_sub(&sd, 1, &sdist);
+    b_u(&ddist, 1, dest_m); b_bytes(&ddist, 2, (const unsigned char *)"12", 2); b_u(&ddist, 3, 2);
+    b_sub(&dd, 1, &ddist); b_bytes(&dd, 2, (const unsigned char *)"16:25", 5); b_u(&dd, 3, dest_s);
+    b_sub(&top, 1, &sd); b_sub(&top, 2, &dd);
+    n = 0; m[n++] = 0x80; m[n++] = 0x07; memcpy(m + n, top.d, top.n); n += top.n;
     pmcp_rg_message(m, n);
 }
 static int step;
@@ -80,6 +123,14 @@ int main(void)
     sleep_ms(9500); snap(dir);                  /* 12 silent > 9 s: route ended */
     status(1); state(7, 0, 0); position(300); snap(dir);   /* 13 a new route after the silent end */
     status(2); snap(dir);                       /* 14 route ended */
+    /* AA 1.1 (A171): road, lanes, destination */
+    status(1); state_full(8, "Wojciecha Cybulskiego", 21, "1,1,5*"); position_full(150, 12000, 900); snap(dir);  /* 15 */
+    state_full(8, "Wojciecha Cybulskiego", 21, ""); position_full(140, 11990, 890); snap(dir);     /* 16 lanes gone */
+    state_full(8, "Jedno\xc5\x9b" "ci Narodowej", 19, "1*2,1*"); snap(dir);                        /* 17 same turn, new road + lanes */
+    state_full(7, "Bad\xff", 4, "8*,1"); position_full(90, 11900, 880); snap(dir);                /* 18 new step, bad UTF-8 road */
+    position_full(80, 11800, 870); snap(dir);                                                      /* 19 */
+    state_full(36, "Pomorska", 8, "0,0"); position_full(500, 11000, 800); snap(dir);               /* 20 lanes with no direction */
+    status(2); snap(dir);                                                                          /* 21 ended */
     sleep_ms(1100);
     printf("FAILED CHECKS C: %d\n", fails);
     return fails ? 1 : 0;

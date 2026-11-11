@@ -12,7 +12,7 @@ public final class TestAaRg {
         String dir = a[0];
         Path cur = Paths.get(dir, "cur.bin");
         MailboxReader r = new MailboxReader(cur.toString());
-        final int N = 15;
+        final int N = 22;
         LiveModel.Frame[] f = new LiveModel.Frame[N];
         for (int i = 0; i < N; i++) {
             Files.copy(Paths.get(dir, "step-" + i + ".bin"), cur, StandardCopyOption.REPLACE_EXISTING);
@@ -37,9 +37,19 @@ public final class TestAaRg {
         check(f[12] != null && !f[12].active, "12 long silence: route ended");
         check(f[13] != null && f[13].active && f[13].main == 13 && f[13].direction == 64 && f[13].meters == 300, "13 new route after the silent end");
         check(f[14] != null && !f[14].active, "14 route ended: not active");
+        // AA 1.1 (A171): the destination's metres / seconds from 0x8007
+        check(f[15] != null && f[15].active && f[15].main == 13 && f[15].direction == 192 && f[15].meters == 150
+            && f[15].remainingMeters == 12000 && f[15].remainingSeconds == 900, "15 right 150 m, destination 12000 m / 900 s");
+        check(f[16] != null && f[16].meters == 140 && f[16].remainingMeters == 11990 && f[16].remainingSeconds == 890, "16 destination follows 0x8007");
+        check(f[17] != null && f[17].active && f[17].main == 13 && f[17].direction == 192, "17 same turn, new road: same arrow");
+        check(f[18] != null && f[18].active && f[18].main == 13 && f[18].direction == 64 && f[18].meters == 90
+            && f[18].remainingMeters == 11900, "18 bad UTF-8 road: the snapshot is still accepted (left 90 m)");
+        check(f[19] != null && f[19].meters == 80 && f[19].remainingSeconds == 870, "19 80 m, 870 s");
+        check(f[20] != null && f[20].main == 13 && f[20].direction == 0 && f[20].meters == 500, "20 straight 500 m");
+        check(f[21] != null && !f[21].active && f[21].remainingMeters == -1, "21 route ended: destination cleared");
         boolean noEta = true;
-        for (int i = 0; i < N; i++) if (f[i] != null && (f[i].remainingMeters != -1 || f[i].remainingSeconds != -1)) noEta = false;
-        check(noEta, "no ETA / remaining distance ever set");
+        for (int i = 0; i < 15; i++) if (f[i] != null && (f[i].remainingMeters != -1 || f[i].remainingSeconds != -1)) noEta = false;
+        check(noEta, "0-14 (no destination in 0x8007): no ETA / remaining distance");
         System.out.println("FAILED CHECKS Java: " + fails);
         System.exit(fails == 0 ? 0 : 1);
     }
