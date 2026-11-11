@@ -245,7 +245,7 @@ for SH in "$@"; do
     echo "[3f] packages F (zoom) and G (day/night)"
     run java-on zoom; rc_is 0
     run java-on dn; rc_is 0; expect_out "set=$NAI+$NP+$RG+$ZOOM+$DN" "all five packages in catalog order"
-    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI+$NP+$RG+$ZOOM+$DN NavActiveIgnore.jar pmcp-np.jar pmcp-guidance5.jar pmcp-zoom.jar pmcp-dn.jar" ] && ok "HMI_BOOT with five JARs" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
+    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI+$NP+$RG+$ZOOM+$DN NavActiveIgnore.jar pmcp-np.jar pmcp-guidance6.jar pmcp-zoom.jar pmcp-dn.jar" ] && ok "HMI_BOOT with five JARs" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
     run status; expect_out "Unit state: JAVA" "JAVA with five packages (set names parsed from HMI_BOOT)"
     run java-off zoom; rc_is 0; [ ! -e "$U/eso/hmi/lsd/jars/pmcp-zoom.jar" ] && ok "zoom off" || bad "zoom jar left"
     run java-on zoom; rc_is 0
@@ -567,7 +567,7 @@ for SH in "$@"; do
     ALL="$NAI+$NP+$RG+$ZOOM+$DN+$UI"
     [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "one set with all six packages (with ui)" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ -e "$U/carplaymaps/rg/SYSTEM_ON" ] && ok "RG system marker" || bad "no SYSTEM_ON"
-    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance5.jar*pmcp-dn.jar:/X/lsd/jars/pmcp-ui2.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
+    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance6.jar*pmcp-dn.jar:/X/lsd/jars/pmcp-ui2.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$ALL" "one confirm for everything"
     allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "remove everything: factory state"
@@ -664,7 +664,7 @@ PEOF
     run13 install map-square-fps40; rc_is 0; run13 rg-system-on; rc_is 0; run13 java-on nai; rc_is 0; run13 java-on rg; rc_is 0
     confirm_now
     # interrupted before the HMI_BOOT switch (new JAR already in place): the old confirmed set loads, java-update finishes
-    run rg-update; rc_is 0; cp "$W/sd/payload/jars/pmcp-guidance5.jar" "$U/eso/hmi/lsd/jars/pmcp-guidance5.jar"
+    run rg-update; rc_is 0; cp "$W/sd/payload/jars/pmcp-guidance6.jar" "$U/eso/hmi/lsd/jars/pmcp-guidance6.jar"
     run status; expect_out "Unit state: JAVA" "new JAR before the switch: JAVA"; expect_out "packages of an earlier card: rg" "old rg still reported"
     o=$(unit_boot); case "$o" in "boot=yes set=$NAI+rg-717fb53c jars="*pmcp-rg.jar) ok "old confirmed set still loads, new JAR not" ;; *) bad "boot: $o" ;; esac
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "java-update finishes from there"
@@ -675,8 +675,8 @@ PEOF
     run rg-update; rc_is 0; expect_out "driver: replaced, reader: replaced" "rg-update replaces both"
     run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "second rg-update: already current"
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "v1.3.0 rg -> rg"
-    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rg.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance5.jar")" = "$(jsha rg)" ] && ok "old pmcp-rg.jar gone, pmcp-guidance5.jar in place" || bad "JARs after java-update"
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance5.jar" ] && ok "java-update: trial boot" || bad "boot: $o"
+    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rg.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance6.jar")" = "$(jsha rg)" ] && ok "old pmcp-rg.jar gone, pmcp-guidance6.jar in place" || bad "JARs after java-update"
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance6.jar" ] && ok "java-update: trial boot" || bad "boot: $o"
     run java-update; rc_is 1; expect_out "JAVA_UPDATE_ALREADY_CURRENT" "second java-update: already current"
     # interrupted after the HMI_BOOT switch (old JAR still there): JAVA, trial confirmable, java-update removes the JAR
     cp "$V13D/payload/jars/pmcp-rg.jar" "$U/eso/hmi/lsd/jars/pmcp-rg.jar"
@@ -720,8 +720,8 @@ PEOF
     allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: rgluasfma updated"
     expect_out "PMCP_FEATURES_ON_OK" "button 3 on an AA unit done"
     [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn ui" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
-    [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance5.jar")" = "$(jsha rg)" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rgluasfma.jar" ] \
-        && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance.jar" ] && ok "pmcp-guidance5.jar only" || bad "JARs after button 3: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
+    [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance6.jar")" = "$(jsha rg)" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rgluasfma.jar" ] \
+        && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance.jar" ] && ok "pmcp-guidance6.jar only" || bad "JARs after button 3: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
     [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" = "$aa_before" ] && ok "button 3 leaves Android Auto alone" || bad "AA changed by button 3"
     run status; expect_out "Android Auto: old mode=gamma" "AA still the earlier card's set"
     run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "aa-on brings the earlier card's AA set up to date"
@@ -826,7 +826,7 @@ PEOF
     run speedlimit-mode off; rc_is 0
     run java-on sl; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run speedlimit-mode turnto; rc_is 0
-    o=$(unit_boot); case "$o" in "boot=yes "*pmcp-guidance5.jar*pmcp-sl2.jar) ok "rg and sl load together" ;; *) bad "boot: $o" ;; esac
+    o=$(unit_boot); case "$o" in "boot=yes "*pmcp-guidance6.jar*pmcp-sl2.jar) ok "rg and sl load together" ;; *) bad "boot: $o" ;; esac
     # without rg nothing writes TurnToInfo text: turnto is refused, the CurrentPositionInfo trial (street) is not
     run java-off rg; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     [ ! -e "$SLM" ] && ok "removing rg resets turnto to off" || bad "turnto kept without rg"
@@ -850,15 +850,15 @@ PEOF
     run status; expect_out "packages of an earlier card: rg" "v1.4.0 rg reported as an earlier card's package"
     run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "v1.4.0 driver and reader are this card's"
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "v1.4.0 rg -> this card's rg"
-    jar_replaced pmcp-guidance.jar pmcp-guidance5.jar rg "pmcp-guidance.jar gone, pmcp-guidance5.jar in place"
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance5.jar" ] && ok "one trial start" || bad "boot: $o"
+    jar_replaced pmcp-guidance.jar pmcp-guidance6.jar rg "pmcp-guidance.jar gone, pmcp-guidance6.jar in place"
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance6.jar" ] && ok "one trial start" || bad "boot: $o"
     run java-confirm; rc_is 0
     run java-on sl; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run speedlimit-mode turnto; rc_is 0
     restore_exact "restore: exact factory tree"
     fi
 
-    echo "[24] v1.4.2 card -> this card: java-update replaces rg (pmcp-guidance2.jar -> pmcp-guidance5.jar), sl and its mode stay"
+    echo "[24] v1.4.2 card -> this card: java-update replaces rg (pmcp-guidance2.jar -> pmcp-guidance6.jar), sl and its mode stay"
     if card_ok "$V142" v1.4.2; then
     start_unit
     run142 install map-square-fps40; rc_is 0; run142 rg-system-on; rc_is 0; run142 java-on nai; rc_is 0; run142 java-on rg; rc_is 0
@@ -867,14 +867,14 @@ PEOF
     run status; expect_out "packages of an earlier card: rg" "v1.4.2 rg reported as an earlier card's package"
     run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "v1.4.2 driver and reader are this card's"
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "v1.4.2 rg -> this card's rg"
-    jar_replaced pmcp-guidance2.jar pmcp-guidance5.jar rg "pmcp-guidance2.jar gone, pmcp-guidance5.jar in place"
-    o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance5.jar*pmcp-sl2.jar) ok "one trial start with the new rg and sl" ;; *) bad "boot: $o" ;; esac
+    jar_replaced pmcp-guidance2.jar pmcp-guidance6.jar rg "pmcp-guidance2.jar gone, pmcp-guidance6.jar in place"
+    o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance6.jar*pmcp-sl2.jar) ok "one trial start with the new rg and sl" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0
     [ "$(cat "$SLM" 2>/dev/null)" = turnto ] && ok "speed-limit mode kept across the rg update" || bad "speed-limit mode lost"
     restore_exact "restore: exact factory tree"
     fi
 
-    echo "[25] experimental card f2a7ceb5 (AA on, rg-aa) -> button 3 of this card: AA stays, rg-aa -> rg (pmcp-guidance5.jar)"
+    echo "[25] experimental card f2a7ceb5 (AA on, rg-aa) -> button 3 of this card: AA stays, rg-aa -> rg (pmcp-guidance6.jar)"
     ALL="$NAI+$NP+$RG+$ZOOM+$DN+$UI"
     no_aa_change() { grep -q "PMCP_AA_\(ON\|REMOVE\)_OK" "$W/out" && bad "$1: button 3 changed Android Auto" || ok "$1: button 3 ran no AA action"; }
     if card_ok "$EXP141" f2a7ceb5; then
@@ -890,10 +890,10 @@ PEOF
         [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" = "$aa_before" ] && [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$')" ] \
             && ok "AA_BOOT and every AA file unchanged by button 3" || bad "AA changed by button 3"
         [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "set nai np rg zoom dn ui" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
-        [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance5.jar")" = "$(jsha rg)" ] \
+        [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance6.jar")" = "$(jsha rg)" ] \
             && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa2.jar" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar" ] \
-            && ok "pmcp-guidance-aa.jar gone, pmcp-guidance5.jar (rg) in place" || bad "JARs after button 3 from f2a7ceb5: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
-        o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance5.jar*) ok "one trial start with rg" ;; *) bad "boot: $o" ;; esac
+            && ok "pmcp-guidance-aa.jar gone, pmcp-guidance6.jar (rg) in place" || bad "JARs after button 3 from f2a7ceb5: $(ls "$U/eso/hmi/lsd/jars" | grep pmcp | tr '\n' ' ')"
+        o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance6.jar*) ok "one trial start with rg" ;; *) bad "boot: $o" ;; esac
         run java-confirm; rc_is 0
         # AA 1 then brings the AA set itself up to date (a newer set: new AA_BOOT, a new AA trial)
         run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "AA 1: the earlier card's AA set brought up to date"
@@ -905,7 +905,7 @@ PEOF
         [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore after f2a7ceb5 -> this card: exact factory tree" || bad "tree after restore"
     fi
 
-    echo "[26] experimental card 84472aa9 (v1.4.3 + AA on, rg-aa 01221496 in pmcp-guidance-aa2.jar) -> button 3: AA stays, rg-aa -> rg (pmcp-guidance5.jar)"
+    echo "[26] experimental card 84472aa9 (v1.4.3 + AA on, rg-aa 01221496 in pmcp-guidance-aa2.jar) -> button 3: AA stays, rg-aa -> rg (pmcp-guidance6.jar)"
     if card_ok "$EXP143" 84472aa9; then
         fresh_unit; factory=$(snapshot "$W/unit")
         runexp143 install map-square-fps40; rc_is 0; runexp143 rg-system-on; rc_is 0; runexp143 java-on nai; rc_is 0
@@ -918,8 +918,8 @@ PEOF
         [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" = "$aa_before" ] && [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-')" ] \
             && ok "AA files, AA_BOOT and AA markers untouched" || bad "AA changed by button 3"
         [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa2.jar" ] \
-            && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance5.jar")" = "$(jsha rg)" ] && ok "pmcp-guidance-aa2.jar -> pmcp-guidance5.jar (this card's rg)" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
-        o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance5.jar*) ok "one trial start" ;; *) bad "boot: $o" ;; esac
+            && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance6.jar")" = "$(jsha rg)" ] && ok "pmcp-guidance-aa2.jar -> pmcp-guidance6.jar (this card's rg)" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
+        o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance6.jar*) ok "one trial start" ;; *) bad "boot: $o" ;; esac
         run java-confirm; rc_is 0
         allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
         run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "AA 1 updates the 2 Mbit/s set"
@@ -943,7 +943,7 @@ PEOF
     grep -q '^PMCP_AA_MODE=most$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_PACE_KBPS=6000$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_SYNC_HOLD_MS=3000$' "$AAD/feeder.conf" \
         && ! grep -q 'KF_METHOD\|KF_TAKE' "$AAD/feeder.conf" && ok "feeder settings: MOST, pacing, start sync, no probe" || bad "feeder.conf"
     [ -x "$AAD/aa-most-feeder" ] && [ -x "$AAD/gal.real" ] && [ ! -e "$U/carplaymaps/.aa-new" ] && ok "executables, no staging leftovers" || bad "aa files"
-    case "$(cat "$AAD/AA_BOOT")" in gamma-bdd76a85-*-716516eb) ok "set id gamma-hook-feeder-conf" ;; *) bad "AA_BOOT $(cat "$AAD/AA_BOOT")" ;; esac
+    case "$(cat "$AAD/AA_BOOT")" in gamma-0340ccca-*-716516eb) ok "set id gamma-hook-feeder-conf" ;; *) bad "AA_BOOT $(cat "$AAD/AA_BOOT")" ;; esac
     run status; expect_out "Unit state: VIDEO" "still VIDEO with AA"; expect_out "Android Auto: on mode=gamma" "status: AA on"
     run aa-on; rc_is 1; expect_out "AA_ALREADY_ON" "second aa-on refused"
     run aa-confirm; rc_is 1; expect_out "AA_NO_TRIAL_YET" "confirm before any AA connection refused"
@@ -970,8 +970,8 @@ PEOF
     run java-on rg-aa; rc_is 1; expect_out "UNKNOWN_JAVA_PACKAGE_rg-aa" "rg-aa is not a package of this card"
     run java-on rg; rc_is 1; expect_out "JAVA_RG_NEEDS_RG_SYSTEM_ON_off" "rg needs the RG system"
     run rg-system-on; rc_is 0; run java-on nai; rc_is 0; run java-on rg; rc_is 0; confirm_now
-    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$NAI+$RG" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance5.jar")" = "$(jsha rg)" ] \
-        && ok "AA on + rg: set nai rg, pmcp-guidance5.jar" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
+    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$NAI+$RG" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance6.jar")" = "$(jsha rg)" ] \
+        && ok "AA on + rg: set nai rg, pmcp-guidance6.jar" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ "$(h "$AAD/gal.real")" = $STOCK_GAL ] && case "$(cat "$AAD/AA_BOOT")" in gamma-*) true ;; *) false ;; esac && ok "java-on rg leaves AA as it is" || bad "AA after java-on rg"
     run rg-system-off; rc_is 1; expect_out "TURN_OFF_JAVA_PACKAGE" "RG system stays while rg is on"
     run aa-status; rc_is 0; run status; expect_out "Unit state: JAVA" "Java + AA: JAVA"
@@ -1016,7 +1016,7 @@ PEOF
     cp "$OLD7/feeder-sync17.conf" "$AAD/feeder.conf"; echo "sync17-dd72104b-27b32b35-99288ee3" > "$AAD/AA_BOOT"
     run status; expect_out "Android Auto: old mode=sync17" "earlier card's AA 3 (1.7): old"
     run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "AA 3 (1.7) -> gamma"
-    grep -q '^GAL_PMCP_RG=1$' "$AAD/gal-hook.conf" && [ "$(h "$AAD/libgal_hook.so")" = bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05 ] && ok "gamma hook and settings" || bad "after sync17 -> gamma"
+    grep -q '^GAL_PMCP_RG=1$' "$AAD/gal-hook.conf" && [ "$(h "$AAD/libgal_hook.so")" = 0340ccca9e7d9953206809b28fc141c0d3b0a70f5d36918ab6fc628f99b69e0b ] && ok "gamma hook and settings" || bad "after sync17 -> gamma"
     fi
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "restore with AA on: factory state"
     [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: every file as at the start" || bad "restore: unit differs from factory"
@@ -1096,7 +1096,7 @@ PEOF
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "restore with saved logs: factory state"
     [ ! -e "$U/carplaymaps" ] && ok "restore removed saved logs with carplaymaps" || bad "carplaymaps left"
 
-    echo "[29] v1.4.3-style unit (rg 7b187484 in pmcp-guidance3.jar, no AA) -> button 3: pmcp-guidance5.jar, no AA file"
+    echo "[29] v1.4.3-style unit (rg 7b187484 in pmcp-guidance3.jar, no AA) -> button 3: pmcp-guidance6.jar, no AA file"
     if card_ok "$EXP143" 84472aa9; then
         fresh_unit; factory=$(snapshot "$W/unit")
         # card 84472aa9's rg is the v1.4.3 release rg (same bytes, same file pmcp-guidance3.jar)
@@ -1107,7 +1107,7 @@ PEOF
         run status; expect_out "packages of an earlier card: rg" "v1.4.3 rg reported as an earlier card's package"; expect_out "Android Auto: off" "AA off"
         allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 3: v1.4.3 rg -> rg"; expect_out "PMCP_FEATURES_ON_OK" "button 3 done"
         [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance3.jar" ] \
-            && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance5.jar")" = "$(jsha rg)" ] && ok "pmcp-guidance3.jar -> pmcp-guidance5.jar" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
+            && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance6.jar")" = "$(jsha rg)" ] && ok "pmcp-guidance3.jar -> pmcp-guidance6.jar" || bad "after button 3: $(cat "$U/carplaymaps/HMI_BOOT")"
         [ ! -e "$U/carplaymaps/aa" ] && [ ! -e "$U/carplaymaps/.aa-new" ] && [ "$(h "$U/eso/bin/apps/gal")" = $STOCK_GAL ] \
             && ! ls "$U/eso/bin/apps" | grep -q 'gal\.' && ! ls "$W/unit/mnt/persist/pmcp" | grep -q '^aa-' \
             && ok "button 3 without AA: no AA file created, factory gal" || bad "button 3 created AA files"
@@ -1126,7 +1126,7 @@ PEOF
         run status; expect_out "Android Auto: old mode=gamma" "b2bcbbe3's AA set (v1.5.x): old on this card"
         allon; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "button 4: its rg-aa -> rg"; no_aa_change "b2bcbbe3"
         [ "$aa_files" = "$(snapshot "$W/unit" | grep '/carplaymaps/aa/\|/apps/gal$\|/persist/pmcp/aa-')" ] && ok "AA untouched by 4" || bad "AA changed"
-        [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance5.jar")" = "$(jsha rg)" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa.jar" ] && ok "pmcp-guidance-aa.jar -> pmcp-guidance5.jar" || bad "JARs after button 3"
+        [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance6.jar")" = "$(jsha rg)" ] && [ ! -e "$U/eso/hmi/lsd/jars/pmcp-guidance-aa.jar" ] && ok "pmcp-guidance-aa.jar -> pmcp-guidance6.jar" || bad "JARs after button 3"
         run aa-on; rc_is 0; expect_out "PMCP_AA_ON_OK mode=gamma" "AA 1 brings AA 1.0"
         [ ! -e "$W/unit/mnt/persist/pmcp/aa-ok.$S" ] && [ "$(cat "$U/carplaymaps/aa/AA_BOOT")" != "$S" ] && ok "new set id, old confirmation gone" || bad "after AA 1: $(cat "$U/carplaymaps/aa/AA_BOOT")"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
@@ -1422,7 +1422,7 @@ PEOF
     fresh_unit; factory=$(snapshot "$W/unit")
     run install map-square-fps40; rc_is 0; run rg-system-on; rc_is 0; run java-on rg; rc_is 0; run java-on sl; rc_is 0
     run java-on ui; rc_is 0
-    o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance5.jar:/X/lsd/jars/pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "rg, sl and ui load together" ;; *) bad "boot: $o" ;; esac
+    o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance6.jar:/X/lsd/jars/pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "rg, sl and ui load together" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0
     run speedlimit-mode turnto; rc_is 0
     run java-off ui; rc_is 0
@@ -1477,11 +1477,13 @@ PEOF
     run aa-remove; rc_is 0; run aa-install; rc_is 0; [ ! -e "$P/aa-extra.conf" ] && ok "3 after AA remove: no switch file, the set's default" || bad "aa-extra.conf left"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
-    echo "[46] AA 1.0: main menu 3 brings every earlier AA set (v10 of v1.5.1, v11, v12, v13) to this card's set in place"
+    echo "[46] AA 1.0: main menu 3 brings every earlier AA set (v10 of v1.5.1, v11, v12, v13, AA 1.0 of v1.6.0) to this card's set in place"
     V151SD="${PMCP_V151_SD:-$SDB/../sd-754c9d82}"; OLD11SD="${PMCP_AA_OLD11:-$SDB/../sd-a55867ab}"
     NEW12SD="${PMCP_AA_V12:-$SDB/../sd-15d19b43}"; V13SD="${PMCP_AA_V13:-$SDB/../sd-d82f8c73}"
+    V160SD="${PMCP_V160_SD:-$SDB/../release-v1.6.0-64553e3b/sd}"
     runc() { _c=$1; shift; PMCP_TEST_ROOT="$W/unit" $SH "$_c/pmcp/pmcp.sh" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
-    for oc in "$V151SD:754c9d82:aa-install" "$OLD11SD:a55867ab:aa-on" "$NEW12SD:15d19b43:aa-on direct" "$V13SD:d82f8c73:aa-on-exp ring"; do
+    for oc in "$V151SD:754c9d82:aa-install" "$OLD11SD:a55867ab:aa-on" "$NEW12SD:15d19b43:aa-on direct" "$V13SD:d82f8c73:aa-on-exp ring" \
+              "$V160SD:64553e3b:aa-install"; do
         od=${oc%%:*}; rest=${oc#*:}; oid=${rest%%:*}; how=${rest#*:}
         card_ok "$od/pmcp/pmcp.sh" "$oid" || continue
         fresh_unit; factory=$(snapshot "$W/unit")
@@ -1559,7 +1561,7 @@ PEOF
         feat; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "4: java-update replaces the v1.5.1 rg and ui"; expect_out "PMCP_FEATURES_ON_OK" "4 done"
         grep -q "PMCP_FEATURES_RESET_OK" "$W/out" && bad "4 reset the Java set (sl would be lost)" || ok "4 did not reset the Java set"
         jar_replaced pmcp-ui.jar pmcp-ui2.jar ui "pmcp-ui.jar gone, pmcp-ui2.jar in place"
-        jar_replaced pmcp-guidance4.jar pmcp-guidance5.jar rg "pmcp-guidance4.jar gone, pmcp-guidance5.jar in place"
+        jar_replaced pmcp-guidance4.jar pmcp-guidance6.jar rg "pmcp-guidance4.jar gone, pmcp-guidance6.jar in place"
         case "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" in *"+$RG+"*"+$(jid sl)+"*"$UI") ok "set keeps sl, new rg and ui" ;; *) bad "set: $(cat "$U/carplaymaps/HMI_BOOT")" ;; esac
         new_start; o=$(unit_boot); case "$o" in "boot=trial "*pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "one trial start with sl and the new ui" ;; *) bad "boot: $o" ;; esac
         run java-confirm; rc_is 0
@@ -1580,7 +1582,7 @@ PEOF
         feat; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "v1.5.0 unit: 4 done"
         grep -q "PMCP_FEATURES_RESET_OK" "$W/out" && bad "v1.5.0 unit: 4 reset the Java set (sl would be lost)" || ok "v1.5.0 unit: 4 did not reset the Java set"
         expect_out "PMCP_JAVA_UPDATE_OK" "v1.5.0 unit: 4 replaces its rg"
-        jar_replaced pmcp-guidance4.jar pmcp-guidance5.jar rg "v1.5.0 unit: pmcp-guidance4.jar gone, pmcp-guidance5.jar in place"
+        jar_replaced pmcp-guidance4.jar pmcp-guidance6.jar rg "v1.5.0 unit: pmcp-guidance4.jar gone, pmcp-guidance6.jar in place"
         case "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" in *"+$(jid sl)+"*"$UI") ok "v1.5.0 unit: set keeps sl, ui added" ;; *) bad "v1.5.0 unit set: $(cat "$U/carplaymaps/HMI_BOOT")" ;; esac
         new_start; o=$(unit_boot); case "$o" in "boot=trial "*pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "v1.5.0 unit: one trial start with sl and ui" ;; *) bad "boot: $o" ;; esac
         run java-confirm; rc_is 0
@@ -1604,10 +1606,10 @@ PEOF
         expect_out "Android Auto: on" "v1.6.0 AA set is this card's"
         feat; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK" "4: java-update replaces the v1.6.0 rg"; expect_out "PMCP_FEATURES_ON_OK" "4 done"
         grep -q "PMCP_FEATURES_RESET_OK" "$W/out" && bad "4 reset the Java set (sl would be lost)" || ok "4 did not reset the Java set"
-        jar_replaced pmcp-guidance4.jar pmcp-guidance5.jar rg "pmcp-guidance4.jar gone, pmcp-guidance5.jar in place"
+        jar_replaced pmcp-guidance4.jar pmcp-guidance6.jar rg "pmcp-guidance4.jar gone, pmcp-guidance6.jar in place"
         [ "$(h "$U/eso/hmi/lsd/jars/pmcp-ui2.jar")" = "$(jsha ui)" ] && ok "ui unchanged" || bad "ui changed"
         case "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" in *"+$RG+"*"+$(jid sl)+"*"$UI") ok "set keeps sl and ui, new rg" ;; *) bad "set: $(cat "$U/carplaymaps/HMI_BOOT")" ;; esac
-        new_start; o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance5.jar*pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "one trial start with the new rg, sl and ui" ;; *) bad "boot: $o" ;; esac
+        new_start; o=$(unit_boot); case "$o" in "boot=trial "*pmcp-guidance6.jar*pmcp-sl2.jar:/X/lsd/jars/pmcp-ui2.jar) ok "one trial start with the new rg, sl and ui" ;; *) bad "boot: $o" ;; esac
         run java-confirm; rc_is 0
         [ "$(cat "$W/unit/mnt/persist/pmcp/native-speedlimit-mode" 2>/dev/null)" = turnto ] && ok "speed-limit mode kept" || bad "speed-limit mode lost"
         [ "$aa_before" = "$(snapshot "$W/unit" | grep -e '/carplaymaps/aa/' -e '/apps/gal')" ] && ok "Android Auto files untouched" || bad "4 changed the AA files"

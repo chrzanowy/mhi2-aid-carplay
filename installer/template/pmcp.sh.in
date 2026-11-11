@@ -1002,6 +1002,11 @@ do_aa_log_save() {
                echo "--- pmcp-aa-feeder.txt-prev$_l_p"; cat "$RAMDISK/pmcp-aa-feeder.txt-prev$_l_p" 2>/dev/null
            done
            echo "--- pmcp-gal-hook.log"; cat "$RAMDISK/pmcp-gal-hook.log"
+           # A166: route guidance from AA, the raw navigation messages and which view the AID showed
+           for _l_x in pmcp-aa-rg.txt pmcp-aa-rg-raw.txt.1 pmcp-aa-rg-raw.txt pmcp-kombi-view.log.1 pmcp-kombi-view.log; do
+               [ -s "$RAMDISK/$_l_x" ] || continue
+               echo "--- $_l_x"; cat "$RAMDISK/$_l_x" 2>/dev/null
+           done
            echo "--- end"; } > "$_l_f.pmcp-new" 2>/dev/null; then
         rm -f "$_l_f.pmcp-new" 2>/dev/null
         fail "AA_LOG_WRITE_FAILED"
