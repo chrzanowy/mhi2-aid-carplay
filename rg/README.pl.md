@@ -6,9 +6,11 @@ Stan: **działa w aucie (MU1161 + AID 791, październik 2026): ETA, dystans do c
 pasy z pasami do zawracania od v1.3.0 (2026-10-31); w v1.4 także strzałka na starcie trasy, nazwa ulicy i pasek odległości
 przed manewrem (test w aucie 2026-11-04).** Autor rozwiązania: tomasz-twardzicki (GPL-3.0-or-later), dekoder i nazwy typów
 manewrów iAP2 wg luka-dev; tablica manewrów dla strzałek zastępczych: harman-f; baza mapy: omonob.
-Źródła: `upstream/tomasz` @ `024dd159` (MU1427), `7925a83` (pasy MU1367 v1.4.0), `1d69473` (MU1367 v1.4.3).
+Źródła: `upstream/tomasz` @ `024dd159` (MU1427), `7925a83` (pasy MU1367 v1.4.0), `1d69473` (MU1367 v1.4.3),
+`d20527f` (MU1367 v1.4.4), `MU1367-v1.4.5` / `MU1367-v1.4.6` (`6610cbb`, `d680311`).
 
-Od v1.4 jest **jedna** paczka Java prowadzenia, `rg`, budowana przez `rg/build.sh <lsd.jar> <katalog> lanes-uturn-asf-m`.
+Od v1.4 jest **jedna** paczka Java prowadzenia, `rg`, budowana przez `rg/build.sh <lsd.jar> <katalog> lanes-uturn-asf-m` (od v1.5.0 `lanes-uturn-asf-m-aa`, od v1.6.1
+`lanes-uturn-asf-m-aa-r`; plik od v1.6.1 `pmcp-guidance5.jar`).
 Zawiera wszystko, co niżej: port MU1427, jego pasy, nasze pasy do zawracania, jego pasek odległości / nazwę ulicy /
 odzyskiwanie strumienia i strzałki zastępcze. Paczek `rg` (bez pasów) i `rglu` z v1.3 już nie ma; `java-update` (przycisk 4)
 zastępuje je, a także eksperymentalne `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma`, tą paczką `rg`.
@@ -123,6 +125,35 @@ strona x próbka kąta: wyniki ścisłe bez zmian, tylko używane elementy głó
 początku do końca). Zestaw `TestLive vectors` Tomasza porównuje z jego ścisłym mapowaniem i na tym JAR-ze ma prawo się
 różnić. Przycisk GEM „RG last maneuver” pokazuje ścisłe mapowanie; gdzie jest main 0, paczka `rg` może jeszcze pokazać
 strzałkę zastępczą.
+
+## Przeliczanie trasy, strzałka zastępcza, strona zawracania, nazwy Map Apple (v1.6.1, MU1367 v1.4.5/v1.4.6)
+
+`rg/lanes/v146.py` (tryb budowania `lanes-uturn-asf-m-aa-r`, po `aa.py`) przenosi poprawki prowadzenia CarPlay z MU1367
+v1.4.5 (tag `MU1367-v1.4.5`, Java z v1.4.5-e `6610cbb`) i v1.4.6 (tag `MU1367-v1.4.6`, Java z v1.4.6-e `d680311`)
+tomasz-twardzicki jako liczone zmiany na naszych źródłach. Jego `GuidanceEvidence.java` i testy (`TestReroute`,
+`TestSourceName`, `TestUturnSide`, `TestPlaceholder`, `TestQuietQnx`) są skopiowane bez zmian do `rg/lanes/v146/`
+i przypięte hashem. Ani u niego („no vehicle result”), ani u nas jeszcze nie sprawdzone w aucie.
+
+- **Przeliczanie trasy.** Przeliczenie przychodzi jako stany trasy 1, 5, 0, 3, 1 w około pół sekundy, potem nowa lista
+  zaczyna się od kroku startu z 0 m. Dotąd to była nowa trasa: dystans, pasek, ulica i przyjazd znikały. Teraz licznik
+  pokazuje symbol VW „wyznaczanie trasy” (`CALC_ROUTE`, element 9), a dystans, pasek, ulica i przyjazd zostają, aż
+  telefon poda prawdziwy dystans, najwyżej 20 s albo 5 s ciszy telefonu. Stop w trakcie przeliczania kończy prowadzenie
+  po 1,5 s. Koniec trasy, nowy cel, inna aplikacja, rozłączenie i nawigacja VW dalej czyszczą od razu.
+- **Strzałka zastępcza.** Aktywna trasa bez żadnego manewru pokazuje prostą strzałkę `DIRECTION_TO_DESTINATION`
+  (element 2) bez dystansu. Nasza różnica: tylko gdy nie ma żadnego znanego manewru i nie przy Android Auto. Znany manewr,
+  którego nie mapuje ani ścisłe mapowanie, ani nasze zastępcze strzałki, zostaje pusty (zmiana autostrady, zjazd z ronda
+  bez kąta), a start trasy dalej ma naszą strzałkę prosto z dystansem (`maneuvers.py`).
+- **Strona zawracania.** Pas z kątem dokładnie 180° nie ma strony: zostaje zawracaniem w lewo (114), chyba że telefon
+  poda ruch lewostronny (wtedy 146). Główna strzałka zawracania przy dokładnie ±180° idzie za stroną ruchu, gdy telefon
+  ją wysyła; w ruchu prawostronnym to teraz zawracanie w lewo (dotąd w prawo dla +180). Nie dla Android Auto: nasz hook
+  AA sam podaje znak kąta (−180 w lewo, +180 w prawo) i zawsze stronę 0, więc jego strzałka się nie zmienia.
+- **Nazwy Map Apple.** Niektóre telefony przełączają w jednej trasie „Apple Maps” i nazwę przetłumaczoną („Mapy Apple”).
+  Każda zmiana była brana za inną aplikację i czyściła zapamiętane manewry i pasy, których Mapy Apple nie wysyłają
+  ponownie. Nazwy ze słowem „Apple” to teraz ta sama aplikacja. `guidance-evidence.txt` dostaje `route_clears source=…
+  destination=…` i ograniczony log `source_flips` (czas, stan trasy, co niosła wiadomość; nigdy tekst).
+- Testy: pięć jego testów na naszym JAR-ze (`TestReroute`: dwie linie oczekują naszej strzałki prosto na starcie zamiast
+  jego pustej; `TestArrow`/`TestRoad` z jego zmianami z v1.4.5) i `TestPmcp146` dla naszych różnic (znak zawracania
+  Android Auto, brak strzałki zastępczej dla znanego manewru i przy Android Auto, stare pasy znikają przy przeliczaniu).
 
 ## Bramka logu w sterowniku iAP2 (v1.4, `rg/driver/`)
 

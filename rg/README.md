@@ -6,17 +6,18 @@ Status: **works in the car (MU1161 + AID 791, October 2026): ETA, distance to de
 lanes with U-turn lanes since v1.3.0 (2026-10-31); in v1.4 also the arrow at the start of a route, the street name and the
 distance bar before the manoeuvre (car test 2026-11-04).** Author of the solution: tomasz-twardzicki (GPL-3.0-or-later),
 decoder and iAP2 maneuver type names after luka-dev; maneuver table of the fallbacks: harman-f; map base: omonob.
-Sources: `upstream/tomasz` @ `024dd159` (MU1427), `7925a83` (MU1367 v1.4.0 lanes), `1d69473` (MU1367 v1.4.3).
+Sources: `upstream/tomasz` @ `024dd159` (MU1427), `7925a83` (MU1367 v1.4.0 lanes), `1d69473` (MU1367 v1.4.3),
+`d20527f` (MU1367 v1.4.4), `MU1367-v1.4.5` / `MU1367-v1.4.6` (`6610cbb`, `d680311`).
 
-Since v1.4 there is **one** route guidance Java package, `rg`. Since v1.5.0 it is built with
-`rg/build.sh <lsd.jar> <dir> lanes-uturn-asf-m-aa` (v1.4.x: `lanes-uturn-asf-m`).
+Since v1.4 there is **one** route guidance Java package, `rg`. Since v1.6.1 it is built with
+`rg/build.sh <lsd.jar> <dir> lanes-uturn-asf-m-aa-r` (v1.5.0-v1.6.0: `lanes-uturn-asf-m-aa`, v1.4.x: `lanes-uturn-asf-m`).
 It holds everything below: the MU1427 port, his lanes, our U-turn lanes, his distance bar / street name / feed recovery,
 the maneuver fallbacks, the quiet-route hold and (v1.5.0, `rg/lanes/aa.py`) the VW arrows from Android Auto: while an
 Android Auto phone is connected (connection type 3) it reads the AA hook's mailbox `/ramdisk/pmcp-aa-rg`, and a quiet
 route is held 10 s instead of 180 s (the hook repeats the route every 2.5 s while Google Maps navigates); with CarPlay
 or no phone it behaves exactly like the v1.4.3 `rg` (the same test suites with the same results, plus `TestAa`).
 The v1.3 packages `rg` (no lanes) and `rglu` are gone; `java-update` (main menu 4) replaces them, v1.4.x's `rg`, the
-experimental cards' `rg-aa` and `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma` by this `rg` (`pmcp-guidance4.jar`).
+experimental cards' `rg-aa` and `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma` by this `rg` (`pmcp-guidance5.jar`; v1.5.0-v1.6.0: `pmcp-guidance4.jar`).
 
 What it gives on the AID:
 - arrows and distance to the manoeuvre in the "arrows" view and on the HUD (also at the start of a route and at roundabout
@@ -127,6 +128,35 @@ becomes the roundabout symbol with that exit direction instead of a plain turn. 
 end-to-end start of route). Tomasz's `TestLive vectors` harness compares against his strict mapping and is expected to
 differ on this JAR. The GEM button "RG last maneuver" shows the strict mapping; where it says main 0 the `rg` package may
 still show a fallback arrow.
+
+## Reroute, placeholder arrow, U-turn side, Apple Maps names (v1.6.1, MU1367 v1.4.5/v1.4.6)
+
+`rg/lanes/v146.py` (build mode `lanes-uturn-asf-m-aa-r`, after `aa.py`) ports the CarPlay guidance fixes of
+tomasz-twardzicki's MU1367 v1.4.5 (tag `MU1367-v1.4.5`, Java of v1.4.5-e `6610cbb`) and v1.4.6 (tag `MU1367-v1.4.6`,
+Java of v1.4.6-e `d680311`) as counted edits on our sources. His `GuidanceEvidence.java` and tests (`TestReroute`,
+`TestSourceName`, `TestUturnSide`, `TestPlaceholder`, `TestQuietQnx`) are copied unchanged into `rg/lanes/v146/` and
+pinned. Not vehicle-tested upstream (his notes: "no vehicle result") nor here yet.
+
+- **Reroute.** A reroute arrives as route states 1, 5, 0, 3, 1 within about half a second, then the new list starts at a
+  start-of-route step with 0 m. Before, that was a new trip: distance, bar, street and arrival were lost. Now the VW
+  "calculating route" symbol (`CALC_ROUTE`, main element 9) shows and distance, bar, street and arrival keep their values
+  until the phone reports a real distance again, at most 20 s or 5 s of phone silence. A stop inside a reroute ends
+  guidance 1.5 s later. Route end, a new destination, another app, disconnect and VW navigation still clear at once.
+- **Placeholder arrow.** An active route without any manoeuvre yet shows the straight `DIRECTION_TO_DESTINATION` arrow
+  (main element 2) without a distance. Our difference: only when no manoeuvre is known at all, and not with Android Auto.
+  A known manoeuvre that neither the strict map nor our fallbacks map stays empty (highway change, roundabout exit
+  without angle), and the start of a route keeps our straight turn arrow with its distance (`maneuvers.py`).
+- **U-turn side.** A lane at exactly 180° has no side: it stays the left U-turn (114) unless the phone says left-hand
+  traffic (then 146). The main U-turn arrow at exactly ±180° follows the driving side when the phone sends one; in
+  right-hand traffic that is now the left U-turn arrow (before: right for +180). Not for Android Auto: our AA hook
+  signs the U-turn angle itself (−180 left, +180 right) and always sends side 0, so its arrow is unchanged.
+- **Apple Maps names.** Some phones alternate "Apple Maps" and a translated name (Polish: "Mapy Apple") within one route.
+  Each change was taken as another app and cleared the stored manoeuvres and lanes, which Apple Maps does not resend.
+  Names containing the word "Apple" are now the same app. `guidance-evidence.txt` adds `route_clears source=…
+  destination=…` and a bounded `source_flips` log (time, route state, what the message carried; never any text).
+- Tests: his five tests above on our JAR (`TestReroute`: two lines expect our start-of-route straight arrow instead of
+  his empty one; `TestArrow`/`TestRoad` with his v1.4.5 changes) and `TestPmcp146` for our differences (Android Auto
+  U-turn sign, no placeholder for a known manoeuvre or with Android Auto, old lanes gone in a reroute).
 
 ## iAP2 driver log gate (v1.4, `rg/driver/`)
 

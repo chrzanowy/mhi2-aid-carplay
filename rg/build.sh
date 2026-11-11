@@ -19,13 +19,19 @@
 # "lanes-uturn-asf-m-aa" (package rg since v1.5.0; the v1.4.x experimental cards' rg-aa): lanes-uturn-asf-m + rg/lanes/aa.py
 # (Android Auto too: connection 3 reads /ramdisk/pmcp-aa-rg written by the AA gamma hook; CarPlay unchanged), tested with
 # every lanes-uturn-asf-m suite and also with TestAa.
+# "lanes-uturn-asf-m-aa-r" (package rg since v1.6.1): lanes-uturn-asf-m-aa + rg/lanes/v146.py (tomasz-twardzicki MU1367
+# v1.4.5/v1.4.6 CarPlay guidance fixes: reroute episode with CALC_ROUTE, placeholder arrow, U-turn side, Apple Maps names),
+# tested with every lanes-uturn-asf-m-aa suite (TestArrow/TestRoad with his reroute changes) plus his TestReroute,
+# TestSourceName, TestUturnSide, TestPlaceholder, TestQuietQnx and our TestPmcp146.
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # do not write __pycache__ into upstream/tomasz (review 2)
 
 STOCK_JAR=${1:?converted lsd jar}; W=${2:?work dir}; MODE=${3:-base}
-case "$MODE" in base|lanes|lanes-uturn|lanes-uturn-asf|lanes-uturn-asf-m|lanes-uturn-asf-m-aa) ;; *) echo "FAIL: third argument must be lanes, lanes-uturn, lanes-uturn-asf, lanes-uturn-asf-m, lanes-uturn-asf-m-aa or nothing" >&2; exit 1 ;; esac
-ASF=no; case "$MODE" in *-asf|*-asf-m|*-asf-m-aa) ASF=yes ;; esac
-MAN=no; case "$MODE" in *-asf-m|*-asf-m-aa) MAN=yes ;; esac
+case "$MODE" in base|lanes|lanes-uturn|lanes-uturn-asf|lanes-uturn-asf-m|lanes-uturn-asf-m-aa|lanes-uturn-asf-m-aa-r) ;; *) echo "FAIL: third argument must be lanes, lanes-uturn, lanes-uturn-asf, lanes-uturn-asf-m, lanes-uturn-asf-m-aa, lanes-uturn-asf-m-aa-r or nothing" >&2; exit 1 ;; esac
+ASF=no; case "$MODE" in *-asf|*-asf-m|*-asf-m-aa|*-asf-m-aa-r) ASF=yes ;; esac
+MAN=no; case "$MODE" in *-asf-m|*-asf-m-aa|*-asf-m-aa-r) MAN=yes ;; esac
+AA=no; case "$MODE" in *-aa|*-aa-r) AA=yes ;; esac
+R146=no; case "$MODE" in *-aa-r) R146=yes ;; esac
 H=$(cd "$(dirname "$0")" && pwd)
 BT="$H/../buildtools"     # Guard (try/catch around every hook call), RefCheck (J9 API check)
 REPO=$(cd "$H/../.." && pwd)
@@ -68,6 +74,15 @@ if [ $ASF = yes ]; then
     pin "$H/lanes/GuidanceEvidence.java" 23e5e5e603e3d2c76e53364f21646758217d4eb7d28175ef6a48bc7680096d3d  # src/guidance
     pin "$H/lanes/TestQuietHold.java" 0d243d38ed774f4cf3f6e8c2b840bdbb28f6df4d9d6ce8099ff6bb149d0bc39d     # tests/java
 fi
+if [ $R146 = yes ]; then
+    # Tomasz's MU1367 v1.4.6 (tag MU1367-v1.4.6, 9ff2f1b; Java of v1.4.6-e d680311) files, copied unchanged into rg/lanes/v146/
+    pin "$H/lanes/v146/GuidanceEvidence.java" a161bd22cb540783287a05d7d87065ede4a10651e0cb287ef4280a0d88cd8dca  # src/guidance
+    pin "$H/lanes/v146/TestReroute.java" f207f2417d88ec821fff546c018ea63e9f6bbc131315134ecdf91b1249f9c977       # tests/java
+    pin "$H/lanes/v146/TestSourceName.java" f40ea2b1f0fcd7c8f8b8edc6aeed83433b60576f0b694b15de49658e7c8af463    # tests/java
+    pin "$H/lanes/v146/TestUturnSide.java" 340985174e32b2e6a7eadd7ad839c0896309c2b607c4a68441dfb154ffb95010     # tests/java
+    pin "$H/lanes/v146/TestPlaceholder.java" 7090c9f8a0012577d935a9df2526262bbd7f7484fdfc4c0239b7b8d2951b6760   # tests/java
+    pin "$H/lanes/v146/TestQuietQnx.java" fa3488097ff02ed862d40111b40f8d84f392171605e06b673d7279c55cf81214      # tests/java
+fi
 pin "$REL/driver/ipod-drvr-iap2.so" 3760797aed4886a6c4480e3a8de79be427a3d8587450a56c424721306ca15d8b
 pin "$BK/MU1161-appimg/armle/lib/dll/ipod-drvr-iap2.so" 7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c
 pin "$BK/MU1161-system/mm/iap2.cfg" 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37
@@ -102,9 +117,15 @@ if [ "$MODE" != base ]; then
         python3 -I "$H/lanes/maneuvers.py" "$LB" "$H/lanes" || fail "maneuvers.py"
         ID=pmcp-mu1161-rg-lanes-asfm-2; WHAT="$WHAT + harman-f maneuver fallbacks"
     fi
-    if [ "$MODE" = lanes-uturn-asf-m-aa ]; then
+    if [ $AA = yes ]; then
         python3 -I "$H/lanes/aa.py" "$LB" || fail "aa.py"
         ID=pmcp-mu1161-rg-lanes-asfm-aa-1; WHAT="$WHAT + Android Auto (pmcp gamma)"
+    fi
+    if [ $R146 = yes ]; then
+        # tomasz-twardzicki MU1367 v1.4.5/v1.4.6 CarPlay guidance fixes (after aa.py, so aa.py's output is unchanged)
+        python3 -I "$H/lanes/v146.py" "$LB" "$H/lanes" || fail "v146.py"
+        cp "$H/lanes/TestPmcp146.java" "$LB/TestPmcp146.java"
+        ID=pmcp-mu1161-rg-lanes-asfm-aa-r-1; WHAT="$WHAT + MU1367 v1.4.5/v1.4.6 reroute, placeholder, U-turn side, Apple names"
     fi
 fi
 
@@ -137,7 +158,8 @@ with zipfile.ZipFile(dst, 'w') as z:
 EOF
 java -cp "$W/patcher:$CP" RefCheck "$STOCK_JAR" "$W/pmcp-rg.jar"
 javac -nowarn -cp "$W/patched:$STOCK_JAR" -d "$W/tests" "$LB/TestLive.java" ${EXTRA:+"$TL"} \
-    $(case "$MODE" in (*-aa) echo "$LB/TestAa.java" ;; esac) $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
+    $([ $AA = yes ] && echo "$LB/TestAa.java") \
+    $([ $R146 = yes ] && echo "$LB/TestReroute.java $LB/TestSourceName.java $LB/TestUturnSide.java $LB/TestPlaceholder.java $LB/TestQuietQnx.java $LB/TestPmcp146.java") $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
     $([ $MAN = yes ] && echo "$LB/TestManeuvers.java")
 java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestLive > "$W/tests/result.json" || { cat "$W/tests/result.json"; fail "TestLive"; }
 cat "$W/tests/result.json"; echo
@@ -169,10 +191,19 @@ if [ $MAN = yes ]; then
     java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestManeuvers > "$W/tests/maneuvers.txt" || { cat "$W/tests/maneuvers.txt"; fail "TestManeuvers"; }
     grep -q '^MANEUVERS_PASS ' "$W/tests/maneuvers.txt" || fail "TestManeuvers: no MANEUVERS_PASS"; cat "$W/tests/maneuvers.txt"
 fi
-case "$MODE" in *-aa)
+if [ $AA = yes ]; then
     java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestAa > "$W/tests/aa.json" || { cat "$W/tests/aa.json"; fail "TestAa"; }
-    cat "$W/tests/aa.json"; echo ;;
-esac
+    cat "$W/tests/aa.json"; echo
+fi
+if [ $R146 = yes ]; then
+    # each in its own JVM (static evidence counters and LiveBridge.INSTANCE start fresh)
+    for t in TestReroute:REROUTE_PASS TestSourceName:SOURCE_NAME_PASS TestUturnSide:UTURN_SIDE_PASS TestPlaceholder:PLACEHOLDER_PASS \
+             TestQuietQnx:QUIET_FACTORY_J9_PASS TestPmcp146:PMCP146_PASS; do
+        c=${t%%:*}; m=${t#*:}
+        java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.$c > "$W/tests/$c.txt" 2>&1 || { cat "$W/tests/$c.txt"; fail "$c"; }
+        grep -q "^$m " "$W/tests/$c.txt" || fail "$c: no $m"; cat "$W/tests/$c.txt"
+    done
+fi
 for c in $CLASSES; do
     norm() { sed -E "s/#[0-9]+(, *[0-9]+)?//; s#$NAV/$c\\.##g; s/^ *[0-9]+: //; s/[[:space:]]+/ /g"; }
     javap -p -c -constants -cp "$W/stock" "${NAV//\//.}.$c" | norm > "$W/report/$c.stock.txt"
