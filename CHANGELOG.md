@@ -46,6 +46,15 @@ build mode `lanes-uturn-asf-m-aa-r`). Host tests only: neither he nor we have tr
   `6610cbb`), U-turn side and Apple Maps names with their evidence fields (MU1367 v1.4.6, `d680311`), and the tests
   `TestReroute`, `TestSourceName`, `TestUturnSide`, `TestPlaceholder`, `TestQuietQnx`.
 
+## Experimental branch only (not in the next release)
+
+- Android Auto feeder v15: if the factory video encoder takes the AID video channel in the first 3 minutes after the
+  radio starts, the feeder takes it back (at most 3 times) and sends the last key frame again, instead of leaving the
+  AID without the map until the phone is reconnected. Reported on MU1367 by tomasz-twardzicki (v1.5.1-e).
+- Diagnostics for the next Android Auto features (road name, lanes, distance and arrival time only while the AID does
+  not show the map): the AA hook writes the raw navigation messages to `/ramdisk/pmcp-aa-rg-raw.txt`, rg writes which
+  view the AID shows to `/ramdisk/pmcp-kombi-view.log`; "AA save log" copies both.
+
 ## v1.6.0 (2026-11-11)
 
 Installer version `pmcp-0.6.0-mu1161-791-<build id>`. v1.5.1 stays available as the previous stable release (Android
