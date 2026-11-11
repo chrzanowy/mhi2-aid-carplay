@@ -226,8 +226,11 @@ one_target() {
                 [ -e "$_j" ] && ! grep -q " ${_j##*/}" "$U/carplaymaps/HMI_BOOT" 2>/dev/null && _stray="$_stray ${_j##*/}"
             done
             if [ -n "$_stray" ]; then
-                run status; grep -q "unused JAR files (not loaded):.*${_stray##* }" "$W/out" \
-                    || bad "[$target] kill@$n ($killed): status does not name the unused JAR(s)$_stray"
+                run status
+                for _j in $_stray; do
+                    grep "unused JAR files (not loaded):" "$W/out" | grep -qF " $_j" \
+                        || bad "[$target] kill@$n ($killed): status does not name the unused JAR $_j"
+                done
             fi
             # an interrupted Java update is finished by running it again
             run java-update; grep -q "PMCP_JAVA_UPDATE_OK\|JAVA_UPDATE_ALREADY_CURRENT" "$W/out" && run status && grep -q "Unit state: JAVA" "$W/out" \
