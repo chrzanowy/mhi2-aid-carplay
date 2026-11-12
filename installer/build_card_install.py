@@ -59,7 +59,7 @@ def main():
     # 1. the installer build: exactly the files of its BUILD-MANIFEST.txt, nothing more, nothing less
     man = (sdb / "BUILD-MANIFEST.txt").read_text().splitlines()
     ver, entries = man[0], [l.split() for l in man[1:] if l.strip()]
-    if not ver.startswith(("pmcp-0.6.0-mu1161-791-", "pmcp-0.6.0-exp-mu1161-791-")):
+    if not ver.startswith(("pmcp-0.7.0-mu1161-791-", "pmcp-0.7.0-exp-mu1161-791-")):
         sys.exit("unexpected build version: %s" % ver)
     if "-exp-" in ver and os.environ.get("PMCP_CARD_EXPERIMENTAL") != "1":
         sys.exit("experimental build %s: set PMCP_CARD_EXPERIMENTAL=1 to make an install card of it" % ver)

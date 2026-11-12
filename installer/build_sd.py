@@ -18,7 +18,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
-PMCP_BASE_VERSION = "pmcp-0.6.0-mu1161-791"   # release v1.6.0: Android Auto 1.0 (direct MOST output), settings page (ui)
+PMCP_BASE_VERSION = "pmcp-0.7.0-mu1161-791"   # release v1.7.0: Android Auto 1.1 (road, lanes, destination, song title), CarPlay rg fixes
 # Experimental card from the same tree (PMCP_BUILD_EXPERIMENTAL=1): "-exp-" in the version, plus the diagnostics buttons
 # (AA record, AA output switches are in every card since AA 1.0). Same payload otherwise, so it never forces another set.
 if os.environ.get("PMCP_BUILD_EXPERIMENTAL") == "1":
@@ -46,7 +46,7 @@ JAVA_PACKAGES = [("nai", "nai: AID map stays while the iPhone navigates (NavActi
 # rg = everything for route guidance in one package: Tomasz's port + his lanes, our VW U-turn lanes, his MU1367
 # v1.4.3 distance bar / street name / feed recovery, the maneuver fallbacks, the quiet-route hold (v1.4.3) and, since
 # v1.5.0, the VW arrows from Android Auto (rg/build.sh lanes-uturn-asf-m-aa: lanes-uturn-asf-m + rg/lanes/aa.py; with
-# connection 3 it reads the AA hook's mailbox /ramdisk/pmcp-aa-rg, CarPlay unchanged) and, since v1.6.1, tomasz-twardzicki's
+# connection 3 it reads the AA hook's mailbox /ramdisk/pmcp-aa-rg, CarPlay unchanged) and, since v1.7.0, tomasz-twardzicki's
 # MU1367 v1.4.5/v1.4.6 CarPlay guidance fixes (rg/build.sh lanes-uturn-asf-m-aa-r: + rg/lanes/v146.py: reroute with
 # CALC_ROUTE, placeholder arrow, U-turn side, Apple Maps names). The rg and rglu of v1.3, v1.4.x's and v1.5.0-v1.6.0's rg
 # and the experimental cards' rg-aa are replaced by java-update (JAVA_OLD below).

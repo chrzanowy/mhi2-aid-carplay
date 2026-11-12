@@ -118,7 +118,10 @@ czytnik i paczki Java (`rglu`, `rg`, eksperymentalne `rg-aa` → `rg` z tej kart
 aktualizuje na miejscu znane mu Android Auto z wcześniejszej karty eksperymentalnej, a Android Auto, którego nie
 obsługuje, zastępuje zestawem z tej karty. Przy przejściu z v1.0–v1.3 zrób też nową kartę 2: karty ratunkowe sprzed
 v1.4 nie przywracają sterownika iAP2 z v1.4.
-**Z v1.5.1:** 2 („already installed”), 3, jeśli używasz Android Auto (przenosi na miejscu Android Auto na 1.0, także
+**Z v1.6.0:** 2 („already installed”), 3, jeśli używasz Android Auto (Android Auto 1.1 na miejscu, wybrane wyjście zostaje),
+4 (prowadzenie i tytuły utworów na miejscu, `sl`, `ui` i tryb ograniczeń prędkości zostają); potem restart, telefon
+i 5 (albo „Save” na stronie ustawień) w tym starcie.
+**Z v1.5.1:** 2 („already installed”), 3, jeśli używasz Android Auto (przenosi na miejscu Android Auto na 1.1, także
 z feederów v11–v13 kart eksperymentalnych), 4 (strona ustawień z nowym wierszem „Android Auto output”); potem restart,
 telefon i 5 (albo „Save” na stronie ustawień) w tym starcie.
 
@@ -262,7 +265,7 @@ Ten projekt nie powstałby bez:
   (łańcuch łatek sterownika, most HMI, czytnik RGI), które `rg/` przenosi na MU1161: MU1427 v1.2.0 (strzałki, dystans,
   ETA, ścisłe mapowanie manewrów `LiveModel.map`), pasy ruchu z MU1367 v1.4.0 oraz pasek odległości, nazwa ulicy
   i odzyskiwanie strumienia z MU1367 v1.4.3 oraz podtrzymanie trasy Apple Maps z MU1367 v1.4.4 (nasze v1.4.3),
-  a także przeliczanie trasy, strzałkę zastępczą, stronę zawracania i nazwy Map Apple z MU1367 v1.4.5/v1.4.6 (nasze v1.6.1).
+  a także przeliczanie trasy, strzałkę zastępczą, stronę zawracania i nazwy Map Apple z MU1367 v1.4.5/v1.4.6 (nasze v1.7.0).
 - **[mathsls/MHI2-Carplay-Maps](https://github.com/mathsls/MHI2-Carplay-Maps)**: pierwszy build dla MU1161 + AID 791.
   Z niego pochodzą miejsca rozmiaru fizycznego i układ wariantu `map-square`.
 - **[ZzYunOvO/MHI2-Carplay-Maps](https://github.com/ZzYunOvO/MHI2-Carplay-Maps)**: zestaw narzędzi, na którym opierają

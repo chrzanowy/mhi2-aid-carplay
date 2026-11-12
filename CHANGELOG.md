@@ -3,7 +3,10 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
-## Unreleased
+## v1.7.0 (2026-11-12)
+
+Installer version `pmcp-0.7.0-mu1161-791-<build id>`. v1.6.0 stays available as the previous stable release
+(Android Auto 1.0) if you need to go back.
 
 **Android Auto 1.1** (tested in the car on 2026-11-12 with experimental card 9c0c4493, Samsung Galaxy A16, Android 16;
 this release ships the same files):
@@ -32,8 +35,9 @@ this release ships the same files):
   with experimental card 9c0c4493 already has this release's files: 3 and 4 change nothing. Host tests [46], new [51]
   (experimental card b542b2d4) and [52] (9c0c4493).
 
-CarPlay CarPlay route guidance fixes from tomasz-twardzicki's MU1367 v1.4.5 and v1.4.6 (package `rg`, `rg/lanes/v146.py`,
-build mode `lanes-uturn-asf-m-aa-r`). Host tests only: neither he nor we have tried them in a car yet.
+CarPlay route guidance fixes from tomasz-twardzicki's MU1367 v1.4.5 and v1.4.6 (package `rg`, `rg/lanes/v146.py`,
+build mode `lanes-uturn-asf-m-aa-r`). In the car since 2026-11-12 with experimental card 9c0c4493 (the same
+`pmcp-guidance7.jar`) with no problem found; not every fix met its situation on that drive.
 
 - **Reroute.** When the phone recalculates the route (route states 1, 5, 0, 3, 1, then a start step at 0 m), the AID
   shows the VW "calculating route" symbol and keeps the distance, the distance bar, the street and the arrival data until

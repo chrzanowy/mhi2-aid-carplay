@@ -1,6 +1,6 @@
 # Tutorial w aucie: instalacja krok po kroku (Passat B8, MHI2 MU1161, AID 791)
 
-Wersja instalatora: **`pmcp-0.6.0-mu1161-791-…`** (końcówka to identyfikator buildu; jest w pierwszej linii
+Wersja instalatora: **`pmcp-0.7.0-mu1161-791-…`** (końcówka to identyfikator buildu; jest w pierwszej linii
 `BUILD-MANIFEST.txt`, w `PMCP_INSTRUKCJA.txt` na karcie 1 i na górze ekranu zielonego menu).
 Wszystkie napisy zielonego menu są po angielsku (od v1.4); niżej cytowane dokładnie tak, jak na ekranie.
 
@@ -31,7 +31,7 @@ zawsze slot **SD1**.
 - Karta SD w zielonym menu jest tylko do odczytu, więc instalator zapisuje wynik każdego przycisku w radiu
   (`/mnt/persist/pmcp/gem.log`, ok. 64 KB; kopiuje go karta logów; przyciski tylko do odczytu jedynie dopisują tam wynik). **Fotografuj wynik każdej akcji.**
 - Wejście do zielonego menu: przytrzymaj **MENU ~10 s** → `=>M.I.B.<=` → **`pmcp_stream_map_aid`**. Nagłówek musi pokazać
-  wersję twojego buildu (`pmcp-0.6.0-mu1161-791-…`); inna wersja = stop.
+  wersję twojego buildu (`pmcp-0.7.0-mu1161-791-…`); inna wersja = stop.
 - „Restart” = **przytrzymaj pokrętło głośności ~10 s** (radio się wyłącza i startuje). Wyłączenie i włączenie auta od razu
   to nie restart (radio jeszcze nie zasnęło).
 
@@ -139,8 +139,8 @@ zestaw i `This boot: set=... use=yes`.
 
 ## Aktualizacja z wcześniejszej wersji
 
-Te same kroki dla v1.5.x, v1.4.x i v1.0-v1.3. Z v1.5.x przycisk 3 daje Android Auto 1.0, a 4 dodaje albo aktualizuje
-stronę ustawień (`ui`), więc restart i 5
+Te same kroki dla v1.6.0, v1.5.x, v1.4.x i v1.0-v1.3. Z v1.5.x i v1.6.0 przycisk 3 daje Android Auto 1.1, a 4 dodaje
+albo aktualizuje stronę ustawień (`ui`), prowadzenie i tytuły utworów, więc restart i 5
 (albo „Save: everything works” na stronie) są potrzebne. Tylko gdy wszystkie trzy (2, 3 i 4) odpowiadają „already
 installed” / „everything was already on, nothing changed” (karta z tymi samymi funkcjami), nie trzeba ani restartu,
 ani 5.

@@ -19,7 +19,7 @@
 # "lanes-uturn-asf-m-aa" (package rg since v1.5.0; the v1.4.x experimental cards' rg-aa): lanes-uturn-asf-m + rg/lanes/aa.py
 # (Android Auto too: connection 3 reads /ramdisk/pmcp-aa-rg written by the AA gamma hook; CarPlay unchanged), tested with
 # every lanes-uturn-asf-m suite and also with TestAa.
-# "lanes-uturn-asf-m-aa-r" (package rg since v1.6.1): lanes-uturn-asf-m-aa + rg/lanes/v146.py (tomasz-twardzicki MU1367
+# "lanes-uturn-asf-m-aa-r" (package rg since v1.7.0): lanes-uturn-asf-m-aa + rg/lanes/v146.py (tomasz-twardzicki MU1367
 # v1.4.5/v1.4.6 CarPlay guidance fixes: reroute episode with CALC_ROUTE, placeholder arrow, U-turn side, Apple Maps names),
 # tested with every lanes-uturn-asf-m-aa suite (TestArrow/TestRoad with his reroute changes) plus his TestReroute,
 # TestSourceName, TestUturnSide, TestPlaceholder, TestQuietQnx and our TestPmcp146.

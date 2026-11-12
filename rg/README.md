@@ -9,7 +9,7 @@ decoder and iAP2 maneuver type names after luka-dev; maneuver table of the fallb
 Sources: `upstream/tomasz` @ `024dd159` (MU1427), `7925a83` (MU1367 v1.4.0 lanes), `1d69473` (MU1367 v1.4.3),
 `d20527f` (MU1367 v1.4.4), `MU1367-v1.4.5` / `MU1367-v1.4.6` (`6610cbb`, `d680311`).
 
-Since v1.4 there is **one** route guidance Java package, `rg`. Since v1.6.1 it is built with
+Since v1.4 there is **one** route guidance Java package, `rg`. Since v1.7.0 it is built with
 `rg/build.sh <lsd.jar> <dir> lanes-uturn-asf-m-aa-r` (v1.5.0-v1.6.0: `lanes-uturn-asf-m-aa`, v1.4.x: `lanes-uturn-asf-m`).
 It holds everything below: the MU1427 port, his lanes, our U-turn lanes, his distance bar / street name / feed recovery,
 the maneuver fallbacks, the quiet-route hold and (v1.5.0, `rg/lanes/aa.py`) the VW arrows from Android Auto: while an
@@ -129,7 +129,7 @@ end-to-end start of route). Tomasz's `TestLive vectors` harness compares against
 differ on this JAR. The GEM button "RG last maneuver" shows the strict mapping; where it says main 0 the `rg` package may
 still show a fallback arrow.
 
-## Reroute, placeholder arrow, U-turn side, Apple Maps names (v1.6.1, MU1367 v1.4.5/v1.4.6)
+## Reroute, placeholder arrow, U-turn side, Apple Maps names (v1.7.0, MU1367 v1.4.5/v1.4.6)
 
 `rg/lanes/v146.py` (build mode `lanes-uturn-asf-m-aa-r`, after `aa.py`) ports the CarPlay guidance fixes of
 tomasz-twardzicki's MU1367 v1.4.5 (tag `MU1367-v1.4.5`, Java of v1.4.5-e `6610cbb`) and v1.4.6 (tag `MU1367-v1.4.6`,

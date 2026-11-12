@@ -1,6 +1,6 @@
 # In-car guide: step-by-step installation (Passat B8, MHI2 MU1161, AID 791)
 
-Installer version: **`pmcp-0.6.0-mu1161-791-…`** (the suffix identifies the build; it is the first line of
+Installer version: **`pmcp-0.7.0-mu1161-791-…`** (the suffix identifies the build; it is the first line of
 `BUILD-MANIFEST.txt` and is shown in `PMCP_INSTRUKCJA.txt` on card 1 and at the top of the green menu screen).
 All green menu labels are in English (since v1.4), quoted below exactly as on the screen.
 
@@ -31,7 +31,7 @@ always slot **SD1**.
 - The SD card is read-only in the green menu, so the installer keeps each button's result on the unit
   (`/mnt/persist/pmcp/gem.log`, about 64 KB; the log card copies it; read-only buttons only add their output to it). **Photograph the result of every action.**
 - Entering the green menu: hold **MENU for ~10 s** → `=>M.I.B.<=` → **`pmcp_stream_map_aid`**. The header must show the version
-  of your build (`pmcp-0.6.0-mu1161-791-…`); a different version = stop.
+  of your build (`pmcp-0.7.0-mu1161-791-…`); a different version = stop.
 - "Restart" = **hold the volume knob for ~10 s** (the unit switches off and boots again). Switching the car off and on
   again right away is not a restart (the unit has not gone to sleep yet).
 
@@ -142,8 +142,8 @@ Restart once more. From now on the set loads at every start. **"7. Status (read-
 
 ## Updating from an earlier version
 
-The same steps for v1.5.x, v1.4.x and v1.0-v1.3. From v1.5.x, 3 brings Android Auto 1.0 and 4 adds or updates the
-settings page (`ui`), so the restart and 5
+The same steps for v1.6.0, v1.5.x, v1.4.x and v1.0-v1.3. From v1.5.x and v1.6.0, 3 brings Android Auto 1.1 and 4 adds
+or updates the settings page (`ui`), the route guidance and the song titles, so the restart and 5
 (or "Save: everything works" on the page) are needed. Only when 2, 3 and 4 all answer "already installed" /
 "everything was already on, nothing changed" (a card with the same features) are no restart and no 5 needed.
 

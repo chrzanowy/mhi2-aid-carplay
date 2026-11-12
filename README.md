@@ -117,7 +117,10 @@ changed" (a card with the same features), nothing changed: no restart and no 5 n
 (`rglu`, `rg`, the experimental `rg-aa` → this card's `rg`) by this card's. Button 3 updates an earlier experimental
 card's Android Auto that it knows in place and replaces Android Auto it does not support by this card's. Make a new
 card 2 as well when coming from v1.0-v1.3: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
-**From v1.5.1:** 2 ("already installed"), 3 if you use Android Auto (brings Android Auto 1.0 in place, also from an
+**From v1.6.0:** 2 ("already installed"), 3 if you use Android Auto (Android Auto 1.1 in place, the chosen output stays),
+4 (route guidance and song titles in place, `sl`, `ui` and the speed-limit mode stay); then restart, connect the phone
+and 5 (or "Save" on the settings page) in that start.
+**From v1.5.1:** 2 ("already installed"), 3 if you use Android Auto (brings Android Auto 1.1 in place, also from an
 experimental card's feeder v11-v13), 4 (the settings page with the new "Android Auto output" row); then restart,
 connect the phone and 5 (or "Save" on the settings page) in that start.
 
@@ -282,7 +285,7 @@ This project would not exist without:
   (driver patch chain, HMI bridge, RGI reader) that `rg/` ports to MU1161: MU1427 v1.2.0 (arrows, distance, ETA, the
   strict maneuver mapping `LiveModel.map`), MU1367 v1.4.0 lane guidance, and MU1367 v1.4.3 distance bar, street name and
   feed recovery, the MU1367 v1.4.4 quiet-route hold for Apple Maps (v1.4.3), and the MU1367 v1.4.5/v1.4.6 reroute
-  handling, placeholder arrow, U-turn side and Apple Maps name fixes (v1.6.1).
+  handling, placeholder arrow, U-turn side and Apple Maps name fixes (v1.7.0).
 - **[mathsls/MHI2-Carplay-Maps](https://github.com/mathsls/MHI2-Carplay-Maps)**: the first MU1161 + AID 791 build. The
   physical-size sites and the layout used by `map-square` come from it.
 - **[ZzYunOvO/MHI2-Carplay-Maps](https://github.com/ZzYunOvO/MHI2-Carplay-Maps)**: the toolbox that the mathsls and
