@@ -48,16 +48,23 @@ This is M.I.B. 3.6.0 plus the CarPlay-on-AID installer. Nothing starts by itself
 
   1. Check card and unit (read-only)        -> PMCP_VERIFY_OK state=STOCK
   2. Install CarPlay                        -> restart (volume knob ~10 s), check the map
-  3. Install Android Auto (optional)        -> Google Maps from an Android phone on the AID
-  4. Install additional features            -> restart: this first start is a TRIAL
+%(aa3)s  4. Install additional features            -> restart: this first start is a TRIAL
   5. Confirm: everything works              -> press it in that same start; restart; done
      (no Confirm, or black screen: restart again -> factory start, nothing to fix)
-  2, 3 and 4 also update an earlier install and replace versions this card does not support.
-  8. Remove everything (back to factory files) -> undo it all
-  More (logs, single features, map layouts, Android Auto details): pmcp_advanced
-
+%(also)s  8. Remove everything (back to factory files) -> undo it all
+  More (logs, single features, map layouts%(aadetails)s): pmcp_advanced
+%(toolbox)s
 Photograph each result (the card is read-only in GEM, there is no log file).
 Do not copy the rescue card (pmcp-rescue/, Swdlautorun.txt) onto this card.
+"""
+
+
+TOOLBOX_NOTE = """
+MIB Toolbox NavActiveIgnore: if the unit's lsd.sh loads it (exactly the Toolbox file and the one Toolbox line), this card
+takes it over. 2 saves both Toolbox files in /mnt/app/carplaymaps/rollback/toolbox-nai (nothing else changes yet); the first
+Java package (4) writes this card's lsd.sh block, which has no Toolbox line, and this card's own nai replaces its job.
+The Toolbox jar file stays in place, unused. 8. Remove everything goes back to the FACTORY lsd.sh (not to the Toolbox one):
+install NavActiveIgnore again with MIB Toolbox afterwards if you want that back. Any other lsd.sh: the card stops.
 """
 
 
@@ -116,7 +123,16 @@ def main():
         shutil.copyfile(sdb / rel, dst)
     if not (out / "esd/Launcher-sda0.esd").read_bytes().startswith((REPO / "archives/mib-3.6.0/Launcher-sda0.esd").read_bytes()):
         sys.exit("our menu file does not start with the unchanged M.I.B. menu")
-    (out / "PMCP_INSTRUKCJA.txt").write_text(README % {"ver": ver, "id": FW["id"], "cluster": FW["cluster"]})
+    aa = "aa" in FW["packages"]
+    tbx = "toolbox_nai" in FW["lsd_sh_states"]
+    (out / "PMCP_INSTRUKCJA.txt").write_text(README % {
+        "ver": ver, "id": FW["id"], "cluster": FW["cluster"],
+        "aa3": "  3. Install Android Auto (optional)        -> Google Maps from an Android phone on the AID\n" if aa else "",
+        "also": "  2, 3 and 4 also update an earlier install and replace versions this card does not support.\n" if aa
+                else "  2 and 4 also update an earlier install and replace versions this card does not support.\n"
+                     "  (Android Auto is not available for this unit.)\n",
+        "aadetails": ", Android Auto details" if aa else "",
+        "toolbox": TOOLBOX_NOTE if tbx else ""})
     shutil.copyfile(sdb / "BUILD-MANIFEST.txt", out / "BUILD-MANIFEST.txt")   # run_tests.sh reads it from the card root
     # 4. final guards and the card manifest
     for bad in ("Swdlautorun.txt", "pmcp-rescue", "PMCP_RESCUE_README.txt", "pmcp-ratunek", "PMCP_RATUNEK_README.txt",

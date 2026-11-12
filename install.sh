@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # One-command installer: builds both SD cards for the CarPlay map on the AID (VW MHI2 + AID 791, firmware profiles
-# in profiles/: today MU1161) from your own M.I.B. backup, checks every input and output by SHA-256, runs the host tests and, if you
+# in profiles/: MU1161, MU1418) from your own M.I.B. backup, checks every input and output by SHA-256, runs the host tests and, if you
 # want, copies the cards onto SD cards. It never touches the car: changes on the head unit happen only
 # later, when you press buttons in the green engineering menu (GEM). See docs/en/09-in-car-guide.md.
 #
@@ -131,6 +131,7 @@ has_pkg() {     # PACKAGE: is it in the profile's package list?
 }
 
 sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
+sha1_of() { shasum -a 1 "$1" | cut -d' ' -f1; }
 
 check_sha() {   # FILE SHA LABEL
     local got
@@ -348,6 +349,31 @@ ok "firmware profile $PROFILE (train $(pget train), MU$(pget mu)): $LABEL"
 while read -r rel want; do
     check_sha "$BACKUP/$rel" "$want" "backup $rel"
 done <<< "$(python3 -I "$PROF_PY" pins "$PROFILE")"
+# lsd.sh: the factory file, or (profiles with toolbox_nai in lsd_sh_states) the factory file plus exactly one line that loads
+# MIB Toolbox's NavActiveIgnore.jar, together with that jar. Both with their exact hashes from the profile; anything else stops.
+# The factory text the build needs (our lsd.sh is made from it) is then taken from the backup's lsd.sh.bu, pinned by stock.LSD.
+LSD_STATE=stock
+case " $(pget lsd_sh_states | tr '\n' ' ')" in *" toolbox_nai "*)
+    LSD_ROWS=$(python3 -I "$PROF_PY" lsd "$PROFILE")
+    lsd_rel() { printf '%s\n' "$LSD_ROWS" | awk -v k="$1" '$1 == k {print $2}'; }
+    lsd_want() { printf '%s\n' "$LSD_ROWS" | awk -v k="$1" '$1 == k {print $3}'; }
+    live=$(sha256 "$BACKUP/$(lsd_rel stock)" 2> /dev/null || true)
+    [ -n "$live" ] && [ -n "$(lsd_want stock)" ] || die "cannot hash the backup lsd.sh" "make the backup again"
+    if [ "$live" = "$(lsd_want stock)" ]; then
+        ok "backup lsd.sh is the factory file"
+    elif [ "$live" = "$(lsd_want toolbox_lsd)" ]; then
+        check_sha "$BACKUP/$(lsd_rel toolbox_jar)" "$(lsd_want toolbox_jar)" "backup Toolbox NavActiveIgnore.jar"
+        [ "$(sha1_of "$BACKUP/$(lsd_rel toolbox_lsd)")" = "$(pget toolbox_nai.sha1.lsd_sh)" ] \
+            && [ "$(sha1_of "$BACKUP/$(lsd_rel toolbox_jar)")" = "$(pget toolbox_nai.sha1.jar)" ] \
+            || die "the Toolbox files in the backup do not have the SHA-1 of the profile" "the files are not the pinned ones; do not continue"
+        LSD_STATE=toolbox_nai
+        ok "backup lsd.sh is the factory file plus MIB Toolbox's NavActiveIgnore line (taken over: the installer replaces it by its own nai)"
+        check_sha "$BACKUP/$(lsd_rel stock_copy)" "$(lsd_want stock_copy)" "backup factory lsd.sh (lsd.sh.bu)"
+    else
+        die "the backup's lsd.sh is neither the factory file nor the factory file with only MIB Toolbox's NavActiveIgnore line (SHA-256 ${live:-unreadable})" \
+            "another tool changed lsd.sh. Nothing is merged: restore the factory lsd.sh with M.I.B. first, make the backup again, never cross-flash"
+    fi ;;
+esac
 ls "$BACKUP/$APPIMG"/eso/hmi/lsd/jars/*.jar > /dev/null 2>&1 || die "backup has no eso/hmi/lsd/jars/*.jar" "make the backup again"
 ok "your unit's files are exactly the tested $PROFILE firmware"
 export PMCP_BACKUP="$BACKUP"

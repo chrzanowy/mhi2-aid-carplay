@@ -45,12 +45,32 @@ FAILS=0
 W=$(mktemp -d /tmp/pmcp-test.XXXX)
 export PMCP_TEST_GEMLOG="$W/gem.log"   # the GEM button log outside the unit tree (the tree checks stay exact)
 STOCK_LSD=$(pf stock.LSD | sed -n 2p)
+. "$T/lsd_state.inc"
+TBX_LSD_SHA=""; TBX_JAR_SHA=""; INIT_LSD=$STOCK_LSD
+if [ $HAS_TBX = yes ]; then
+    TBX_LSD_SHA=$(pf toolbox_nai.lsd_sh | sed -n 1p); TBX_JAR_SHA=$(pf toolbox_nai.jar | sed -n 2p)
+    [ "$LSD_TEST_STATE" = toolbox_nai ] && INIT_LSD=$TBX_LSD_SHA
+fi
 LSD_JAVA=$(sed -n 's/^LSD_JAVA \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")
 jsha() { sed -n "s/^JAR_$1 \([0-9a-f]*\) .*/\1/p" "$SDB/pmcp/pmcp.sh"; }
 jid() { echo "$1-$(jsha "$1" | cut -c1-8)"; }
 NAI_SHA=$(jsha nai); NP_SHA=$(jsha np)
 NAI=$(jid nai); NP=$(jid np); RG=$(jid rg); ZOOM=$(jid zoom); DN=$(jid dn); UI=$(jid ui)
-[ -n "$NAI_SHA" ] && [ -n "$NP_SHA" ] || { echo "no JAR hashes in the manifest"; exit 99; }
+[ -n "$NAI_SHA" ] || { echo "no nai JAR hash in the manifest"; exit 99; }
+# the file name of our nai on the unit (NavActiveIgnore.jar, or pmcp-nai.jar where that name is MIB Toolbox's file)
+NAIJAR=$(sed -n 's/^JAR_nai [0-9a-f]* [0-9]* jars\/\(.*\)$/\1/p' "$SDB/pmcp/pmcp.sh")
+STOCK_DIO=$(pf stock.DIO | sed -n 2p); STOCK_DRV=$(pf stock.IAP2DRV | sed -n 2p); STOCK_CFG=$(pf stock.IAP2CFG | sed -n 2p)
+RG_DRV_SHA=$(sed -n 's/^RG_DRIVER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh"); RG_CFG_SHA=$(sed -n 's/^RG_CFG \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")
+# what the profile's card has: every package of the profile, and Android Auto (package aa) or not
+HAS_NP=no; HAS_UI=no; HAS_AA=no
+case " $(pf packages | tr '\n' ' ')" in *" np "*) HAS_NP=yes ;; esac
+case " $(pf packages | tr '\n' ' ')" in *" ui "*) HAS_UI=yes ;; esac
+case " $(pf packages | tr '\n' ' ')" in *" aa "*) HAS_AA=yes ;; esac
+# the whole MU1161 feature set (np, ui, Android Auto): scenarios written for it run only then; a smaller profile has its own
+FULLSET=no; [ $HAS_NP = yes ] && [ $HAS_UI = yes ] && [ $HAS_AA = yes ] && FULLSET=yes
+# set ids / HMI_BOOT words with np where the profile has it
+ID_NP=""; J_NP=""; [ $HAS_NP = yes ] && { ID_NP="+$NP"; J_NP=" pmcp-np2.jar"; }
+ID_UI=""; JB_UI=""; [ $HAS_UI = yes ] && { ID_UI="+$UI"; JB_UI=":/X/lsd/jars/pmcp-ui2.jar"; }
 # simulate the lsd.sh block of the unit tree for one normal boot (or RUN_MODE=$1); prints "boot=USE set=ID jars=LIST"
 unit_boot() {
     { echo "BASE_DIR=/X; BOOTCLASSPATH=-Xbootclasspath/a:/ifs/lsd.jxe; RUN_MODE=${1:-}"
@@ -65,7 +85,12 @@ ok()   { echo "  ok   $*"; }
 bad()  { echo "  FAIL $*"; FAILS=$((FAILS+1)); }
 expect_out() { grep -q -- "$1" "$W/out" && ok "$2" || { bad "$2 (wanted '$1')"; sed 's/^/       | /' "$W/out" | tail -8; }; }
 # one shasum process for the whole tree (same lines as one per file)
-snapshot() { (cd "$1" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2); }
+# (a unit that started with MIB Toolbox's lsd.sh: restore ends with the FACTORY lsd.sh, so Toolbox's lsd.sh counts as the
+# factory one in a snapshot; the Toolbox jar is never removed, so it stays in the tree and the comparison checks that)
+snapshot() { (cd "$1" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2) | snap_norm; }
+snap_norm() {
+    if [ "$HAS_TBX" = yes ]; then sed "s#^$(pf toolbox_nai.lsd_sh | sed -n 1p)  \(.*/lsd/lsd.sh\)\$#$STOCK_LSD  \1#"; else cat; fi
+}
 h() { shasum -a 256 < "$1" | cut -d' ' -f1; }
 
 fresh_unit() {
@@ -78,8 +103,7 @@ fresh_unit() {
     cp "$BK/eso/bin/apps/dio_manager" "$W/unit/mnt/app/eso/bin/apps/dio_manager"
     cp "$BK/eso/bin/apps/gal" "$W/unit/mnt/app/eso/bin/apps/gal"
     mkdir -p "$W/unit/ramdisk"
-    cp "$BK/eso/hmi/lsd/lsd.sh" "$W/unit/mnt/app/eso/hmi/lsd/lsd.sh"
-    cp "$BK/eso/hmi/lsd/jars/"* "$W/unit/mnt/app/eso/hmi/lsd/jars/"
+    lsd_state_into_unit "$W/unit/mnt/app"
     echo "factory persist content" > "$W/unit/mnt/persist/etc/ffs3.2ver"
     cp -R "$SDB/pmcp" "$W/sd"
     awk -v inc="$T/no_printf.inc" '{print} /^unset LD_PRELOAD$/ && !done {while ((getline l < inc) > 0) print l; done=1}' \
@@ -102,6 +126,8 @@ V142="${PMCP_V142_SD:-$SDB/../release-v1.4.2-5a55ffff/sd}/pmcp/pmcp.sh"
 # (and says so); release runs set PMCP_REQUIRE_OLD_CARDS=1, which makes a missing earlier card a failure.
 SKIPS=0
 card_ok() {
+    # the earlier cards are MU1161 cards (their files and hashes are MU1161's history); a profile with fewer packages has none
+    [ $FULLSET = yes ] || return 1
     [ -e "$1" ] && return 0
     if [ "${PMCP_REQUIRE_OLD_CARDS:-0}" = 1 ]; then bad "earlier card $2 missing: $1"
     else echo "  skip earlier card $2 not present ($1): its update test is skipped"; SKIPS=$((SKIPS+1)); fi
@@ -171,19 +197,47 @@ for SH in "$@"; do
     prof detect MHI2_XX_VWG13_P0000 "$(pf mu)"; prof_is 1 "detect: unknown train is an error"
     grep -q "no single profile" "$W/pout" && ok "unknown train: readable message" || bad "unknown train message: $(cat "$W/pout")"
     prof detect "$(pf train)" 9999; prof_is 1 "detect: known train, unknown MU is an error"
-    prof detect MHI2_US_VWG13_P3662 1418; prof_is 1 "detect: MU1418 (no profile yet) is an error"
+    # a train of one profile with the MU of another is no profile (the cross-flash case): every profile pair
+    for _a in $(python3 -I "$PP" list); do for _b in $(python3 -I "$PP" list); do
+        [ "$_a" = "$_b" ] && continue
+        prof detect "$(python3 -I "$PP" get "$_a" train)" "$(python3 -I "$PP" get "$_b" mu)"; prof_is 1 "detect: $_a train with $_b MU is an error"
+        prof detect "$(python3 -I "$PP" get "$_a" train)" "$(python3 -I "$PP" get "$_a" mu)"
+        [ "$(cat "$W/pout")" = "$_a" ] && ok "detect: train and MU of $_a name $_a (not $_b)" || bad "detect printed: $(cat "$W/pout")"
+    done; done
     prof detect "" ""; prof_is 1 "detect: empty train and MU is an error"
     prof get NOPE train; prof_is 1 "get: unknown profile is an error"
     prof get mu1161 train; prof_is 1 "get: a lower-case id is an error"
     prof get "$PMCP_PROFILE" no.such.key; prof_is 1 "get: unknown key is an error"
     prof pins "$PMCP_PROFILE"; prof_is 0 "pins"
-    [ "$(wc -l < "$W/pout" | tr -d ' ')" = 6 ] && [ "$(sed -n 1p "$W/pout" | cut -d' ' -f1)" = "$(pf lsd_jxe.file)" ] && ok "pins: lsd.jxe and the five stock files" || bad "pins: $(cat "$W/pout")"
+    # (a profile with toolbox_nai: the live lsd.sh is no plain pin, see "lsd" below)
+    [ "$(wc -l < "$W/pout" | tr -d ' ')" = "$([ "$HAS_TBX" = yes ] && echo 5 || echo 6)" ] && [ "$(sed -n 1p "$W/pout" | cut -d' ' -f1)" = "$(pf lsd_jxe.file)" ] && ok "pins: lsd.jxe and the stock files" || bad "pins: $(cat "$W/pout")"
     # the pinned backup files really are what the profile says (the build and install.sh trust these)
     pins_bad=0
     while read -r rel want; do
         [ "$(h "$BKROOT/$rel")" = "$want" ] || { pins_bad=1; echo "       | backup file differs from its pin: $rel"; }
     done < "$W/pout"
     [ $pins_bad = 0 ] && ok "backup files match the profile pins" || bad "backup files differ from the profile pins"
+    prof lsd "$PMCP_PROFILE"; prof_is 0 "lsd rows"
+    live_lsd=$(h "$BK/eso/hmi/lsd/lsd.sh")
+    if [ "$HAS_TBX" = yes ]; then
+        [ "$(wc -l < "$W/pout" | tr -d ' ')" = 4 ] && ok "lsd: stock, stock_copy, toolbox_lsd, toolbox_jar" || bad "lsd rows: $(cat "$W/pout")"
+        while read -r kind rel want; do
+            case "$kind" in
+                stock_copy|toolbox_jar) [ ! -f "$BKROOT/$rel" ] || [ "$(h "$BKROOT/$rel")" = "$want" ] && ok "backup $kind matches (or absent)" || bad "backup $kind differs: $rel" ;;
+                stock) [ "$live_lsd" = "$want" ] || [ "$live_lsd" = "$(pf toolbox_nai.lsd_sh | sed -n 1p)" ] \
+                           && ok "backup lsd.sh is the factory or the Toolbox file" || bad "backup lsd.sh is neither: $live_lsd" ;;
+            esac
+        done < "$W/pout"
+        [ -n "$FACTORY_LSD_SRC" ] && ok "the backup holds the factory lsd.sh text ($(basename "$FACTORY_LSD_SRC"))" || bad "no factory lsd.sh text in the backup"
+        # both Toolbox files also have the SHA-1 the unit computes
+        if [ "$live_lsd" = "$(pf toolbox_nai.lsd_sh | sed -n 1p)" ]; then
+            [ "$(shasum -a 1 < "$BK/eso/hmi/lsd/lsd.sh" | cut -d' ' -f1)" = "$(pf toolbox_nai.sha1.lsd_sh)" ] \
+                && [ "$(shasum -a 1 < "$BK/$(pf toolbox_nai.jar | sed -n 1p)" | cut -d' ' -f1)" = "$(pf toolbox_nai.sha1.jar)" ] \
+                && ok "Toolbox files: SHA-1 of the profile" || bad "Toolbox files: SHA-1 differs from the profile"
+        fi
+    else
+        [ "$(wc -l < "$W/pout" | tr -d ' ')" = 1 ] && [ "$(cut -d' ' -f3 < "$W/pout")" = "$live_lsd" ] && ok "lsd: the live lsd.sh is the factory pin" || bad "lsd rows: $(cat "$W/pout")"
+    fi
     # a broken profile is refused: work on a copy of scripts/profile.py and the profile (profile.py reads profiles/ next to it)
     cat > "$W/mut.py" <<'PY'
 import json, sys
@@ -222,6 +276,17 @@ PY
     pt_refused "absolute stock path" profile.json 'd["stock"]["LSD"][0] = "/x"'
     pt_refused "stock key missing" profile.json 'del d["stock"]["GAL"]'
     pt_refused "lsd.sh state list without stock first" profile.json 'd["lsd_sh_states"] = ["toolbox_nai"]'
+    if [ "$HAS_TBX" = yes ]; then
+        pt_refused "toolbox_nai: jar sha1 wrong" profile.json 'd["toolbox_nai"]["sha1"]["jar"] = "00"'
+        pt_refused "toolbox_nai: lsd.sh hash in capitals" profile.json 'd["toolbox_nai"]["lsd_sh"][0] = d["toolbox_nai"]["lsd_sh"][0].upper()'
+        pt_refused "toolbox_nai: line does not name the jar" profile.json 'd["toolbox_nai"]["line"] = "BOOTCLASSPATH=\"$BOOTCLASSPATH -Xbootclasspath/p:x.jar\""'
+        pt_refused "toolbox_nai: line with a newline" profile.json 'd["toolbox_nai"]["line"] += "\nrm -rf /"'
+        pt_refused "toolbox_nai: factory_lsd with .." profile.json 'd["toolbox_nai"]["factory_lsd"] = "../x"'
+        pt_refused "toolbox_nai: key missing (jar)" profile.json 'del d["toolbox_nai"]["jar"]'
+        pt_refused "toolbox_nai kept without the lsd.sh state" profile.json 'd["lsd_sh_states"] = ["stock"]'
+    else
+        pt_refused "toolbox_nai set without the lsd.sh state" profile.json 'd["toolbox_nai"] = {"x": 1}'
+    fi
     pt_refused "bad version_tag" profile.json 'd["version_tag"] = "MU 1"'
     pt_refused "bad mathsls commit" profile.json 'd["mathsls_commit"] = "abc"'
     # review 2026-11-12: values that reach pmcp.sh or a path must be exactly shaped
@@ -233,14 +298,26 @@ PY
     pt_refused "backup_dir not MU<mu>" profile.json 'd["backup_dir"] = "MU0000"'
     pt_refused "duplicate jar pin" profile.json 'd["lsd_jar_sha256"].append(d["lsd_jar_sha256"][0])'
     pt_refused "empty package list" profile.json 'd["packages"] = []'
-    pt_refused "history jar outside jars/" history.json 'd["java_old"][0]["jar"] = "../x.jar"'
-    pt_refused "history unknown successor" history.json 'd["java_old"][0]["successor"] = "zz"'
-    pt_refused "history duplicate row" history.json 'd["rg_known"].append(dict(d["rg_known"][0]))'
-    pt_refused "history: sha1 wrong" history.json 'd["java_old"][0]["sha1"] = "00"'
-    pt_refused "history: sha256 in capitals" history.json 'd["rg_known"][0]["sha256"] = d["rg_known"][0]["sha256"].upper()'
-    pt_refused "history: AA set with 3 files" history.json 'd["aa_old"][0]["files"].pop()'
-    pt_refused "history: unknown key" history.json 'd["java_old"][0]["extra"] = 1'
-    pt_refused "history: top-level key missing" history.json 'del d["rg_known"]'
+    hist_n() { python3 -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))[sys.argv[2]]))' "$PROJ/profiles/$PMCP_PROFILE/history.json" "$1"; }
+    if [ "$(hist_n java_old)" -gt 0 ] && [ "$(hist_n rg_known)" -gt 0 ] && [ "$(hist_n aa_old)" -gt 0 ]; then
+        pt_refused "history jar outside jars/" history.json 'd["java_old"][0]["jar"] = "../x.jar"'
+        pt_refused "history unknown successor" history.json 'd["java_old"][0]["successor"] = "zz"'
+        pt_refused "history duplicate row" history.json 'd["rg_known"].append(dict(d["rg_known"][0]))'
+        pt_refused "history: sha1 wrong" history.json 'd["java_old"][0]["sha1"] = "00"'
+        pt_refused "history: sha256 in capitals" history.json 'd["rg_known"][0]["sha256"] = d["rg_known"][0]["sha256"].upper()'
+        pt_refused "history: AA set with 3 files" history.json 'd["aa_old"][0]["files"].pop()'
+        pt_refused "history: unknown key" history.json 'd["java_old"][0]["extra"] = 1'
+        pt_refused "history: top-level key missing" history.json 'del d["rg_known"]'
+    else
+        # a profile without earlier cards (empty history lists): the same checks on an entry added to each list
+        pt_refused "history: java_old entry with a bad sha1" history.json 'd["java_old"].append({"name": "rg", "sha256": "0"*64, "sha1": "00", "size": 1, "jar": "pmcp-x.jar", "successor": "rg"})'
+        pt_refused "history: java_old entry outside jars/" history.json 'd["java_old"].append({"name": "rg", "sha256": "0"*64, "sha1": "0"*40, "size": 1, "jar": "../x.jar", "successor": "rg"})'
+        pt_refused "history: java_old unknown successor" history.json 'd["java_old"].append({"name": "rg", "sha256": "0"*64, "sha1": "0"*40, "size": 1, "jar": "pmcp-x.jar", "successor": "zz"})'
+        pt_refused "history: rg_known entry in capitals" history.json 'd["rg_known"].append({"kind": "DRIVER", "sha256": "A"*64, "sha1": "0"*40, "size": 1})'
+        pt_refused "history: AA set with 3 files" history.json 'd["aa_old"].append({"mode": "gamma", "files": [["0"*64, "0"*40, 1]]*3})'
+        pt_refused "history: unknown key" history.json 'd["surprise"] = 1'
+        pt_refused "history: top-level key missing" history.json 'del d["rg_known"]'
+    fi
     pt_fresh; rm "$W/pt/profiles/$PMCP_PROFILE/history.json"; python3 -I "$W/pt/scripts/profile.py" validate > "$W/pout" 2>&1; echo $? > "$W/prc"
     prof_is 1 "refused: no history.json"
     pt_fresh; echo '{' > "$W/pt/profiles/$PMCP_PROFILE/profile.json"; python3 -I "$W/pt/scripts/profile.py" validate > "$W/pout" 2>&1; echo $? > "$W/prc"
@@ -277,10 +354,18 @@ PY
 
     echo "[3] install map-clean (stage A: video only)"
     run install map-clean; rc_is 0; expect_out "PMCP_INSTALL_OK stage=A variant=map-clean" "install ok"
-    [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = $STOCK_LSD ] && ok "lsd.sh still factory" || bad "lsd.sh changed in stage A"
-    [ ! -e "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" ] && ok "no NAI jar in stage A" || bad "NAI jar in stage A"
+    [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = $INIT_LSD ] && ok "lsd.sh unchanged in stage A ($LSD_TEST_STATE)" || bad "lsd.sh changed in stage A"
+    if [ "$LSD_TEST_STATE" = toolbox_nai ]; then
+        [ "$(h "$U/carplaymaps/rollback/lsd.sh")" = $STOCK_LSD ] && ok "rollback/lsd.sh is the FACTORY text (from the card)" || bad "rollback/lsd.sh is not factory"
+        [ "$(h "$U/carplaymaps/rollback/toolbox-nai/lsd.sh")" = $TBX_LSD_SHA ] && ok "Toolbox lsd.sh saved (audit)" || bad "Toolbox lsd.sh copy"
+        [ "$(h "$U/carplaymaps/rollback/toolbox-nai/$TBX_JAR_NAME")" = $TBX_JAR_SHA ] && ok "Toolbox jar saved (audit)" || bad "Toolbox jar copy"
+        [ "$(h "$U/eso/hmi/lsd/jars/$TBX_JAR_NAME")" = $TBX_JAR_SHA ] && ok "Toolbox jar still in place" || bad "Toolbox jar touched in stage A"
+    else
+        [ ! -e "$U/carplaymaps/rollback/toolbox-nai" ] && ok "factory unit: no Toolbox copies" || bad "Toolbox copies on a factory unit"
+    fi
+    [ ! -e "$U/eso/hmi/lsd/jars/$NAIJAR" ] && ok "no NAI jar in stage A" || bad "NAI jar in stage A"
     [ "$(h "$U/eso/bin/apps/dio_manager")" = 8c12f6974adf9c8c9eb746e7d033e7fb35a9605e49c31ff2129e8ba938b2633d ] && ok "dio_manager is wrapper" || bad "dio_manager"
-    [ "$(h "$U/carplaymaps/stock_first/dio_manager.real")" = 609e42723ab3e36c7be5ceade81e03672ba4acd251f8eeb8b100e074aaf3c250 ] && ok "factory dio saved" || bad "factory dio copy"
+    [ "$(h "$U/carplaymaps/stock_first/dio_manager.real")" = $STOCK_DIO ] && ok "factory dio saved" || bad "factory dio copy"
     [ "$(h "$U/carplaymaps/core.so")" = c5f4870427d6d24bf78908497beb27e4e881d64374b58c564e7395d809efe2f4 ] && ok "core.so map-clean" || bad "core.so"
     [ -e "$U/carplaymaps/CLUSTER_AUTO_ENABLE" ] && ok "auto-enable marker" || bad "marker"
     ls -a "$U" | grep -q '^\.carplaymaps-new' && bad "staging dir left behind" || ok "no staging leftovers"
@@ -289,26 +374,31 @@ PY
     echo "[3b] java-on nai, confirm, retry"
     run java-on nai; rc_is 0; expect_out "PMCP_JAVA_ON_OK package=nai set=$NAI" "java-on ok"
     [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = "$LSD_JAVA" ] && ok "lsd.sh has the pmcp block" || bad "lsd.sh"
-    [ "$(h "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar")" = $NAI_SHA ] && ok "NAI jar" || bad "NAI jar"
-    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI NavActiveIgnore.jar" ] && ok "HMI_BOOT = set id + JARs" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
+    if [ $HAS_TBX = yes ]; then
+        grep -q "jars/$TBX_JAR_NAME" "$U/eso/hmi/lsd/lsd.sh" && bad "lsd.sh still loads the Toolbox jar" || ok "lsd.sh: the Toolbox line is gone"
+        [ ! -e "$U/eso/hmi/lsd/jars/$TBX_JAR_NAME" ] || [ "$(h "$U/eso/hmi/lsd/jars/$TBX_JAR_NAME")" = $TBX_JAR_SHA ] && ok "Toolbox jar not changed (kept in place when it was there)" || bad "Toolbox jar changed"
+        [ "$LSD_TEST_STATE" != toolbox_nai ] || [ -e "$U/eso/hmi/lsd/jars/$TBX_JAR_NAME" ] && ok "Toolbox jar not deleted" || bad "Toolbox jar deleted"
+    fi
+    [ "$(h "$U/eso/hmi/lsd/jars/$NAIJAR")" = $NAI_SHA ] && ok "NAI jar" || bad "NAI jar"
+    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI $NAIJAR" ] && ok "HMI_BOOT = set id + JARs" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
     run status; expect_out "Unit state: JAVA" "state JAVA"
     run java-on nai; rc_is 1; expect_out "JAVA_PACKAGE_ALREADY_ON_nai" "second java-on refused"
     run java-confirm; rc_is 1; expect_out "NO_TRIAL_BOOT_YET_FOR_SET" "confirm before any boot refused"
     # review 1, finding 2: confirm only during the trial boot of this set
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI jars=/X/lsd/jars/NavActiveIgnore.jar" ] && ok "boot 1: trial" || bad "boot 1: $o"
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI jars=/X/lsd/jars/$NAIJAR" ] && ok "boot 1: trial" || bad "boot 1: $o"
     o=$(unit_boot); [ "$o" = "boot=no set=$NAI jars=" ] && ok "boot 2 without confirm: factory" || bad "boot 2: $o"
     run java-confirm; rc_is 1; expect_out "NOT_IN_TRIAL_BOOT_OF_THIS_SET" "confirm on the factory boot after an unconfirmed trial refused"
     o=$(unit_boot); [ "$o" = "boot=no set=$NAI jars=" ] && ok "still factory (nothing confirmed)" || bad "boot 3: $o"
     run java-retry; rc_is 0; [ ! -e "$W/unit/mnt/persist/pmcp/trial.$NAI" ] && ok "retry clears trial" || bad "trial left"
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI jars=/X/lsd/jars/NavActiveIgnore.jar" ] && ok "after retry: trial again" || bad "retry boot: $o"
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI jars=/X/lsd/jars/$NAIJAR" ] && ok "after retry: trial again" || bad "retry boot: $o"
     o=$(unit_boot swdl); [ "$o" = "boot=no set= jars=" ] && ok "update mode (RUN_MODE=swdl): block loads nothing" || bad "swdl boot: $o"
     run java-confirm; rc_is 1; expect_out "NOT_IN_TRIAL_BOOT_OF_THIS_SET" "update-mode boot cleared last-boot: no confirm"
     o=$(unit_boot); [ "$o" = "boot=no set=$NAI jars=" ] && ok "trial used up" || bad "boot: $o"
-    run java-retry; rc_is 0; o=$(unit_boot); [ "$o" = "boot=trial set=$NAI jars=/X/lsd/jars/NavActiveIgnore.jar" ] && ok "trial again" || bad "boot: $o"
+    run java-retry; rc_is 0; o=$(unit_boot); [ "$o" = "boot=trial set=$NAI jars=/X/lsd/jars/$NAIJAR" ] && ok "trial again" || bad "boot: $o"
     run java-confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$NAI" "confirm during the trial boot"
     [ -e "$W/unit/mnt/persist/pmcp/ok.$NAI" ] && ok "ok marker" || bad "ok marker"
     run java-confirm; rc_is 1; expect_out "SET_ALREADY_CONFIRMED" "second confirm refused"
-    o=$(unit_boot); [ "$o" = "boot=yes set=$NAI jars=/X/lsd/jars/NavActiveIgnore.jar" ] && ok "confirmed set loads on every boot" || bad "boot: $o"
+    o=$(unit_boot); [ "$o" = "boot=yes set=$NAI jars=/X/lsd/jars/$NAIJAR" ] && ok "confirmed set loads on every boot" || bad "boot: $o"
     touch "$W/unit/mnt/persist/pmcp/DISABLED"; o=$(unit_boot); [ "$o" = "boot=no set= jars=" ] && ok "DISABLED: factory boot" || bad "DISABLED boot: $o"
     run java-confirm; rc_is 1; expect_out "JAVA_DISABLED_BY_RESCUE_CARD" "confirm refused while DISABLED"
     rm "$W/unit/mnt/persist/pmcp/DISABLED"
@@ -317,46 +407,63 @@ PY
 
     echo "[3c] java-off nai back to stage A, then on again"
     run java-off nai; rc_is 0; expect_out "PMCP_JAVA_OFF_OK" "java-off ok"
-    [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = $STOCK_LSD ] && ok "lsd.sh factory again" || bad "lsd.sh"
-    [ ! -e "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" ] && ok "NAI jar removed" || bad "NAI jar left"
+    [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = $STOCK_LSD ] && ok "lsd.sh factory again (never back to the Toolbox lsd.sh)" || bad "lsd.sh"
+    [ ! -e "$U/eso/hmi/lsd/jars/$NAIJAR" ] && ok "NAI jar removed" || bad "NAI jar left"
     run status; expect_out "Unit state: VIDEO" "back to VIDEO"
     run java-off nai; rc_is 1; expect_out "JAVA_OFF_NEEDS_JAVA_STATE_VIDEO" "java-off on VIDEO refused"
     run java-on nai; rc_is 0
     installed=$(snapshot "$W/unit")
 
-    echo "[3d] two Java packages: order, set id, removing one keeps the other"
-    run java-on np; rc_is 0; expect_out "set=$NAI+$NP" "set id for nai+np"
-    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI+$NP NavActiveIgnore.jar pmcp-np2.jar" ] && ok "HMI_BOOT in catalog order" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
-    # regression (2026-10-21): a helper overwrote the caller's "f", so the np JAR was staged as NavActiveIgnore.jar
-    [ "$(h "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar")" = $NAI_SHA ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-np2.jar")" = $NP_SHA ] \
+    if [ $HAS_NP = no ]; then
+    echo "[3m] two Java packages without np: nai + zoom, order, set id, removing one keeps the other"
+    ZJAR=$(sed -n 's/^JAR_zoom [0-9a-f]* [0-9]* jars\/\(.*\)$/\1/p' "$SDB/pmcp/pmcp.sh")
+    run java-on zoom; rc_is 0; expect_out "set=$NAI+$ZOOM" "set id for nai+zoom"
+    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI+$ZOOM $NAIJAR $ZJAR" ] && ok "HMI_BOOT in catalog order" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
+    [ "$(h "$U/eso/hmi/lsd/jars/$NAIJAR")" = $NAI_SHA ] && [ "$(h "$U/eso/hmi/lsd/jars/$ZJAR")" = "$(jsha zoom)" ] \
         && ok "each JAR under its own name with its own hash" || bad "JAR names/hashes mixed up"
     run java-off nai; rc_is 0
-    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NP pmcp-np2.jar" ] && [ ! -e "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" ] && ok "nai off, np stays" || bad "after nai off"
+    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$ZOOM $ZJAR" ] && [ ! -e "$U/eso/hmi/lsd/jars/$NAIJAR" ] && ok "nai off, zoom stays" || bad "after nai off"
+    [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = "$LSD_JAVA" ] && ok "lsd.sh keeps the block while a package is on" || bad "lsd.sh"
+    run status; expect_out "Unit state: JAVA" "still JAVA"
+    run java-on nai; rc_is 0; expect_out "set=$NAI+$ZOOM" "same set id again (catalog order)"
+    run java-off zoom; rc_is 0; [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI $NAIJAR" ] && ok "zoom off, nai stays" || bad "after zoom off"
+    installed=$(snapshot "$W/unit")
+    fi
+    if [ $HAS_NP = yes ]; then
+    echo "[3d] two Java packages: order, set id, removing one keeps the other"
+    run java-on np; rc_is 0; expect_out "set=$NAI+$NP" "set id for nai+np"
+    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI+$NP $NAIJAR pmcp-np2.jar" ] && ok "HMI_BOOT in catalog order" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
+    # regression (2026-10-21): a helper overwrote the caller's "f", so the np JAR was staged as $NAIJAR
+    [ "$(h "$U/eso/hmi/lsd/jars/$NAIJAR")" = $NAI_SHA ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-np2.jar")" = $NP_SHA ] \
+        && ok "each JAR under its own name with its own hash" || bad "JAR names/hashes mixed up"
+    run java-off nai; rc_is 0
+    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NP pmcp-np2.jar" ] && [ ! -e "$U/eso/hmi/lsd/jars/$NAIJAR" ] && ok "nai off, np stays" || bad "after nai off"
     [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = "$LSD_JAVA" ] && ok "lsd.sh keeps the block while a package is on" || bad "lsd.sh"
     run status; expect_out "Unit state: JAVA" "still JAVA"
     run java-on nai; rc_is 0; expect_out "set=$NAI+$NP" "same set id again (catalog order)"
     installed=$(snapshot "$W/unit")
 
+    fi
     echo "[3e] route guidance (package E): system part and Java package"
     run java-on rg; rc_is 1; expect_out "JAVA_RG_NEEDS_RG_SYSTEM_ON" "java rg refused without RG system"
     run rg-system-on; rc_is 0; expect_out "PMCP_RG_SYSTEM_ON_OK" "rg-system-on ok"
-    [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = 519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3 ] && ok "patched driver active" || bad "driver"
-    [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = c61407d9c6cd0d2529afedad0c9a120d5da5a504739e273bbb3dbea1e0b9b491 ] && ok "iap2.cfg with [ident]" || bad "cfg"
+    [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = $RG_DRV_SHA ] && ok "patched driver active" || bad "driver"
+    [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = $RG_CFG_SHA ] && ok "iap2.cfg with [ident]" || bad "cfg"
     run rg-system-on; rc_is 1; expect_out "RG_SYSTEM_ALREADY_ON" "second rg-system-on refused"
-    run java-on rg; rc_is 0; expect_out "set=$NAI+$NP+$RG" "set with rg"
+    run java-on rg; rc_is 0; expect_out "set=$NAI${ID_NP}+$RG" "set with rg"
     run rg-system-off; rc_is 1; expect_out "TURN_OFF_JAVA_PACKAGE_RG_FIRST" "rg-system-off refused while JAR rg on"
     run status; expect_out "Route guidance system: on" "status shows RG on"
     run java-off rg; rc_is 0
     run rg-system-off; rc_is 0; expect_out "PMCP_RG_SYSTEM_OFF_OK" "rg-system-off ok"
-    [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = 7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c ] && ok "factory driver back" || bad "driver not factory"
-    [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37 ] && ok "factory cfg back" || bad "cfg not factory"
+    [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = $STOCK_DRV ] && ok "factory driver back" || bad "driver not factory"
+    [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = $STOCK_CFG ] && ok "factory cfg back" || bad "cfg not factory"
     run rg-system-on; rc_is 0; run java-on rg; rc_is 0
 
     echo "[3f] packages F (zoom) and G (day/night)"
     run java-on zoom; rc_is 0
-    run java-on dn; rc_is 0; expect_out "set=$NAI+$NP+$RG+$ZOOM+$DN" "all five packages in catalog order"
-    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI+$NP+$RG+$ZOOM+$DN NavActiveIgnore.jar pmcp-np2.jar pmcp-guidance7.jar pmcp-zoom.jar pmcp-dn.jar" ] && ok "HMI_BOOT with five JARs" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
-    run status; expect_out "Unit state: JAVA" "JAVA with five packages (set names parsed from HMI_BOOT)"
+    run java-on dn; rc_is 0; expect_out "set=$NAI${ID_NP}+$RG+$ZOOM+$DN" "all packages in catalog order"
+    [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$NAI${ID_NP}+$RG+$ZOOM+$DN $NAIJAR$J_NP pmcp-guidance7.jar pmcp-zoom.jar pmcp-dn.jar" ] && ok "HMI_BOOT with all JARs" || bad "HMI_BOOT: $(cat "$U/carplaymaps/HMI_BOOT")"
+    run status; expect_out "Unit state: JAVA" "JAVA with all packages (set names parsed from HMI_BOOT)"
     run java-off zoom; rc_is 0; [ ! -e "$U/eso/hmi/lsd/jars/pmcp-zoom.jar" ] && ok "zoom off" || bad "zoom jar left"
     run java-on zoom; rc_is 0
     installed=$(snapshot "$W/unit")
@@ -432,7 +539,7 @@ PY
     echo "[13a] rescue-card result (factory lsd.sh, JAR gone, DISABLED): VIDEO, java-on again works, restore completes"
     fresh_unit; factory=$(snapshot "$W/unit")
     run install map-clean-l40; rc_is 0; run java-on nai; rc_is 0
-    cp "$BK/eso/hmi/lsd/lsd.sh" "$U/eso/hmi/lsd/lsd.sh"; rm "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar"
+    cp "$FACTORY_LSD_SRC" "$U/eso/hmi/lsd/lsd.sh"; rm "$U/eso/hmi/lsd/jars/$NAIJAR"
     mkdir -p "$W/unit/mnt/persist/pmcp"; touch "$W/unit/mnt/persist/pmcp/DISABLED"
     run status; expect_out "Unit state: VIDEO" "VIDEO after rescue (video still installed)"
     run java-on nai; rc_is 0; [ ! -e "$W/unit/mnt/persist/pmcp/DISABLED" ] && ok "java-on clears DISABLED" || bad "DISABLED left"
@@ -466,7 +573,7 @@ PY
     echo "[13c] JAR with a wrong hash in the unit: not JAVA, restore still works"
     fresh_unit; factory=$(snapshot "$W/unit")
     run install map-clean; rc_is 0; run java-on nai; rc_is 0
-    printf 'Z' | dd of="$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" bs=1 seek=100 conv=notrunc 2>/dev/null
+    printf 'Z' | dd of="$U/eso/hmi/lsd/jars/$NAIJAR" bs=1 seek=100 conv=notrunc 2>/dev/null
     run status; expect_out "Unit state: PARTIAL" "tampered JAR detected"
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "factory tree" || bad "tree differs"
@@ -492,8 +599,8 @@ PY
         fi
         if [ "$(basename "$m")" = features-on.sh ]; then
             acts=$(sed -n 's/^for A in \(.*\); do$/\1/p' "$m")
-            [ "$acts" = "features-reset_ rg-update_ java-update_ rg-system-on_ java-on_nai java-on_np java-on_rg java-on_zoom java-on_dn java-on_ui" ] && grep -q '^PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh$' "$m" \
-                && ok "button 4: reset of unsupported files, updates, RG system, then nai np rg zoom dn ui (map and AA stay)" || bad "features-on actions: $acts"
+            [ "$acts" = "features-reset_ rg-update_ java-update_ rg-system-on_ java-on_nai$([ $HAS_NP = yes ] && echo ' java-on_np') java-on_rg java-on_zoom java-on_dn$([ $HAS_UI = yes ] && echo ' java-on_ui')" ] && grep -q '^PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh$' "$m" \
+                && ok "button 4: reset of unsupported files, updates, RG system, then the packages of the profile (map and AA stay)" || bad "features-on actions: $acts"
             continue
         fi
         args=$(sed -n 's#^/bin/ksh /net/mmx/fs/sda0/pmcp/pmcp.sh ##p' "$m")
@@ -517,15 +624,15 @@ PY
         && ok "main install button 2 is map-square-fps40" || bad "main install button"
     [ ! -e "$SDB/pmcp/menu/install-map-square-fps40.sh" ] && ok "no second install button for the main layout" || bad "install-map-square-fps40 button left"
     main=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    [ "$main" = "menu/verify.sh menu/map-install.sh menu/aa-install.sh menu/features-on.sh menu/confirm.sh menu/retry.sh menu/status.sh menu/restore.sh " ] \
+    [ "$main" = "menu/verify.sh menu/map-install.sh $([ $HAS_AA = yes ] && echo 'menu/aa-install.sh ')menu/features-on.sh menu/confirm.sh menu/retry.sh menu/status.sh menu/restore.sh " ] \
         && ok "main screen: 1 check, 2 CarPlay, 3 Android Auto, 4 features, 5 confirm, 6 try again, 7 status, 8 remove" || bad "main screen: $main"
     labels=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | awk '/^script/{s=1;next} s&&/^    label/{print substr($0,14,1);s=0}' | tr -d '\n')
-    [ "$labels" = 12345678 ] && ok "main screen buttons numbered 1-8" || bad "main numbering: $labels"
+    [ "$labels" = "$([ $HAS_AA = yes ] && echo 12345678 || echo 1245678)" ] && ok "main screen buttons numbered 1-8 (3 is Android Auto: only with the aa package)" || bad "main numbering: $labels"
     scr=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,$p' | grep '^screen' | tr '\n' '|')
-    [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen features_advanced pmcp_advanced|screen carplay_advanced pmcp_advanced|screen aa_advanced pmcp_advanced|" ] \
+    [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen features_advanced pmcp_advanced|screen carplay_advanced pmcp_advanced|$([ $HAS_AA = yes ] && echo 'screen aa_advanced pmcp_advanced|')" ] \
         && ok "screens: pmcp_stream_map_aid > pmcp_advanced > features / carplay / aa_advanced" || bad "screens: $scr"
     feat=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen carplay_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/log-clear.sh menu/speedlimit-status.sh menu/rg-system-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh ") ok "features_advanced: diagnostics, CarPlay log, speed-limit status only (mode on the page), RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
+    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/log-clear.sh menu/speedlimit-status.sh menu/rg-system-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh $([ $HAS_UI = yes ] && echo 'menu/java-on-ui.sh ')"*"menu/java-off-sl.sh $([ $HAS_UI = yes ] && echo 'menu/java-off-ui.sh ')") ok "features_advanced: diagnostics, CarPlay log, speed-limit status only (mode on the page), RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
     for _m in speedlimit-on speedlimit-cpi speedlimit-off; do
         [ ! -e "$SDB/pmcp/menu/$_m.sh" ] && ! grep -q "menu/$_m.sh" "$SDB/esd/Launcher-sda0.esd" && ok "no GEM button $_m (mode set on the page)" \
             || bad "GEM speed-limit mode button $_m still there"
@@ -543,6 +650,16 @@ PY
         pmcp-0.7.0-exp-$VTAG-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "experimental version carries a build id: $v" ;;
         *) bad "version $v" ;; esac
     aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen aa_advanced/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+    if [ $HAS_AA = no ]; then
+        # no Android Auto package: no AA screen, no AA button, no AA payload, and the main text says it
+        [ -z "$aa" ] && ! ls "$SDB"/pmcp/menu/ | grep -q '^aa-' && ! grep -q 'aa_advanced\|menu/aa-' "$SDB/esd/Launcher-sda0.esd" \
+            && ok "menu: no Android Auto screen or button" || bad "Android Auto in the menu of a profile without it: $aa"
+        grep -q "3. Android Auto: not available for this unit ($PMCP_PROFILE)" <(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd") && ok "menu says Android Auto is not available" || bad "menu: no note about Android Auto"
+        grep -q '^AA_\|^AAX_' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && bad "AA payload keys in a profile without aa" || ok "manifest: no Android Auto files"
+        [ ! -e "$SDB/pmcp/payload/aa" ] && ok "payload: no aa/ directory" || bad "payload/aa exists"
+        if [ $HAS_NP = no ]; then [ ! -e "$SDB/pmcp/menu/java-on-np.sh" ] && ok "menu: no np button" || bad "np button"; fi
+        if [ $HAS_UI = no ]; then [ ! -e "$SDB/pmcp/menu/java-on-ui.sh" ] && ok "menu: no ui button" || bad "ui button"; fi
+    else
     case "$v" in
     *-exp-*)
         [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh menu/aa-capture-60.sh menu/aa-capture-off.sh " ] \
@@ -555,6 +672,7 @@ PY
         grep -qi 'experimental\|rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says experimental or rg-aa" || ok "menu: no 'experimental', no rg-aa"
         grep -q '^AAX_' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && bad "release card carries AAX_ keys" || ok "release card: no experimental AA set" ;;
     esac
+    fi
     grep -q 'pmcp_CarPlay_AID\|pmcp_android_auto\|pmcp_packages\|pmcp_other_layouts\|pmcp_switch_layout' "$SDB/esd/Launcher-sda0.esd" && bad "old screen names left" || ok "no old screen names"
     grep -q '"java-on rg-aa\|java-on-rg-aa' "$SDB/esd/Launcher-sda0.esd" "$SDB"/pmcp/menu/*.sh && bad "rg-aa button left" || ok "no rg-aa package button"
     grep -q "$v" "$SDB/esd/Launcher-sda0.esd" && [ "$(head -1 "$SDB/BUILD-MANIFEST.txt")" = "$v" ] && ok "same id in GEM and BUILD-MANIFEST" || bad "version id mismatch"
@@ -564,7 +682,7 @@ PY
     sed -n '/^# >>> pmcp: CarPlay AID mod/,/^# <<< pmcp/p' "$SDB/pmcp/payload/lsd/lsd.sh" > "$B/pre.sh"
     [ "$(grep -c '' "$B/pre.sh")" -gt 10 ] && ok "block extracted" || bad "block not found"
     [ "$(grep -c '>>> pmcp' "$SDB/pmcp/payload/lsd/lsd.sh")" = 1 ] && ok "exactly one pmcp block (no watcher after J9)" || bad "pmcp block count"
-    diff <(cat "$BK/eso/hmi/lsd/lsd.sh") <(sed '/^# >>> pmcp: CarPlay AID mod/,/^# <<< pmcp/d' "$SDB/pmcp/payload/lsd/lsd.sh") >/dev/null \
+    diff <(cat "$FACTORY_LSD_SRC") <(sed '/^# >>> pmcp: CarPlay AID mod/,/^# <<< pmcp/d' "$SDB/pmcp/payload/lsd/lsd.sh") >/dev/null \
         && ok "patched lsd.sh = factory + the block only" || bad "lsd.sh differs outside the block"
     # boot [RUN_MODE] -> prints BOOTCLASSPATH
     boot() {
@@ -574,18 +692,18 @@ PY
         } > "$B/run.sh"
         $SH "$B/run.sh" 2>&1
     }
-    echo "nai-823adeb0 NavActiveIgnore.jar" > "$B/app/carplaymaps/HMI_BOOT"
-    o=$(boot); case "$o" in *"/p:/ramdisk/hmi/lsd/jars/NavActiveIgnore.jar"*) ok "boot 1 (trial) loads the JAR" ;; *) bad "boot 1: $o" ;; esac
+    echo "nai-823adeb0 $NAIJAR" > "$B/app/carplaymaps/HMI_BOOT"
+    o=$(boot); case "$o" in *"/p:/ramdisk/hmi/lsd/jars/$NAIJAR"*) ok "boot 1 (trial) loads the JAR" ;; *) bad "boot 1: $o" ;; esac
     [ "$(cat "$B/persist/pmcp/last-boot")" = "set=nai-823adeb0 use=trial" ] && ok "last-boot says trial" || bad "last-boot: $(cat "$B/persist/pmcp/last-boot")"
     [ ! -e "$B/persist/pmcp/ok.nai-823adeb0" ] && ok "no automatic ok" || bad "ok written without the user"
     o=$(boot); case "$o" in *"/p:"*) bad "unconfirmed trial loaded again: $o" ;; *) ok "boot 2 without confirm is factory" ;; esac
     [ "$(cat "$B/persist/pmcp/last-boot")" = "set=nai-823adeb0 use=no" ] && ok "last-boot says no" || bad "last-boot: $(cat "$B/persist/pmcp/last-boot")"
     touch "$B/persist/pmcp/ok.nai-823adeb0"
-    o=$(boot); case "$o" in *NavActiveIgnore*) ok "confirmed set loads" ;; *) bad "confirmed: $o" ;; esac
+    o=$(boot); case "$o" in *"$NAIJAR"*) ok "confirmed set loads" ;; *) bad "confirmed: $o" ;; esac
     o=$(boot swdl); case "$o" in *"/p:"*) bad "update mode loaded JARs: $o" ;; *) ok "RUN_MODE=swdl: factory boot even with ok" ;; esac
     [ ! -e "$B/persist/pmcp/last-boot" ] && ok "update mode removes last-boot" || bad "last-boot left in update mode"
-    echo "nai-823adeb0+np-11111111 NavActiveIgnore.jar pmcp-np.jar" > "$B/app/carplaymaps/HMI_BOOT"
-    o=$(boot); case "$o" in *"NavActiveIgnore.jar:/ramdisk/hmi/lsd/jars/pmcp-np.jar"*) ok "new set: trial loads both JARs" ;; *) bad "new set trial: $o" ;; esac
+    echo "nai-823adeb0+np-11111111 $NAIJAR pmcp-np.jar" > "$B/app/carplaymaps/HMI_BOOT"
+    o=$(boot); case "$o" in *"$NAIJAR:/ramdisk/hmi/lsd/jars/pmcp-np.jar"*) ok "new set: trial loads both JARs" ;; *) bad "new set trial: $o" ;; esac
     o=$(boot); case "$o" in *"/p:"*) bad "unconfirmed trial loaded again: $o" ;; *) ok "next boot after the unconfirmed trial is factory" ;; esac
     touch "$B/persist/pmcp/DISABLED"; rm -f "$B/persist/pmcp/trial."*
     o=$(boot); case "$o" in *"/p:"*) bad "DISABLED ignored: $o" ;; *) ok "DISABLED (rescue card) gives a factory boot" ;; esac
@@ -626,7 +744,7 @@ PY
     fresh_unit; run install map-clean; rc_is 0; run java-on nai; rc_is 0
     rescue
     [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = $STOCK_LSD ] && ok "JAVA unit: factory lsd.sh back" || bad "lsd.sh not restored"
-    [ ! -e "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" ] && ok "JAR removed" || bad "JAR left"
+    [ ! -e "$U/eso/hmi/lsd/jars/$NAIJAR" ] && ok "JAR removed" || bad "JAR left"
     [ -e "$W/unit/mnt/persist/pmcp/DISABLED" ] && ok "DISABLED written" || bad "no DISABLED"
     [ -e "$U/carplaymaps/core.so" ] && [ "$(h "$U/eso/bin/apps/dio_manager")" = 8c12f6974adf9c8c9eb746e7d033e7fb35a9605e49c31ff2129e8ba938b2633d ] \
         && ok "video part left in place" || bad "video part touched"
@@ -636,7 +754,7 @@ PY
     fresh_unit; run install map-clean; rc_is 0; run java-on nai; rc_is 0
     rm "$U/carplaymaps/rollback/lsd.sh"
     rescue
-    [ ! -e "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" ] && [ -e "$W/unit/mnt/persist/pmcp/DISABLED" ] && ok "no factory copy: JAR removed + DISABLED" || bad "fallback failed"
+    [ ! -e "$U/eso/hmi/lsd/jars/$NAIJAR" ] && [ -e "$W/unit/mnt/persist/pmcp/DISABLED" ] && ok "no factory copy: JAR removed + DISABLED" || bad "fallback failed"
     grep -q "RESULT=UNSURE" "$W/med/PMCP_RESCUE_LOG.txt" && ok "honest RESULT=UNSURE when lsd.sh still has our block" || bad "should be NIEPEWNY"
 
     fresh_unit; run install map-clean; rc_is 0; run rg-system-on; rc_is 0; run java-on rg; rc_is 0
@@ -644,8 +762,8 @@ PY
     echo turnto > "$W/unit/mnt/persist/pmcp/native-speedlimit-mode"
     rescue
     [ ! -e "$W/unit/mnt/persist/pmcp/native-speedlimit-mode" ] && ok "speed-limit mode removed (not back after Try again)" || bad "speed-limit mode left"
-    [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = 7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c ] && ok "RG: factory iAP2 driver back" || bad "driver not restored"
-    [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37 ] && ok "RG: factory iap2.cfg back" || bad "cfg not restored"
+    [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = $STOCK_DRV ] && ok "RG: factory iAP2 driver back" || bad "driver not restored"
+    [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = $STOCK_CFG ] && ok "RG: factory iap2.cfg back" || bad "cfg not restored"
     [ ! -e "$U/carplaymaps/rg/SYSTEM_ON" ] && [ ! -e "$W/unit/mnt/persist/pmcp/last-boot" ] && ok "SYSTEM_ON and last-boot removed" || bad "SYSTEM_ON/last-boot left"
     grep -q "RESULT=OK" "$W/med/PMCP_RESCUE_LOG.txt" && ok "RESULT=OK" || bad "no RESULT=OK"
     run java-confirm; rc_is 1; expect_out "JAVA_NEEDS\|JAVA_CONFIRM_NEEDS_JAVA_STATE\|NOT_IN_TRIAL\|DISABLED" "no confirm after a rescue"
@@ -675,14 +793,18 @@ PY
     run map-install map-square-fps40; rc_is 0; expect_out "PMCP_INSTALL_OK stage=A variant=map-square-fps40" "2 on a factory unit installs the map"
     run map-install map-square-fps40; rc_is 0; expect_out "already installed: variant map-square-fps40, nothing changed" "2 again: already installed"
     allon; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "all features on"; expect_out "PMCP_RG_SYSTEM_ON_OK" "RG system on"
-    ALL="$NAI+$NP+$RG+$ZOOM+$DN+$UI"
-    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "one set with all six packages (with ui)" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
+    ALL="$NAI${ID_NP}+$RG+$ZOOM+$DN${ID_UI}"
+    [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "one set with all the packages of the profile" || bad "set: $(cat "$U/carplaymaps/HMI_BOOT")"
     [ -e "$U/carplaymaps/rg/SYSTEM_ON" ] && ok "RG system marker" || bad "no SYSTEM_ON"
-    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance7.jar*pmcp-dn.jar:/X/lsd/jars/pmcp-ui2.jar) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
+    o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*pmcp-guidance7.jar*pmcp-dn.jar$JB_UI) ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$ALL" "one confirm for everything"
+    if [ $HAS_TBX = yes ]; then
+        [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = "$LSD_JAVA" ] && ! grep -q "jars/$TBX_JAR_NAME" "$U/eso/hmi/lsd/lsd.sh" && ok "4: lsd.sh is ours, no Toolbox line" || bad "4: lsd.sh"
+        [ "$LSD_TEST_STATE" != toolbox_nai ] || [ "$(h "$U/eso/hmi/lsd/jars/$TBX_JAR_NAME")" = $TBX_JAR_SHA ] && ok "4: the Toolbox jar is still in place" || bad "4: Toolbox jar"
+    fi
     allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "remove everything: factory state"
-    [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37 ] && ok "factory iap2.cfg back" || bad "cfg after restore"
+    [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = $STOCK_CFG ] && ok "factory iap2.cfg back" || bad "cfg after restore"
     # update a v1.3.0 install (its button 3: map-square-fps40, RG, nai np zoom dn rglu, confirmed) with the same button
     if card_ok "$V13" v1.3.0; then
     fresh_unit; factory=$(snapshot "$W/unit")
@@ -696,7 +818,7 @@ PY
     allon; rc_is 0; expect_out "PMCP_RG_UPDATE_OK" "update: RG driver and reader replaced"
     expect_out "PMCP_JAVA_UPDATE_OK" "update: Java packages replaced"; expect_out "PMCP_SWITCH_OK variant=map-square-fps40" "update: main map switched"
     expect_out "PMCP_FEATURES_ON_OK" "update done"
-    [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = 519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3 ] \
+    [ "$(h "$U/armle/lib/dll/ipod-drvr-iap2.so")" = $RG_DRV_SHA ] \
         && [ "$(h "$U/carplaymaps/rg/rgi-observer")" = 3166df9b91119475f93043ac8c150e2641732e602161839a137a1907d4ef11df ] \
         && ok "update: new driver and reader" || bad "driver/reader after update"
     [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$ALL" ] && ok "update: set nai np rg zoom dn ui" || bad "update set: $(cat "$U/carplaymaps/HMI_BOOT")"
@@ -707,6 +829,167 @@ PY
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore after the v1.3.0 update: exact factory tree" || bad "tree after restore"
     fi
+
+    # ---- profile specifics: the Toolbox NavActiveIgnore state, no Android Auto, a card of another profile ----
+    if [ $HAS_TBX = yes ]; then
+    TBXL="$U/eso/hmi/lsd/lsd.sh"; TBXJ="$U/eso/hmi/lsd/jars/$TBX_JAR_NAME"
+    echo "[T1] toolbox_nai: detection by exact hashes (lsd.sh and jar), anything else stops; unit state $LSD_TEST_STATE"
+    fresh_unit; before=$(snapshot "$W/unit")
+    run verify; rc_is 0; expect_out "PMCP_VERIFY_OK state=STOCK" "verify: STOCK ($LSD_TEST_STATE)"
+    if [ "$LSD_TEST_STATE" = toolbox_nai ]; then
+        expect_out "factory + MIB Toolbox's NavActiveIgnore line, with its jar" "verify names the Toolbox state"
+        run status; expect_out "MIB Toolbox NavActiveIgnore: loaded by lsd.sh now" "status names the Toolbox state"
+    else
+        grep -q "Toolbox" "$W/out" && bad "factory unit mentions Toolbox" || ok "factory unit: no word about Toolbox"
+    fi
+    [ "$before" = "$(snapshot "$W/unit")" ] && ok "verify wrote nothing" || bad "verify changed the unit"
+    if [ "$LSD_TEST_STATE" = toolbox_nai ]; then
+        # the Toolbox jar changed by one byte: lsd.sh is Toolbox's, the jar is not -> unknown, nothing is merged
+        fresh_unit; printf 'Z' | dd of="$TBXJ" bs=1 seek=100 conv=notrunc 2>/dev/null; before=$(snapshot "$W/unit")
+        run install map-clean; rc_is 1; expect_out "UNIT_NOT_FACTORY_STATE_UNKNOWN" "tampered Toolbox jar: install stops"
+        expect_out "is not Toolbox's file" "reason names the Toolbox jar"
+        run map-install map-square-fps40; rc_is 1; expect_out "MAP_INSTALL_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" "main menu 2 stops too"
+        [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
+        # the Toolbox jar missing
+        fresh_unit; rm "$TBXJ"; before=$(snapshot "$W/unit")
+        run install map-clean; rc_is 1; expect_out "UNIT_NOT_FACTORY_STATE_UNKNOWN" "Toolbox lsd.sh without its jar: install stops"
+        [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
+        # the Toolbox line plus another line, the line twice, the line in another place: each is another file
+        for variant in extra twice moved; do
+            fresh_unit
+            case $variant in
+                extra) echo '# local edit' >> "$TBXL" ;;
+                twice) { cat "$TBXL"; sed -n '/NavActiveIgnore.jar/p' "$TBXL"; } > "$W/lsd.v"; cp "$W/lsd.v" "$TBXL" ;;
+                moved) { sed -n '/NavActiveIgnore.jar/p' "$TBXL"; grep -v NavActiveIgnore.jar "$TBXL"; } > "$W/lsd.v"; cp "$W/lsd.v" "$TBXL" ;;
+            esac
+            before=$(snapshot "$W/unit")
+            run install map-clean; rc_is 1; expect_out "UNIT_NOT_FACTORY_STATE_UNKNOWN" "lsd.sh variant '$variant': install stops"
+            [ "$before" = "$(snapshot "$W/unit")" ] && ok "'$variant': unit unchanged" || bad "'$variant': unit changed"
+        done
+        # Toolbox's lsd.sh with the pmcp block and no carplaymaps (a rest of something else): unknown
+        fresh_unit; cp "$SDB/pmcp/payload/lsd/lsd.sh" "$TBXL"; before=$(snapshot "$W/unit")
+        run install map-clean; rc_is 1; expect_out "UNIT_NOT_FACTORY_STATE_UNKNOWN" "our lsd.sh without carplaymaps: install stops"
+        [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
+    fi
+
+    echo "[T2] toolbox_nai: install saves both Toolbox files, the first Java package replaces the Toolbox line, restore goes back to the FACTORY lsd.sh"
+    fresh_unit; factory=$(snapshot "$W/unit")
+    run map-install map-square-fps40; rc_is 0; expect_out "PMCP_INSTALL_OK stage=A" "2: map installed"
+    if [ "$LSD_TEST_STATE" = toolbox_nai ]; then
+        expect_out "both Toolbox files saved" "install says it saved the Toolbox files"
+        [ "$(h "$TBXL")" = $TBX_LSD_SHA ] && [ "$(h "$TBXJ")" = $TBX_JAR_SHA ] && ok "stage A: Toolbox lsd.sh and jar untouched (NAI keeps working)" || bad "stage A touched the Toolbox files"
+        run status; expect_out "Unit state: VIDEO" "VIDEO"; expect_out "its lsd.sh and jar are saved in carplaymaps/rollback/toolbox-nai (verified)" "status: saved copies verified"
+        run verify; rc_is 0; expect_out "PMCP_VERIFY_OK state=VIDEO" "verify: VIDEO"
+        # java-on of another package first: the Toolbox line goes, and the card warns that no nai loads
+        run java-on rg; rc_is 1; expect_out "JAVA_RG_NEEDS_RG_SYSTEM_ON" "rg needs its system part"
+        run java-on zoom; rc_is 0; expect_out "PMCP_JAVA_ON_OK package=zoom" "java-on zoom"
+        expect_out "lsd.sh no longer loads MIB Toolbox's NavActiveIgnore.jar" "java-on says the Toolbox line is gone"
+        expect_out "PMCP_WARN=TOOLBOX_NAI_NOT_LOADED_ANY_MORE" "and warns: no nai in the set"
+        [ "$(h "$TBXL")" = "$LSD_JAVA" ] && ! grep -q "jars/$TBX_JAR_NAME" "$TBXL" && ok "lsd.sh: our block, no Toolbox line" || bad "lsd.sh after java-on"
+        [ "$(h "$TBXJ")" = $TBX_JAR_SHA ] && ok "the Toolbox jar is still there (not deleted)" || bad "Toolbox jar changed or deleted"
+        o=$(unit_boot); case "$o" in *"$NAIJAR"*|*"$TBX_JAR_NAME"*) bad "boot loads a NAI jar without nai in the set: $o" ;; *) ok "boot: only the set's JARs, no Toolbox jar" ;; esac
+        run java-on nai; rc_is 0; expect_out "set=$NAI+$ZOOM" "nai added: set nai+zoom"; grep -q "PMCP_WARN" "$W/out" && bad "warn although nai is in the set" || ok "no warning with nai"
+        run java-off zoom; rc_is 0; run java-off nai; rc_is 0; expect_out "PMCP_JAVA_OFF_OK" "last package off"
+        [ "$(h "$TBXL")" = $STOCK_LSD ] && ok "last package off: FACTORY lsd.sh (not the Toolbox one)" || bad "lsd.sh after java-off"
+        run status; expect_out "Unit state: VIDEO" "VIDEO again"; expect_out "toolbox-nai (verified)" "audit copies still there and verified"
+    fi
+    run restore; rc_is 0; expect_out "PMCP_RESTORE_OK" "restore"
+    [ "$(h "$TBXL")" = $STOCK_LSD ] && ok "restore: FACTORY lsd.sh" || bad "restore: lsd.sh is not factory"
+    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore: tree = start state with the factory lsd.sh (Toolbox jar kept, carplaymaps gone)" || { bad "restore: tree differs"; diff <(echo "$factory") <(snapshot "$W/unit") | head -5; }
+    [ ! -e "$U/carplaymaps" ] && ok "carplaymaps (with the audit copies) removed" || bad "carplaymaps left"
+    run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "after restore: factory STOCK"
+
+    if [ "$LSD_TEST_STATE" = toolbox_nai ]; then
+    echo "[T3] toolbox_nai: damaged states fail closed, the way back works"
+    # Toolbox jar changed after install (stage A): not VIDEO, nothing is merged, restore still goes back
+    fresh_unit; factory=$(snapshot "$W/unit"); run map-install map-clean; rc_is 0
+    printf 'Z' | dd of="$TBXJ" bs=1 seek=100 conv=notrunc 2>/dev/null
+    run status; expect_out "Unit state: PARTIAL" "Toolbox jar changed after install: PARTIAL"
+    run java-on zoom; rc_is 1; expect_out "JAVA_NEEDS_STAGE_A_STATE_PARTIAL" "java-on refused"
+    before=$(snapshot "$W/unit"); feat; expect_out "FEATURES_RESET_LSD_SH_IS_NOT_OURS_NOTHING_CHANGED\|FEATURES_STOPPED_AT" "4 stops"
+    [ "$before" = "$(snapshot "$W/unit")" ] && ok "4: nothing changed" || bad "4 changed the unit"
+    run restore; rc_is 0; [ "$(h "$TBXL")" = $STOCK_LSD ] && ok "restore: factory lsd.sh (the changed jar stays, it is not ours)" || bad "restore: lsd.sh"
+    # audit copy changed: not VIDEO; 4 repairs (factory lsd.sh back, then this card's set), restore ends factory
+    fresh_unit; run map-install map-clean; rc_is 0
+    printf 'Z' >> "$U/carplaymaps/rollback/toolbox-nai/lsd.sh"
+    run status; expect_out "Unit state: PARTIAL" "damaged audit copy: PARTIAL"
+    feat; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "4 repairs it"
+    run status; expect_out "Unit state: JAVA" "JAVA"; [ "$(h "$TBXL")" = "$LSD_JAVA" ] && ok "lsd.sh is ours" || bad "lsd.sh after 4"
+    run restore; rc_is 0; [ "$(h "$TBXL")" = $STOCK_LSD ] && ok "restore: factory lsd.sh" || bad "restore: lsd.sh"
+    # the Toolbox line added by the Toolbox AFTER our install (factory at install time): no audit copies; 4 brings our set
+    fresh_unit; cp "$FACTORY_LSD_SRC" "$TBXL"; rm -f "$TBXJ"; run map-install map-clean; rc_is 0
+    [ ! -e "$U/carplaymaps/rollback/toolbox-nai" ] && ok "factory install: no audit copies" || bad "audit copies on a factory install"
+    cp "$BK/eso/hmi/lsd/lsd.sh" "$TBXL"; cp "$BK/$(pf toolbox_nai.jar | sed -n 1p)" "$TBXJ"
+    run status; expect_out "Unit state: PARTIAL" "Toolbox NAI added later: PARTIAL (no audit copies)"
+    feat; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "4: factory lsd.sh back, then our set"
+    run status; expect_out "Unit state: JAVA" "JAVA"; [ "$(h "$TBXL")" = "$LSD_JAVA" ] && ok "lsd.sh is ours" || bad "lsd.sh after 4"
+    run restore; rc_is 0; [ "$(h "$TBXL")" = $STOCK_LSD ] && ok "restore: factory lsd.sh" || bad "restore: lsd.sh"
+    # a factory install whose unit has a stray Toolbox jar (lsd.sh factory): normal install, jar ignored and kept
+    fresh_unit; cp "$FACTORY_LSD_SRC" "$TBXL"; factory=$(snapshot "$W/unit")
+    run map-install map-clean; rc_is 0; run java-on nai; rc_is 0; run restore; rc_is 0
+    [ "$factory" = "$(snapshot "$W/unit")" ] && ok "stray Toolbox jar + factory lsd.sh: install and restore leave it as it was" || bad "tree differs"
+    # rescue card on the unit: stage A (Toolbox lsd.sh live) is no emergency, lsd.sh stays; after java-on it goes back to factory
+    echo "[T4] toolbox_nai: rescue card"
+    fresh_unit; run map-install map-clean; rc_is 0; rescue
+    [ "$(h "$TBXL")" = $TBX_LSD_SHA ] && [ "$(h "$TBXJ")" = $TBX_JAR_SHA ] && ok "rescue on stage A: Toolbox lsd.sh and jar untouched" || bad "rescue touched the Toolbox state"
+    grep -q "RESULT=OK" "$W/med/PMCP_RESCUE_LOG.txt" && ok "RESULT=OK" || bad "no RESULT=OK"
+    run java-on nai; rc_is 0; rescue
+    [ "$(h "$TBXL")" = $STOCK_LSD ] && ok "rescue after java-on: FACTORY lsd.sh" || bad "rescue: lsd.sh"
+    [ ! -e "$U/eso/hmi/lsd/jars/$NAIJAR" ] && [ "$(h "$TBXJ")" = $TBX_JAR_SHA ] && ok "rescue: our nai removed, Toolbox jar kept" || bad "rescue: jars"
+    grep -q "RESULT=OK" "$W/med/PMCP_RESCUE_LOG.txt" && ok "RESULT=OK" || bad "no RESULT=OK"
+    run status; expect_out "Unit state: VIDEO" "VIDEO after the rescue (audit copies intact)"
+    run restore; rc_is 0
+    # review 2026-11-12: an lsd.sh that is neither factory nor Toolbox's (cut short) after stage A: the rescue card
+    # puts the factory one back and does not report OK while the cut file stays
+    fresh_unit; run map-install map-clean; rc_is 0
+    head -c 4000 "$TBXL" > "$W/lsd.cut"; cat "$W/lsd.cut" > "$TBXL"; rescue
+    [ "$(h "$TBXL")" = $STOCK_LSD ] && ok "rescue: a cut lsd.sh becomes the FACTORY one" || bad "rescue left the cut lsd.sh"
+    [ "$(h "$TBXJ")" = $TBX_JAR_SHA ] && ok "rescue: Toolbox jar kept" || bad "rescue: Toolbox jar"
+    grep -q "RESULT=OK" "$W/med/PMCP_RESCUE_LOG.txt" && ok "RESULT=OK after the repair" || bad "no RESULT=OK after the repair"
+    run restore; rc_is 0
+    fi
+    fi
+
+    if [ $HAS_AA = no ]; then
+    echo "[A1] no Android Auto for this profile: every AA action says so and changes nothing"
+    for st in factory installed; do
+        fresh_unit
+        [ $st = installed ] && { run map-install map-clean; rc_is 0; run java-on nai; rc_is 0; }
+        before=$(snapshot "$W/unit")
+        for act in aa-on aa-on-exp aa-install aa-confirm aa-retry aa-status aa-log-save aa-remove "aa-output direct" "aa-output ring" "aa-capture 60" "aa-capture off" "aa-bogus"; do
+            run $act; rc_is 1; expect_out "PMCP_FAIL=ANDROID_AUTO_NOT_AVAILABLE_FOR_${PMCP_PROFILE}_NOTHING_CHANGED" "$st: $act refused"
+            expect_out "Android Auto is not available for this unit" "$st: $act says why"
+        done
+        [ "$before" = "$(snapshot "$W/unit")" ] && ok "$st: nothing changed by any AA action" || bad "$st: an AA action changed the unit"
+        run aa-log-clear; rc_is 0; expect_out "PMCP_AA_LOG_CLEAR_OK" "$st: aa-log-clear (it also clears the CarPlay logs) still works"
+    done
+    fresh_unit; run status; expect_out "Android Auto: off" "status: AA off"
+    run map-install map-clean; run restore; rc_is 0
+    fi
+
+    # a card of one profile on a unit of another: stops in firmware_identity (lsd.jxe size), before any change
+    echo "[X1] card of this profile on a unit of another profile, and another profile's card on this unit: stop, nothing changed"
+    for other in $(python3 -I "$PROJ/scripts/profile.py" list); do
+        [ "$other" = "$PMCP_PROFILE" ] && continue
+        OSZ=$(python3 -I "$PROJ/scripts/profile.py" get "$other" lsd_jxe.size)
+        fresh_unit; rm "$W/unit/ifs/lsd.jxe"; truncate -s $OSZ "$W/unit/ifs/lsd.jxe"; before=$(snapshot "$W/unit")
+        for act in verify "install map-clean" "map-install map-square-fps40" "restore" "status" "java-on nai" "features-reset" "confirm" "rg-system-on"; do
+            run $act; rc_is 1; expect_out "PMCP_FAIL=NOT_${PMCP_PROFILE}_LSD_JXE_SIZE_$OSZ" "this card on a $other unit: $act stops"
+        done
+        [ "$before" = "$(snapshot "$W/unit")" ] && ok "$other unit: nothing changed" || bad "$other unit changed"
+        # the other profile's card (built by PMCP_OTHER_SD_<id>) on a unit of this profile
+        ocard="$(eval echo \${PMCP_OTHER_SD_$other:-})"
+        if [ -n "$ocard" ] && [ -f "$ocard/pmcp/pmcp.sh" ]; then
+            fresh_unit; before=$(snapshot "$W/unit"); MYSZ=$JXE_SIZE
+            for act in verify "install map-clean" "map-install map-square-fps40" "restore" "status" "java-on nai" "features-reset" "rg-system-on" "aa-on"; do
+                PMCP_TEST_ROOT="$W/unit" $SH "$ocard/pmcp/pmcp.sh" $act > "$W/out" 2>&1; echo $? > "$W/rc"
+                rc_is 1; expect_out "PMCP_FAIL=NOT_${other}_LSD_JXE_SIZE_$MYSZ\|PMCP_FAIL=ANDROID_AUTO_NOT_AVAILABLE" "$other card on this unit: $act stops"
+            done
+            [ "$before" = "$(snapshot "$W/unit")" ] && ok "$other card on this unit: nothing changed" || bad "the $other card changed this unit"
+        else
+            echo "  skip the $other card on this unit (PMCP_OTHER_SD_$other not set)"
+        fi
+    done
 
     echo "[20] start timeline button (fake pidin/sloginfo; real script, host awk)"
     mkdir -p "$W/tl/bin"
@@ -787,7 +1070,7 @@ PEOF
     run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "second rg-update: already current"
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "v1.3.0 rg -> rg"
     [ ! -e "$U/eso/hmi/lsd/jars/pmcp-rg.jar" ] && [ "$(h "$U/eso/hmi/lsd/jars/pmcp-guidance7.jar")" = "$(jsha rg)" ] && ok "old pmcp-rg.jar gone, pmcp-guidance7.jar in place" || bad "JARs after java-update"
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance7.jar" ] && ok "java-update: trial boot" || bad "boot: $o"
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/$NAIJAR:/X/lsd/jars/pmcp-guidance7.jar" ] && ok "java-update: trial boot" || bad "boot: $o"
     run java-update; rc_is 1; expect_out "JAVA_UPDATE_ALREADY_CURRENT" "second java-update: already current"
     # interrupted after the HMI_BOOT switch (old JAR still there): JAVA, trial confirmable, java-update removes the JAR
     cp "$V13D/payload/jars/pmcp-rg.jar" "$U/eso/hmi/lsd/jars/pmcp-rg.jar"
@@ -962,7 +1245,7 @@ PEOF
     run rg-update; rc_is 1; expect_out "RG_UPDATE_ALREADY_CURRENT" "v1.4.0 driver and reader are this card's"
     run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$NAI+$RG" "v1.4.0 rg -> this card's rg"
     jar_replaced pmcp-guidance.jar pmcp-guidance7.jar rg "pmcp-guidance.jar gone, pmcp-guidance7.jar in place"
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-guidance7.jar" ] && ok "one trial start" || bad "boot: $o"
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$RG jars=/X/lsd/jars/$NAIJAR:/X/lsd/jars/pmcp-guidance7.jar" ] && ok "one trial start" || bad "boot: $o"
     run java-confirm; rc_is 0
     run java-on sl; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run speedlimit-mode turnto; rc_is 0
@@ -986,7 +1269,7 @@ PEOF
     fi
 
     echo "[25] experimental card f2a7ceb5 (AA on, rg-aa) -> button 3 of this card: AA stays, rg-aa -> rg (pmcp-guidance7.jar)"
-    ALL="$NAI+$NP+$RG+$ZOOM+$DN+$UI"
+    ALL="$NAI${ID_NP}+$RG+$ZOOM+$DN${ID_UI}"
     no_aa_change() { grep -q "PMCP_AA_\(ON\|REMOVE\)_OK" "$W/out" && bad "$1: button 3 changed Android Auto" || ok "$1: button 3 ran no AA action"; }
     if card_ok "$EXP141" f2a7ceb5; then
         fresh_unit; factory=$(snapshot "$W/unit")
@@ -1038,6 +1321,7 @@ PEOF
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore with AA: exact factory tree" || bad "tree after restore"
     fi
 
+    if [ "$FULLSET" = yes ]; then
     echo "[27] Android Auto (its own screen, mode gamma): gal wrapper, trial start, confirm, rg arrows, removal"
     AAH=/mnt/app/carplaymaps/aa; AAD="$U/carplaymaps/aa"
     HOOKED="use=trial real=gal.real preload=$AAH/libgal_hook.so conf=$AAH/gal-hook.conf player=$AAH/aa-most-feeder"
@@ -1134,13 +1418,15 @@ PEOF
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "restore with AA on: factory state"
     [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: every file as at the start" || bad "restore: unit differs from factory"
 
-    echo "[28] AA saved logs and the log card"
-    P="$W/unit/mnt/persist/pmcp"; RD="$W/unit/ramdisk"
+    fi
     LC="$(cd "$(dirname "$0")/.." && pwd)/logcard/pmcp-logs.sh"
     logcard() { # the log card script as stuff.sh runs it at the end; medium = $W/med3
         rm -rf "$W/lr"; mkdir -p "$W/lr/net" "$W/med3"; ln -s "$W/unit" "$W/lr/net/mmx"
         PMCP_LOGCARD_TEST_ROOT="$W/lr" $SH "$LC" "$W/med3" >/dev/null 2>&1
     }
+    if [ "$FULLSET" = yes ]; then
+    echo "[28] AA saved logs and the log card"
+    P="$W/unit/mnt/persist/pmcp"; RD="$W/unit/ramdisk"
     navlog() { # a hook log with N 0x8006 and M 0x8007 lines
         : > "$RD/pmcp-gal-hook.log"
         i=0; while [ $i -lt $1 ]; do echo "t event=aap.nav_msg channel=12 msg_id=0x8006 bytes=40 n=$((i+1)) hex=80060a26" >> "$RD/pmcp-gal-hook.log"; i=$((i+1)); done
@@ -1209,6 +1495,7 @@ PEOF
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "restore with saved logs: factory state"
     [ ! -e "$U/carplaymaps" ] && ok "restore removed saved logs with carplaymaps" || bad "carplaymaps left"
 
+    fi
     echo "[29] v1.4.3-style unit (rg 7b187484 in pmcp-guidance3.jar, no AA) -> button 3: pmcp-guidance7.jar, no AA file"
     if card_ok "$EXP143" 84472aa9; then
         fresh_unit; factory=$(snapshot "$W/unit")
@@ -1277,6 +1564,7 @@ PEOF
         run aa-remove; rc_is 0; run status; expect_out "Android Auto: off" "after AA remove: off"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
     fi
+    if [ "$FULLSET" = yes ]; then
     echo "[32] main menu 3: Install Android Auto (stable); an AA set this card does not support is removed first"
     fresh_unit; factory=$(snapshot "$W/unit")
     run aa-install; rc_is 1; expect_out "AA_INSTALL_NEEDS_CARPLAY_FIRST_PRESS_2" "3 on a factory unit: press 2 first"
@@ -1310,6 +1598,8 @@ PEOF
     cp "$W/galreal" "$U/carplaymaps/aa/gal.real"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
+    fi
+    if [ "$FULLSET" = yes ]; then
     echo "[33] main menu 5 and 6: one Confirm and one Try again for the CarPlay features and Android Auto"
     fresh_unit; factory=$(snapshot "$W/unit")
     run confirm; rc_is 1; expect_out "CONFIRM_NOTHING_INSTALLED_THAT_HAS_A_TRIAL" "factory unit: nothing to confirm"
@@ -1345,6 +1635,7 @@ PEOF
     run confirm; rc_is 0; expect_out "PMCP_CONFIRM_OK confirmed=2" "then 5 confirms both"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
+    fi
     echo "[34] main menu 4: Java or route guidance files this card does not support are replaced"
     fresh_unit; factory=$(snapshot "$W/unit")
     run map-install map-square-fps40; feat; rc_is 0; confirm_now
@@ -1384,14 +1675,14 @@ PEOF
     fresh_unit; factory=$(snapshot "$W/unit")
     run map-install map-square-fps40; run switch map-clean; rc_is 0
     run map-install map-square-fps40; rc_is 0; expect_out "PMCP_SWITCH_OK variant=map-square-fps40" "2 brings the main layout back"
-    feat; run aa-install; rc_is 0
+    feat; [ $HAS_AA = yes ] && { run aa-install; rc_is 0; }
     echo junk > "$U/eso/bin/apps/dio_manager"
     run status; expect_out "Unit state: PARTIAL" "changed dio_manager: PARTIAL"; expect_out "2. Install CarPlay repairs it" "status points at 2"
     feat; expect_out "PMCP_FAIL=FEATURES_STOPPED_AT_features-reset_" "4 stops"; expect_out "2. Install CarPlay first" "4 says press 2"
-    run aa-install; rc_is 0; expect_out "PMCP_AA_INSTALL_OK (already installed" "3: Android Auto itself is fine (already installed)"
+    if [ $HAS_AA = yes ]; then run aa-install; rc_is 0; expect_out "PMCP_AA_INSTALL_OK (already installed" "3: Android Auto itself is fine (already installed)"; fi
     run map-install map-square-fps40; rc_is 0; expect_out "removing everything first" "2 removes everything first"
     expect_out "PMCP_RESTORE_OK" "restore"; expect_out "PMCP_INSTALL_OK stage=A variant=map-square-fps40" "then the map"
-    expect_out "press 3 and/or 4 now" "says 3 and 4 again"
+    if [ $HAS_AA = yes ]; then expect_out "press 3 and/or 4 now" "says 3 and 4 again"; else expect_out "press 4 now" "says 4 again"; fi
     run status; expect_out "Unit state: VIDEO" "VIDEO"; expect_out "Android Auto: off" "AA off"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
     # another mod's carplaymaps (no pmcp version file): nothing written
@@ -1422,6 +1713,7 @@ PEOF
     grep -q "^RESULT=OK copied=5 aa_logs=0 cp_logs=5$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: RESULT=OK with cp_logs=5" || bad "log card result"
     run aa-log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "Delete saved logs removes the CarPlay logs" || bad "cp logs left"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
+    if [ "$FULLSET" = yes ]; then
     echo "[37] main menu 3 and 4 with unsupported Android Auto AND unsupported Java files at once (no dead end)"
     fresh_unit; factory=$(snapshot "$W/unit")
     run map-install map-square-fps40; feat; run aa-install; confirm_now; S=$(cat "$U/carplaymaps/aa/AA_BOOT")
@@ -1450,6 +1742,8 @@ PEOF
     feat; expect_out "PMCP_FEATURES_ON_OK" "then 4: this card's features"; run status; expect_out "Unit state: JAVA" "JAVA"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
+    fi
+    if [ "$FULLSET" = yes ]; then
     echo "[38] after the rescue card: 5 refuses, 6 gives both a new trial (also confirmed sets)"
     fresh_unit; factory=$(snapshot "$W/unit")
     run map-install map-square-fps40; feat; run aa-install; S=$(cat "$U/carplaymaps/aa/AA_BOOT")
@@ -1467,6 +1761,8 @@ PEOF
     run confirm; rc_is 1; expect_out "Android Auto: this is not its trial start (6. Try again" "AA outside its trial start"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
+    fi
+    if [ "$FULLSET" = yes ]; then
     echo "[39] PARTIAL with intact map files: layout switch allowed; CarPlay log in PARTIAL; log card with both kinds"
     fresh_unit; factory=$(snapshot "$W/unit")
     run map-install map-square-fps40; feat
@@ -1479,6 +1775,8 @@ PEOF
     grep -q "^RESULT=OK copied=2 aa_logs=1 cp_logs=1$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: one AA and one CarPlay log" || bad "log card: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
+    fi
+    if [ "$FULLSET" = yes ]; then
     echo "[40] package ui (AID navigation configuration page, Save of trial starts): own JAR, in main 4, java-off and restore exact, shares the mode file"
     UI=$(jid ui)
     grep -q "java-on_ui" "$SDB/pmcp/menu/features-on.sh" && ok "main 4 installs ui (Save on the page)" || bad "main 4 leaves ui out"
@@ -1491,14 +1789,14 @@ PEOF
     jars_before=$(cd "$U/eso/hmi/lsd/jars" && ls); boot_before=$(cat "$U/carplaymaps/HMI_BOOT")
     run java-on ui; rc_is 0; expect_out "PMCP_JAVA_ON_OK package=ui set=$NAI+$UI" "ui on, set nai+ui"
     [ "$(h "$U/eso/hmi/lsd/jars/pmcp-ui2.jar")" = "$(jsha ui)" ] && ok "pmcp-ui2.jar in place" || bad "pmcp-ui2.jar"
-    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$UI jars=/X/lsd/jars/NavActiveIgnore.jar:/X/lsd/jars/pmcp-ui2.jar" ] \
+    o=$(unit_boot); [ "$o" = "boot=trial set=$NAI+$UI jars=/X/lsd/jars/$NAIJAR:/X/lsd/jars/pmcp-ui2.jar" ] \
         && ok "next start: one trial loading pmcp-ui2.jar" || bad "boot: $o"
     o=$(unit_boot); [ "$o" = "boot=no set=$NAI+$UI jars=" ] && ok "without Confirm: the next start is factory" || bad "boot: $o"
     run java-retry; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     run java-off ui; rc_is 0; expect_out "PMCP_JAVA_OFF_OK package=ui" "ui off"
     [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$boot_before" ] && [ "$(cd "$U/eso/hmi/lsd/jars" && ls)" = "$jars_before" ] \
         && ok "ui off: the set and the jars folder as before" || bad "after ui off: $(cat "$U/carplaymaps/HMI_BOOT")"
-    o=$(unit_boot); [ "$o" = "boot=yes set=${boot_before%% *} jars=/X/lsd/jars/NavActiveIgnore.jar" ] \
+    o=$(unit_boot); [ "$o" = "boot=yes set=${boot_before%% *} jars=/X/lsd/jars/$NAIJAR" ] \
         && ok "ui off: the confirmed earlier set loads" || bad "boot: $o"
     run restore; rc_is 0
     [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore after ui: exact factory tree" || bad "restore after ui left changes"
@@ -1552,6 +1850,8 @@ PEOF
     HOOKEDY=$(echo "$HOOKED" | sed 's/^use=trial/use=yes/')
     # set files, AA_BOOT and the AA markers (what a trial protects): the output switch must not change any of them
     aaf() { (cd "$U/carplaymaps/aa" && for f in *; do echo "$f $(h "$f")"; done); ls "$P" 2>/dev/null | grep '^aa-ok\.\|^aa-trial\.'; ls "$RDK" 2>/dev/null | grep '^pmcp-aa-trial\.'; }
+    fi
+    if [ "$FULLSET" = yes ]; then
     echo "[45] AA 1.0: main menu 3 installs the direct set; the output switch changes no set file, no AA_BOOT, no marker (no trial)"
     fresh_unit; factory=$(snapshot "$W/unit")
     ! grep -q '^AAX_' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && ok "no experimental AA set: AA 1.0 is the stable one" || bad "AAX_ key on the card"
@@ -1590,6 +1890,7 @@ PEOF
     run aa-remove; rc_is 0; run aa-install; rc_is 0; [ ! -e "$P/aa-extra.conf" ] && ok "3 after AA remove: no switch file, the set's default" || bad "aa-extra.conf left"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
+    fi
     echo "[46] AA 1.0: main menu 3 brings every earlier AA set (v10 of v1.5.1, v11, v12, v13, AA 1.0 of v1.6.0) to this card's set in place"
     V151SD="${PMCP_V151_SD:-$SDB/../sd-754c9d82}"; OLD11SD="${PMCP_AA_OLD11:-$SDB/../sd-a55867ab}"
     NEW12SD="${PMCP_AA_V12:-$SDB/../sd-15d19b43}"; V13SD="${PMCP_AA_V13:-$SDB/../sd-d82f8c73}"
@@ -1631,6 +1932,7 @@ PEOF
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "$oid: restore exact" || bad "$oid: tree after restore"
     done
 
+    if [ "$FULLSET" = yes ]; then
     echo "[47] AA 1.0: main menu 3 leaves a Java part this card does not support when it is plainly ours; otherwise it refuses"
     jbase() { fresh_unit; run map-install map-square-fps40; run java-on nai; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
               echo X > "$U/eso/hmi/lsd/jars/pmcp-zz.jar"; read s jars < "$U/carplaymaps/HMI_BOOT"
@@ -1657,6 +1959,7 @@ PEOF
         [ "$before" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "$bad_case: nothing changed" || bad "$bad_case: 3 changed the unit"
     done
 
+    fi
     echo "[48] v1.5.1 card (ui e11bd8d3 in pmcp-ui.jar, rg 4e32e7f7 in pmcp-guidance4.jar, sl in turnto mode) -> main menu 4: ui and rg replaced in place, sl and its mode stay"
     V151P="${PMCP_V151_SD:-$SDB/../sd-754c9d82}/pmcp/pmcp.sh"
     run151() { PMCP_TEST_ROOT="$W/unit" $SH "$V151P" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }

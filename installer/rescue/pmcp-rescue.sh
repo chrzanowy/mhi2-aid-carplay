@@ -44,14 +44,15 @@ LSD="$APP/eso/hmi/lsd/lsd.sh"
 JARS="$APP/eso/hmi/lsd/jars"
 ROOT="$APP/carplaymaps"
 PERSIST="$N/mnt/persist/pmcp"
-FACTORY_LSD_SIZE=16567
+FACTORY_LSD_SIZE=@@FACTORY_LSD_SIZE@@
+TOOLBOX_LSD_SIZE=@@TOOLBOX_LSD_SIZE@@  #@@TBX_ONLY
 DRV="$APP/armle/lib/dll/ipod-drvr-iap2.so"
 CFG="$N/mnt/system/etc/mm/iap2.cfg"
-FACTORY_DRV_SIZE=739925
+FACTORY_DRV_SIZE=@@FACTORY_DRV_SIZE@@
 # our patched iAP2 drivers: stable 76926bde (743196 B), experimental with the log gate 519ea3c5 (743272 B)
 OUR_DRV_SIZES="743196 743272"
-FACTORY_CFG_SIZE=5951
-OUR_CFG_SIZE=6079
+FACTORY_CFG_SIZE=@@FACTORY_CFG_SIZE@@
+OUR_CFG_SIZE=@@OUR_CFG_SIZE@@
 
 log() { echo "$*" >> "$RAM" 2>/dev/null; }
 
@@ -121,7 +122,7 @@ attempt() {
         [ -n "${PMCP_RESCUE_TEST_ROOT:-}" ] || mount -uw "$N/mnt/system" 2>/dev/null
         restore_by_size "$CFG" "$ROOT/rollback/iap2.cfg" "$OUR_CFG_SIZE" "$FACTORY_CFG_SIZE" 644
     fi
-    if [ "`size_of "$LSD"`" != "$FACTORY_LSD_SIZE" ] && [ "`size_of "$ROOT/rollback/lsd.sh"`" = "$FACTORY_LSD_SIZE" ] \
+    if @@LSD_NOT_FACTORY@@ && [ "`size_of "$ROOT/rollback/lsd.sh"`" = "$FACTORY_LSD_SIZE" ] \
         && ! has_pmcp_block "$ROOT/rollback/lsd.sh"; then
         rm -f "$LSD.pmcp-rescue" 2>/dev/null
         cp "$ROOT/rollback/lsd.sh" "$LSD.pmcp-rescue" 2>/dev/null
@@ -132,7 +133,7 @@ attempt() {
             rm -f "$LSD.pmcp-rescue" 2>/dev/null
         fi
     fi
-    rm -f "$JARS/NavActiveIgnore.jar" 2>/dev/null
+    rm -f "$JARS/NavActiveIgnore.jar" 2>/dev/null  #@@OWN_NAI
     for j in "$JARS"/pmcp-*.jar; do [ -e "$j" ] && rm -f "$j" 2>/dev/null; done
     sync 2>/dev/null
 }
@@ -140,10 +141,11 @@ attempt() {
 # Done when MMX is reachable and the HMI start is factory as far as we are concerned.
 done_ok() {
     [ -d "$JARS" ] || return 1
-    [ ! -e "$JARS/NavActiveIgnore.jar" ] || return 1
+    [ ! -e "$JARS/NavActiveIgnore.jar" ] || return 1  #@@OWN_NAI
     for j in "$JARS"/pmcp-*.jar; do [ -e "$j" ] && return 1; done
     [ -s "$LSD" ] || return 1
     has_pmcp_block "$LSD" && return 1
+    [ "`size_of "$LSD"`" = "$FACTORY_LSD_SIZE" ] || [ "`size_of "$LSD"`" = "$TOOLBOX_LSD_SIZE" ] || return 1  #@@TBX_ONLY
     for _s in $OUR_DRV_SIZES; do [ "`size_of "$DRV"`" != "$_s" ] || return 1; done
     [ "`size_of "$CFG"`" != "$OUR_CFG_SIZE" ] || return 1
     return 0

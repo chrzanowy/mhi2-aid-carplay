@@ -37,6 +37,38 @@ def _load_profile():
 
 FW = _load_profile()
 
+def rescue_script():
+    """installer/rescue/pmcp-rescue.sh with this profile's factory sizes. A profile with toolbox_nai on its unit (MIB Toolbox's
+    NavActiveIgnore.jar, not ours): the rescue never deletes that jar, and it replaces lsd.sh only when it holds our block
+    (Toolbox's lsd.sh is a known state, not something to undo)."""
+    tbx = "toolbox_nai" in FW["lsd_sh_states"]
+    text = (HERE / "rescue/pmcp-rescue.sh").read_text()
+    out = []
+    for line in text.split("\n"):
+        if line.endswith("  #@@OWN_NAI"):
+            if tbx:
+                continue
+            line = line[:-len("  #@@OWN_NAI")]
+        if line.endswith("  #@@TBX_ONLY"):   # only for a profile whose unit may run MIB Toolbox's NavActiveIgnore
+            if not tbx:
+                continue
+            line = line[:-len("  #@@TBX_ONLY")]
+        out.append(line)
+    text = "\n".join(out)
+    for k, v in {"@@FACTORY_LSD_SIZE@@": FW["stock"]["LSD"][2], "@@FACTORY_DRV_SIZE@@": FW["stock"]["IAP2DRV"][2],
+                 "@@FACTORY_CFG_SIZE@@": FW["stock"]["IAP2CFG"][2],
+                 "@@OUR_CFG_SIZE@@": FW["stock"]["IAP2CFG"][2] + 128,   # build_sd.py asserts: iap2.cfg + the 128 B [ident] block
+                 # toolbox profile: replace an lsd.sh with our block, or one that is neither factory nor Toolbox's (cut short, foreign)
+                 "@@LSD_NOT_FACTORY@@": ('{ has_pmcp_block "$LSD" || { [ "`size_of "$LSD"`" != "$FACTORY_LSD_SIZE" ]'
+                                         ' && [ "`size_of "$LSD"`" != "$TOOLBOX_LSD_SIZE" ]; }; }') if tbx
+                                        else '[ "`size_of "$LSD"`" != "$FACTORY_LSD_SIZE" ]',
+                 "@@TOOLBOX_LSD_SIZE@@": FW["toolbox_nai"]["lsd_sh"][1] if tbx else 0}.items():
+        assert k in text or (k == "@@TOOLBOX_LSD_SIZE@@" and not tbx), k
+        text = text.replace(k, str(v))
+    assert "@@" not in text
+    return text.encode()
+
+
 STUFF_HEAD = """# >>> pmcp rescue card: undo our HMI start changes first, without any redirect (see pmcp-rescue.sh)
 if [ -f ${2}/pmcp-rescue/pmcp-rescue.sh ]; then
 \t/bin/ksh ${2}/pmcp-rescue/pmcp-rescue.sh ${1} ${2}
@@ -61,7 +93,7 @@ by itself; this card is the second safety net).
 What it does: insert it in slot SD1 and wait up to 60 s. The unit enters update mode by itself
 (answer Continue if asked; do NOT pull the card while it updates). It then:
   1. puts back the factory lsd.sh,
-  2. removes our Java files (NavActiveIgnore.jar, pmcp-*.jar),
+  2. removes our Java files (%(javafiles)s),
   3. writes /mnt/persist/pmcp/DISABLED (nothing of ours loads at start),
   4. puts back the factory iAP2 driver and iap2.cfg if the route guidance system was on.
 The map picture stays. Afterwards, in the green menu: "Remove everything (back to factory files)".
@@ -133,8 +165,9 @@ def main():
     out = pathlib.Path(sys.argv[1])
     mib_card(out, STUFF_HEAD, STUFF_TAIL)
     (out / "pmcp-rescue").mkdir()
-    (out / "pmcp-rescue/pmcp-rescue.sh").write_bytes((HERE / "rescue/pmcp-rescue.sh").read_bytes())
-    (out / "PMCP_RESCUE_README.txt").write_text(README % {"id": FW["id"]})
+    (out / "pmcp-rescue/pmcp-rescue.sh").write_bytes(rescue_script())
+    (out / "PMCP_RESCUE_README.txt").write_text(README % {"id": FW["id"], "javafiles": "pmcp-*.jar" if "toolbox_nai" in FW["lsd_sh_states"]
+                                                                  else "NavActiveIgnore.jar, pmcp-*.jar"})
     if (out / "pmcp").exists():
         sys.exit("rescue card must not contain the pmcp installer")
     write_manifest(out, "PMCP_RESCUE_MANIFEST.txt", ("stuff.sh", "pmcp-rescue", "Swdlautorun", "metainfo2", "finalScript"))

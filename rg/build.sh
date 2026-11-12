@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Package E (native route guidance, port of tomasz-twardzicki MU1427 v1.2.0) for a firmware profile (so far MU1161):
+# Package E (native route guidance, port of tomasz-twardzicki MU1427 v1.2.0) for a firmware profile (MU1161, MU1418):
 #   - pmcp-rg.jar: Tomasz's PatchLive applied to OUR six NavSD classes + his bridge helpers compiled against
 #     OUR converted lsd.jar, then his TestLive integration test on the desktop JVM;
 #   - ipod-drvr-iap2.so: his driver patch chain reproduced on our driver (see rg/README.md);
@@ -11,7 +11,10 @@
 #
 # The profile (profiles/<ID>/profile.json, via scripts/profile.py) gives the pinned lsd.jar images, the backup folder and the
 # stock driver / iap2.cfg (path and SHA-256) and the input hash of the log gate. The driver chain below (virtual MU1427 stock,
-# B4 patch, usage block offsets) is the one worked out on the MU1161 driver; another driver stops at its assertions.
+# B4 patch, usage block offsets) was worked out on the MU1161 driver and carries over to the MU1418 (US) driver unchanged: both
+# are the MU1427 code and differ from it (and from each other) only in the QNX usage block 0xae3f0-0xae490, which the chain swaps
+# out and back. Another driver stops at its assertions. What the chain makes of each profile's driver and iap2.cfg is pinned
+# below (case "$PROFILE": output hashes are build results, not facts about the unit, so they are not in profile.json).
 #
 # "lanes": pmcp-rg.jar additionally carries Tomasz's MU1367 v1.4.0 native lane guidance (rg/lanes/, iAP2 0x5204 -> the
 # factory LaneGuidance builder) and is tested with his TestLanes; driver, cfg and reader are the same.
@@ -44,6 +47,8 @@ R146=no; case "$MODE" in *-aa-r) R146=yes ;; esac
 H=$(cd "$(dirname "$0")" && pwd)
 BT="$H/../buildtools"     # Guard (try/catch around every hook call), RefCheck (J9 API check)
 REPO=$(cd "$H/../.." && pwd)
+sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
+fail() { echo "FAIL: $*" >&2; exit 1; }
 T="$REPO/upstream/tomasz"            # git 024dd159c4d99890c9b17ea500325e4d2b5dcbde
 RG="$T/MU1427/route-guidance"
 REL="$T/releases/CarPlay_Maps_VC_Full_Toolboxes/VW_SKODA_ALL_CarPlay_Maps_VC_FULL_MQB_Toolbox_V4/Custom/carplay_native_guidance"
@@ -67,11 +72,18 @@ CFG_STOCK=$(stock_path IAP2CFG); CFG_STOCK_SHA=$(stock_sha IAP2CFG)
 for v in "$DRV_STOCK_SHA" "$CFG_STOCK_SHA"; do [[ "$v" =~ ^[0-9a-f]{64}$ ]] || fail "profile $PROFILE: bad stock pin '$v'"; done
 [ -f "$DRV_STOCK" ] && [ -f "$CFG_STOCK" ] || fail "stock driver or iap2.cfg not in the backup: $DRV_STOCK $CFG_STOCK"
 GATE_IN_SHA=$(pf rg_driver_in_sha256)
+# Pinned results of the chain per profile: the log-gated driver (input GATE_IN_SHA = the profile's rg_driver_in_sha256) and
+# the iap2.cfg with the [ident] section (stock iap2.cfg + 128 B). The un-gated driver is GATE_IN_SHA itself.
+case "$PROFILE" in
+    MU1161) GATED_SHA=519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3
+            CFG_OUT_SHA=c61407d9c6cd0d2529afedad0c9a120d5da5a504739e273bbb3dbea1e0b9b491 ;;
+    MU1418) GATED_SHA=8f417c9956e2ae81361707ebcce943e4ee567b63b329f58bc09ffca653cca69f
+            CFG_OUT_SHA=71a203b589d8433aa630a9a48e5e341c84d9916cd032647284a87dec72924fe0 ;;
+    *) echo "FAIL: rg/build.sh has no driver/iap2.cfg result pins for profile $PROFILE" >&2; exit 1 ;;
+esac
 : "${ASM_DIR:?set ASM_DIR}"
 PY="$REPO/upstream/tools/venv-elftools/bin/python"   # pyelftools 0.31 for Tomasz's patch scripts
 
-sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
-fail() { echo "FAIL: $*" >&2; exit 1; }
 pin() { [ -n "$2" ] || fail "no pin for $1"; [ "$(sha "$1")" = "$2" ] || fail "hash $1"; }
 
 # the converted lsd.jar must be one of the profile's pinned images
@@ -280,10 +292,12 @@ bad = [i for i in range(len(ours)) if ours[i] != out[i] and i not in allowed]
 assert not bad, "unexpected changes %r" % [hex(i) for i in bad[:10]]
 open(sys.argv[3], 'wb').write(out)
 EOF
+pin "$W/ipod-drvr-iap2.so" "$GATE_IN_SHA"   # the chain's result on this profile's driver (profile rg_driver_in_sha256)
 
 # ---- iap2.cfg: our factory file + Tomasz's [ident] section --------------------------------------------
 cp "$CFG_STOCK" "$W/iap2.cfg"
 printf '# pmcp route guidance (tomasz-twardzicki MU1427 B1 identification)\n[ident]\nsendmsgs=0x5200,0x5203\nrecvmsgs=0x5201,0x5202,0x5204\n' >> "$W/iap2.cfg"
+pin "$W/iap2.cfg" "$CFG_OUT_SHA"
 cp "$REL/rgi-observer" "$W/rgi-observer"
 # pmcp reader pmcp-r1 (rg/reader/reader.c, survives a stuck driver read), prebuilt in the repository so no QNX toolchain is
 # needed; rg/reader/build.sh rebuilds it in docker
@@ -303,7 +317,7 @@ if [ "${PMCP_GATE:-1}" = 1 ]; then
     fi
     pin "$W/driver/gate/log-gate.bin" c0c553567165efbfb3ccf63592ab3a7c8afe910a3ba4a5dcb85509820cebfc55
     python3 -I "$H/driver/patch-log-gate.py" "$W/ipod-drvr-iap2.so" "$W/driver/gate/log-gate.bin" "$W/ipod-drvr-iap2-gated.so" "$GATE_IN_SHA"
-    pin "$W/ipod-drvr-iap2-gated.so" 519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3
+    pin "$W/ipod-drvr-iap2-gated.so" "$GATED_SHA"
 fi
 
 {

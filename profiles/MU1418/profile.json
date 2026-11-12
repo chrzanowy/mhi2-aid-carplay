@@ -13,7 +13,8 @@
   "system": "advanced/MU1418-system",
   "lsd_jxe": {"file": "MU1418-lsd.jxe", "size": 54250283,
               "sha256": "33adfb85079fd659cde05f2ae6249dddb0cda05c51be8c483127160c7f2ba918"},
-  "lsd_jar_sha256": ["1ca9a5ffbb93ed61aa056dfedfffec803dace9ecb03405d4d1b5e82aebb26e8a"],
+  "lsd_jar_sha256": ["1ca9a5ffbb93ed61aa056dfedfffec803dace9ecb03405d4d1b5e82aebb26e8a",
+                     "9739dbcebb4823d95fd1ebcc5ddb4e59a19be58a5f7c8199276cd24270b8a3e7"],
   "props": {"carplay_rg": 2910009, "aa_rg": 2910005},
   "stock": {
     "IAP2DRV": ["armle/lib/dll/ipod-drvr-iap2.so", "af8d2ab3ecefed7951547ff3c858c1d03bf22512384b897d10883710bca365a7", 739925],
@@ -30,6 +31,8 @@
   "toolbox_nai": {
     "lsd_sh": ["1d7f488a9acf30c26ca47ebb6b2a586f5ae908407fc748b5ba46203925972c7f", 15999],
     "jar": ["eso/hmi/lsd/jars/NavActiveIgnore.jar", "303f0c484ca935ecd1be6c266d24ffec8fc68e3b928393846331eda59fb3e5d9", 18057],
+    "sha1": {"lsd_sh": "38fb1af43770373afe26fe3f10e87d78ad32bbb3", "jar": "eb64d39c20cf9cc9abbcafe8dd043c381daf417d"},
+    "factory_lsd": "eso/hmi/lsd/lsd.sh.bu",
     "line": "BOOTCLASSPATH=\"$BOOTCLASSPATH -Xbootclasspath/p:$BASE_DIR/lsd/jars/NavActiveIgnore.jar\""
   }
 }

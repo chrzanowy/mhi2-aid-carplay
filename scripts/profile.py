@@ -6,6 +6,9 @@
   profile.py detect <train> <mu>        the one profile with exactly this train and MU, else exit 1
   profile.py list                       profile ids
   profile.py pins <ID>                  "<path in the M.I.B. backup folder> <sha256>" per line: lsd.jxe and the stock files
+                                        (a profile with toolbox_nai: without the live lsd.sh, see lsd)
+  profile.py lsd <ID>                   "<kind> <path in the backup folder> <sha256>": the live lsd.sh (stock), and with
+                                        toolbox_nai the file holding the factory text (stock_copy), the Toolbox lsd.sh and jar
   (validate also checks profiles/<ID>/history.json, the older card files this profile's installer still replaces)
 
 From Python: sys.path.insert(0, <repo>/scripts); import profile as fwprofile; p = fwprofile.load("MU1161").
@@ -19,6 +22,7 @@ import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "profiles")
 HEX64 = re.compile(r"^[0-9a-f]{64}\Z")
+HEX40 = re.compile(r"^[0-9a-f]{40}\Z")
 ID = re.compile(r"^[A-Z0-9]+\Z")
 PACKAGES = {"nai", "np", "rg", "zoom", "dn", "sl", "ui", "aa"}
 STOCK_KEYS = {"IAP2DRV", "IAP2CFG", "LSD", "DIO", "GAL"}
@@ -132,8 +136,8 @@ def validate(p, pid):
     # Only with "toolbox_nai" in lsd_sh_states, and then fully described: that lsd.sh, the jar and the exact line.
     t = p["toolbox_nai"]
     if "toolbox_nai" in p["lsd_sh_states"]:
-        if set(t) != {"lsd_sh", "jar", "line"}:
-            fail("%s: toolbox_nai needs lsd_sh, jar, line" % pid)
+        if set(t) != {"lsd_sh", "jar", "line", "sha1", "factory_lsd"}:
+            fail("%s: toolbox_nai needs lsd_sh, jar, line, sha1, factory_lsd" % pid)
         if not (isinstance(t["lsd_sh"], list) and len(t["lsd_sh"]) == 2):
             fail("%s: toolbox_nai.lsd_sh is not [sha256, size]" % pid)
         _hash(t["lsd_sh"][0], pid + " toolbox_nai.lsd_sh")
@@ -143,6 +147,14 @@ def validate(p, pid):
         _relpath(t["jar"][0], pid + " toolbox_nai.jar")
         _hash(t["jar"][1], pid + " toolbox_nai.jar")
         _size(t["jar"][2], pid + " toolbox_nai.jar")
+        # the unit's own sha1sum is what the installer runs: both Toolbox files also need their SHA-1 (the factory text's
+        # SHA-1 is computed by the build from the file itself)
+        if not (isinstance(t["sha1"], dict) and set(t["sha1"]) == {"lsd_sh", "jar"}
+                and all(isinstance(v, str) and HEX40.match(v) for v in t["sha1"].values())):
+            fail("%s: toolbox_nai.sha1 needs lsd_sh and jar as lowercase sha1" % pid)
+        if not isinstance(t["factory_lsd"], str):
+            fail("%s: toolbox_nai.factory_lsd is not a path" % pid)
+        _relpath(t["factory_lsd"], pid + " toolbox_nai.factory_lsd")
         if not (isinstance(t["line"], str) and t["line"] and "\n" not in t["line"] and "\r" not in t["line"]
                 and "-Xbootclasspath/p:" in t["line"] and t["jar"][0].split("/")[-1] in t["line"]):
             fail("%s: toolbox_nai.line must be one BOOTCLASSPATH line naming the jar" % pid)
@@ -160,7 +172,6 @@ def validate(p, pid):
     return p
 
 
-HEX40 = re.compile(r"^[0-9a-f]{40}\Z")
 HISTORY_KEYS = {"schema", "aa_old_note", "aa_old", "rg_known_note", "rg_known", "java_old_note", "java_old"}
 JAVA_OLD_KEYS = ("name", "sha256", "sha1", "size", "jar", "successor")
 
@@ -237,11 +248,28 @@ def load_history(pid):
 
 
 def pins(p):
-    """Files the build reads from the unit's M.I.B. backup folder, with their pins (stock paths: appimg, or system for @system/)."""
+    """Files the build reads from the unit's M.I.B. backup folder, with their pins (stock paths: appimg, or system for @system/).
+    With toolbox_nai the live lsd.sh may be the factory file or Toolbox's, so it is not a plain pin here: see lsd_pins."""
     out = [(p["lsd_jxe"]["file"], p["lsd_jxe"]["sha256"])]
     for k in ("LSD", "DIO", "IAP2DRV", "IAP2CFG", "GAL"):
+        if k == "LSD" and "toolbox_nai" in p["lsd_sh_states"]:
+            continue
         path, h, _ = p["stock"][k]
         out.append((p["system"] + "/" + path[len("@system/"):] if path.startswith("@system/") else p["appimg"] + "/" + path, h))
+    return out
+
+
+def lsd_pins(p):
+    """(kind, path in the backup folder, sha256) for lsd.sh. kind stock = the unit's lsd.sh as the factory file;
+    with toolbox_nai: stock_copy = a file in the backup that holds the factory text (lsd.sh.bu), toolbox_lsd = lsd.sh with
+    Toolbox's NavActiveIgnore line, toolbox_jar = Toolbox's jar. The live lsd.sh must hash as stock or as toolbox_lsd."""
+    path, h, _ = p["stock"]["LSD"]
+    out = [("stock", p["appimg"] + "/" + path, h)]
+    if "toolbox_nai" in p["lsd_sh_states"]:
+        t = p["toolbox_nai"]
+        out += [("stock_copy", p["appimg"] + "/" + t["factory_lsd"], h),
+                ("toolbox_lsd", p["appimg"] + "/" + path, t["lsd_sh"][0]),
+                ("toolbox_jar", p["appimg"] + "/" + t["jar"][0], t["jar"][1])]
     return out
 
 
@@ -279,6 +307,8 @@ def main(argv):
             print("ok " + i)
     elif len(argv) == 3 and argv[1] == "pins":
         print("\n".join("%s %s" % x for x in pins(load(argv[2]))))
+    elif len(argv) == 3 and argv[1] == "lsd":
+        print("\n".join("%s %s %s" % x for x in lsd_pins(load(argv[2]))))
     elif len(argv) == 4 and argv[1] == "detect":
         print(detect(argv[2], argv[3]))
     else:

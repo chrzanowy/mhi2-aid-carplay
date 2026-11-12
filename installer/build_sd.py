@@ -88,12 +88,23 @@ START_VARIANT = "map-square-fps40"
 # carplaymaps/aa/gal.real
 STOCK = {k: ((SYSTEM / path[len("@system/"):]) if path.startswith("@system/") else (BACKUP / path), h, size)
          for k, (path, h, size) in FW["stock"].items()}
+# Profile with toolbox_nai: the unit's lsd.sh may carry MIB Toolbox's NavActiveIgnore line, so the factory text our lsd.sh is
+# made from (and the card's rollback copy) is read from the backup's lsd.sh.bu, pinned by the stock.LSD hash; a backup whose
+# lsd.sh is itself the factory file (no .bu needed) works too. Nothing else is accepted.
+TBX = "toolbox_nai" in FW["lsd_sh_states"]
+if TBX:
+    _cands = [BACKUP / FW["toolbox_nai"]["factory_lsd"], STOCK["LSD"][0]]
+    _ok = [c for c in _cands if c.is_file() and hashlib.sha256(c.read_bytes()).hexdigest() == STOCK["LSD"][1]
+           and c.stat().st_size == STOCK["LSD"][2]]
+    if not _ok:
+        sys.exit("input mismatch: no file holding the factory lsd.sh (sha256 %s): looked at %s" % (STOCK["LSD"][1], ", ".join(map(str, _cands))))
+    STOCK["LSD"] = (_ok[0],) + STOCK["LSD"][1:]
 
 # Pins of this tool's own build results and of the vendored files, per profile (reviewed after each change; not facts about
 # the unit, so they are not in profile.json). key -> (source, sha256, size, path inside payload/)
 PAYLOAD_BY_PROFILE = {}
 PAYLOAD_BY_PROFILE["MU1161"] = {
-    "BRIDGE": (MATHSLS / "profiles" / FW["id"] / FW["cluster"] / "altscreen-most-bridge",
+    "BRIDGE": (MATHSLS / "profiles" / FW["mathsls_payload"].split("/")[0] / FW["cluster"] / "altscreen-most-bridge",
                "fed7dce45f923384fec47861c448b753913f0561ed7e2a279860a5d13f8a44f4", 67835, "common/altscreen-most-bridge"),
     "SUPERVISOR": (MATHSLS / "common/carplay-cluster-supervisor",
                    "8e6ac3a85f04c3faca4850c9f09021bdd628fa1653d718f9c3db3be9d8057569", 56849, "common/carplay-cluster-supervisor"),
@@ -162,6 +173,30 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", 1566, "aa/feeder.conf"),
 })
+# MU1418 (US, MHI2_US_VWG13_P3662): the cluster 791 files (mathsls payload of MU1161/791, vendored reader) are the same files;
+# the Java packages, the iAP2 driver and iap2.cfg are builds from this unit's HMI and factory files (build/*-mu1418-*, made by
+# install.sh from the user's backup). No Android Auto, np or ui here (profile packages). Its own nai is not named
+# NavActiveIgnore.jar: that is MIB Toolbox's file on this unit (profile toolbox_nai), which this card takes over and leaves alone.
+PAYLOAD_BY_PROFILE["MU1418"] = {k: PAYLOAD_BY_PROFILE["MU1161"][k] for k in
+                                ("BRIDGE", "SUPERVISOR", "SEC", "PAIR_HELPER", "PAIR_CORE", "WRAPPER", "RG_READER")}
+PAYLOAD_BY_PROFILE["MU1418"].update({
+    # nai: patcher on the US classes; in the card as pmcp-nai.jar (the unit's NavActiveIgnore.jar is MIB Toolbox's, not ours)
+    "JAR_nai": (PROJ / "build/nai-mu1418-v2/NavActiveIgnore.jar",
+                "940a34f6cb1e556b2a421bfc3c3a0aecbd3366ec1eedd04d5522aaf5c45067d0", 13068, "jars/pmcp-nai.jar"),
+    # rg/build.sh MU1418 <lsd> <dir> lanes-uturn-asf-m-aa-r (US LaneGuidance classes, driver chain on the US factory driver)
+    "JAR_rg": (PROJ / "build/rg-mu1418-lanes-uturn-asf-m-aa-r-aa11/pmcp-rg.jar",
+               "8116f74b8018bf04387cc6669946a5d86c3977cfac7fd85d51cf6ee34d2ecfc0", 64031, "jars/pmcp-guidance7.jar"),
+    "JAR_zoom": (PROJ / "build/extras-mu1418-v2/pmcp-zoom.jar",
+                 "4367d71b6fb5c75a728635d31738dd92b389d14d9be2ffe40f4757e57956954f", 4740, "jars/pmcp-zoom.jar"),
+    "JAR_dn": (PROJ / "build/extras-mu1418-v2/pmcp-dn.jar",
+               "87f34f3c77d943107dfc43581eeae8ad1dc174fdc8d89fdc3abb88aeb9623358", 11384, "jars/pmcp-dn.jar"),
+    "JAR_sl": (PROJ / "build/sl-mu1418/pmcp-sl.jar",
+               "44d7ce85690afc3810d50d61c64f16e321d0a7fd42590133580563843bb85edc", 16527, "jars/pmcp-sl2.jar"),
+    "RG_DRIVER": (PROJ / "build/rg-mu1418-lanes-uturn-asf-m-aa-r-aa11/ipod-drvr-iap2-gated.so",
+                  "8f417c9956e2ae81361707ebcce943e4ee567b63b329f58bc09ffca653cca69f", 743272, "rg/ipod-drvr-iap2.so"),
+    "RG_CFG": (PROJ / "build/rg-mu1418-lanes-uturn-asf-m-aa-r-aa11/iap2.cfg",
+               "71a203b589d8433aa630a9a48e5e341c84d9916cd032647284a87dec72924fe0", 6035, "rg/iap2.cfg"),
+})
 # Experimental AA set (AAX_FEEDER: an experimental feeder next to the stable one, pmcp.sh aa-on-exp, set id
 # gamma-<hook>-<that feeder>-<hook settings>): none since AA 1.0, whose stable set has the v13/v14 feeder. pmcp.sh keeps
 # the mechanism for the next experimental feeder: add the key here again (experimental builds only, own feeder file).
@@ -179,10 +214,24 @@ RG_KNOWN = [(e["kind"], e["sha256"], e["sha1"], e["size"]) for e in HIST["rg_kno
 JAVA_OLD = [tuple(e[k] for k in fwprofile.JAVA_OLD_KEYS) for e in HIST["java_old"]]
 if PROFILE_ID not in PAYLOAD_BY_PROFILE:
     sys.exit("no PAYLOAD pins for profile %s in build_sd.py (PAYLOAD_BY_PROFILE)" % PROFILE_ID)
+# Only what the profile supports: a JAR_<pkg> of a package it does not list, the Android Auto files (AA_*, package aa) and the
+# route guidance system files (RG_*, package rg) stay out of the payload, the manifest and the card.
 PAYLOAD = {k: v for k, v in PAYLOAD_BY_PROFILE[PROFILE_ID].items()
-           if not (k.startswith("JAR_") and k[4:] not in FW["packages"])}
-if FW["lsd_sh_states"] != ["stock"]:
-    sys.exit("profile %s: lsd_sh_states %r is not supported by this installer yet" % (PROFILE_ID, FW["lsd_sh_states"]))
+           if not (k.startswith("JAR_") and k[4:] not in FW["packages"])
+           and not (k.startswith("AA_") and "aa" not in FW["packages"])
+           and not (k.startswith("RG_") and "rg" not in FW["packages"])}
+if FW["lsd_sh_states"] not in (["stock"], ["stock", "toolbox_nai"]):
+    sys.exit("profile %s: lsd_sh_states %r is not supported by this installer" % (PROFILE_ID, FW["lsd_sh_states"]))
+HAS_AA = "aa" in FW["packages"]
+# Toolbox profile: no file of ours may take the name of Toolbox's jar, or restore/java-reset (they remove our jars by
+# name) would delete Toolbox's NavActiveIgnore.jar, which the project decided never to delete.
+if TBX:
+    _tbx_jar = FW["toolbox_nai"]["jar"][0].split("/")[-1]
+    _clash = [k for k, v in PAYLOAD.items() if v[3].split("/")[-1] == _tbx_jar]
+    if _clash:
+        sys.exit("profile %s: payload %s would be named %s, the unit's MIB Toolbox jar" % (PROFILE_ID, _clash, _tbx_jar))
+# the rescue card (build_rescue.py) takes the size of our iap2.cfg from the factory one
+assert "RG_CFG" not in PAYLOAD or PAYLOAD["RG_CFG"][2] == STOCK["IAP2CFG"][2] + 128, "RG_CFG is not iap2.cfg + 128 bytes"
 for name in VARIANTS:
     PAYLOAD["CORE_" + name] = (TUNING / name / "core.so", None, 75099, "core/%s/core.so" % name)
 
@@ -265,6 +314,39 @@ fi
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def render_template(tpl):
+    """The profile-dependent parts of template/pmcp.sh.in. Lines "#@@NAME_BEGIN" ... "#@@NAME_END" are dropped with their
+    content unless the profile has the feature (TBX: toolbox_nai lsd.sh state; AA / NOAA: with / without the Android Auto package), and the
+    marker lines themselves are always dropped. @@LSD_PRE@@ / @@LSD_PRE_ROOT@@: "lsd.sh is a file the Java part may start from" =
+    the factory file; with TBX also the Toolbox state (lsd_pre / lsd_pre_root in the TBX block). For a profile without these
+    features the result is exactly the text the template had before they existed (checked with compare_cards.py)."""
+    import re
+    on = {"TBX": TBX, "AA": HAS_AA, "NOAA": not HAS_AA}
+    out, skip = [], 0
+    for line in tpl.split("\n"):
+        m = re.match(r"^#@@([A-Z]+)_(BEGIN|END)$", line)
+        if not m:
+            if not skip:
+                out.append(line)
+            continue
+        if m.group(1) not in on:
+            sys.exit("template: unknown block %s" % m.group(1))
+        if m.group(2) == "BEGIN":
+            if skip or "open" in on:
+                sys.exit("template: nested block")
+            skip = 0 if on[m.group(1)] else 1
+            on["open"] = m.group(1)
+        else:
+            if on.pop("open", None) != m.group(1):
+                sys.exit("template: block %s closed wrongly" % m.group(1))
+            skip = 0
+    if "open" in on:
+        sys.exit("template: block %s not closed" % on["open"])
+    text = "\n".join(out)
+    pre = 'matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"'
+    return text.replace("@@LSD_PRE_ROOT@@", "lsd_pre_root" if TBX else pre).replace("@@LSD_PRE@@", "lsd_pre" if TBX else pre)
 
 
 def read_pinned(path, want_sha, want_size, label=""):
@@ -398,17 +480,21 @@ def menu_entries():
     top = [("verify", "verify", "1. Check card and unit (read-only)"),
            ("map-install", "map-install " + START_VARIANT, "2. Install CarPlay: the map on the AID (also repairs or updates it)"),
            ("aa-install", "aa-install", "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)"),
-           ("features-on", FEATURES, "4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)"),
-           ("confirm", "confirm", "5. Confirm: everything works (in the first start after 3 or 4)"),
+           ("features-on", FEATURES, "4. Install additional features: " + ", ".join(t for n, t in FEATURE_NAMES if n in FW["packages"]) + " (needs 2)"),
+           ("confirm", "confirm", "5. Confirm: everything works (in the first start after 3 or 4)" if HAS_AA
+            else "5. Confirm: everything works (in the first start after 4)"),
            ("retry", "retry", "6. Try again: the next start is a new trial"),
            ("status", "status", "7. Status (read-only)"),
            ("restore", "restore", "8. Remove everything (back to factory files)")]
+    if not HAS_AA:
+        top = [e for e in top if e[0] != "aa-install"]
     feat = [("diag", None, "0. Diagnostics (read-only, photograph the screen)"),
             ("timeline", TIMELINE, "Start timeline: seconds from unit start to CarPlay, MOST, navigation (read-only)"),
             ("rglast", RGLAST, "RG last maneuver: what the iPhone sent and which VW arrow it gives (read-only)"),
             ("navdiag", NAVDIAG, "Navigation diagnostics: why the VW navigation does not start (read-only)"),
             ("cp-log-save", "cp-log-save", "CP save log: copy this start's CarPlay log to the unit (for the log card)"),
-            ("log-clear", "aa-log-clear", "Delete saved logs, CarPlay and AA (after the log card copied them)"),
+            ("log-clear", "aa-log-clear", "Delete saved logs, CarPlay and AA (after the log card copied them)" if HAS_AA
+             else "Delete saved logs (after the log card copied them)"),
             # package sl (On sl, then 5. Confirm), then one of these; the mode is kept across starts
             # the speed-limit mode is set on the unit: App-Connect > Settings > AID navigation configuration (package ui); pmcp.sh
             # speedlimit-mode stays for the tests and the command line
@@ -417,11 +503,17 @@ def menu_entries():
             ("rg-system-off", "rg-system-off", "Route guidance system off (factory iAP2 driver and iap2.cfg)"),
             ("rg-update", "rg-update", "Route guidance system update (driver and reader of this card, RG stays on)"),
             ("java-update", "java-update", "Java update: packages of an earlier card -> this card's (rglu -> rg)")]
+    feat = [e for e in feat if not ((e[0].startswith("rg-") and "rg" not in FW["packages"])
+                                    or (e[0] == "speedlimit-status" and "sl" not in FW["packages"]))]
     feat += [("java-on-" + n, "java-on " + n, "On " + label) for n, label in JAVA_PACKAGES] + \
             [("java-off-" + n, "java-off " + n, "Off " + label) for n, label in JAVA_PACKAGES]
     cp = [("install-" + v, "install " + v, "Install map layout: " + v) for v in VARIANTS if v != START_VARIANT] + \
          [("switch-" + v, "switch " + v, "Switch map layout to: " + v) for v in VARIANTS]
-    return top, feat, cp, AA_MENU + AA_EXP_MENU
+    return top, feat, cp, (AA_MENU + AA_EXP_MENU if HAS_AA else [])
+
+
+# what main menu 4 installs, in the words of its label (only packages the profile has; nai and sl are not named there)
+FEATURE_NAMES = [("rg", "route guidance"), ("zoom", "zoom"), ("dn", "day/night"), ("np", "song title"), ("ui", "settings page")]
 
 
 # Android Auto details, screen aa_advanced. The stable set is installed by main menu 3 (aa-install); the main menu's
@@ -445,7 +537,8 @@ AA_EXP_MENU = [] if "-exp-" not in PMCP_BASE_VERSION else [
 # RG driver/reader and Java packages replaced by this card's (rg-update, java-update), the route guidance system (rg
 # needs it), then every package except the optional sl (ui included: its page saves trial starts on the unit). Steps already done answer *_ALREADY_* and are skipped, so the
 # same button brings any earlier pmcp install to this card's set. The map (2) and Android Auto (3) are not touched.
-FEATURES = ["features-reset", "rg-update", "java-update", "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
+FEATURES = ["features-reset"] + (["rg-update"] if "rg" in FW["packages"] else []) + ["java-update"] \
+    + (["rg-system-on"] if "rg" in FW["packages"] else []) + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
 
 
 def menu_script(args, label):
@@ -470,13 +563,18 @@ def esd_block(version, top, feat, cp, aa):
     out = ['', '#' * 91, '#', '# Main -> M.I.B. -> pmcp: CarPlay and Android Auto map on the AID (%s %s / %s), added on the SD card only' % (FW["car"], FW["id"], FW["cluster"]),
            '#', '#' * 91, 'screen pmcp_stream_map_aid =>M.I.B.<=', '']
     out += kv(version) + kv("Every button checks all files first and changes nothing on a mismatch. Photograph each result.")
-    out += kv("2, 3 and 4 also replace versions this card does not support. Then restart (hold the volume knob ~10 s).")
-    out += kv("9. Advanced: pmcp_advanced (below): single features, map layouts, Android Auto details, logs.")
+    out += kv("2, 3 and 4 also replace versions this card does not support. Then restart (hold the volume knob ~10 s)." if HAS_AA else
+              "2 and 4 also replace versions this card does not support. Then restart (hold the volume knob ~10 s).")
+    out += kv("9. Advanced: pmcp_advanced (below): single features, map layouts, Android Auto details, logs." if HAS_AA else
+              "9. Advanced: pmcp_advanced (below): single features, map layouts, logs.")
+    if not HAS_AA:
+        out += kv("3. Android Auto: not available for this unit (%s)." % FW["id"])
     for n, _, l in top:
         out += sc(n, l)
     out += ['screen pmcp_advanced pmcp_stream_map_aid', '']
     out += kv("1. features_advanced: diagnostics, logs, speed limit, single packages.")
-    out += kv("2. carplay_advanced: map layouts.  3. aa_advanced: Android Auto details and logs.")
+    out += kv("2. carplay_advanced: map layouts.  3. aa_advanced: Android Auto details and logs." if HAS_AA else
+              "2. carplay_advanced: map layouts.")
     out += ['screen features_advanced pmcp_advanced', '']
     out += kv("The first start after a change is a trial: if everything works, press 5. Confirm in that start.")
     out += kv("Without Confirm the next start is the factory one (then: 6. Try again).")
@@ -486,11 +584,12 @@ def esd_block(version, top, feat, cp, aa):
     out += ['screen carplay_advanced pmcp_advanced', '']
     for n, _, l in cp:
         out += sc(n, l)
-    out += ['screen aa_advanced pmcp_advanced', '']
-    out += kv("Android Auto 0.1: main menu 3, connect the phone, then 5. Confirm in that start.")
-    out += kv("VW arrows from Google Maps: rg (main menu 4). Lost picture: AA status, then AA save log.")
-    for n, _, l in aa:
-        out += sc(n, l)
+    if HAS_AA:
+        out += ['screen aa_advanced pmcp_advanced', '']
+        out += kv("Android Auto 0.1: main menu 3, connect the phone, then 5. Confirm in that start.")
+        out += kv("VW arrows from Google Maps: rg (main menu 4). Lost picture: AA status, then AA save log.")
+        for n, _, l in aa:
+            out += sc(n, l)
     return "\r\n".join(out) + "\r\n"
 
 
@@ -544,6 +643,10 @@ def main():
     (pm / "payload/lsd/lsd.sh").parent.mkdir(parents=True, exist_ok=True)
     (pm / "payload/lsd/lsd.sh").write_bytes(lsd_patched)
     rows.append(("LSD_JAVA", sha(lsd_patched), len(lsd_patched), "lsd/lsd.sh"))
+    if TBX:
+        # the factory text, for install's rollback copy when the unit's lsd.sh is Toolbox's (the unit's own text is not factory then)
+        (pm / "payload/lsd/lsd-factory.sh").write_bytes(stock["LSD"])
+        rows.append(("LSD_STOCK", sha(stock["LSD"]), len(stock["LSD"]), "lsd/lsd-factory.sh"))
 
     selftest = bytes(range(256)) * 3 + b"\n\n\0\r\nend-without-newline"
     (pm / "bin/selftest.bin").write_bytes(selftest)
@@ -558,6 +661,11 @@ def main():
     pairs = {sha(selftest): hashlib.sha1(selftest).hexdigest()}
     for data in stock.values():
         pairs[sha(data)] = hashlib.sha1(data).hexdigest()
+    if TBX:
+        # sha256 -> sha1 of the two Toolbox files, from the profile (the card must also work from a backup without them)
+        tb = FW["toolbox_nai"]
+        pairs[tb["lsd_sh"][0]] = tb["sha1"]["lsd_sh"]
+        pairs[tb["jar"][1]] = tb["sha1"]["jar"]
     known = []
     for kind, h, h1, size in RG_KNOWN:
         pairs[h] = h1
@@ -567,7 +675,7 @@ def main():
         pairs[h] = h1
         old.append("%s %s %d %s %s" % (name, h, size, jar, succ))
     aa_old = []
-    cur_aa = [PAYLOAD[k][1:3] for k in ("AA_HOOK", "AA_FEEDER", "AA_HOOK_CONF", "AA_MODE")]
+    cur_aa = [PAYLOAD[k][1:3] for k in ("AA_HOOK", "AA_FEEDER", "AA_HOOK_CONF", "AA_MODE")] if HAS_AA else []
     for mode, files in AA_OLD:
         hs = []
         for h, h1, size in files:
@@ -600,8 +708,14 @@ def main():
     PMCP_VERSION = PMCP_BASE_VERSION + "-" + sha((manifest + "\n" + "\n".join(known) + "\n" + "\n".join(old) + "\n"
                                                    + "\n".join(aa_old) + "\n"
                                                    + (HERE / "template/pmcp.sh.in").read_text() + menu_text).encode())[:8]
-    tpl = (HERE / "template/pmcp.sh.in").read_text()
-    for k, v in {
+    tpl = render_template((HERE / "template/pmcp.sh.in").read_text())
+    tbx_values = {}
+    if TBX:
+        tb = FW["toolbox_nai"]
+        tbx_values = {"@@TBX_LSD_SHA@@": tb["lsd_sh"][0], "@@TBX_LSD_SIZE@@": str(tb["lsd_sh"][1]),
+                      "@@TBX_JAR_SHA@@": tb["jar"][1], "@@TBX_JAR_SIZE@@": str(tb["jar"][2]),
+                      "@@TBX_JAR_PATH@@": tb["jar"][0], "@@TBX_JAR_NAME@@": tb["jar"][0].rsplit("/", 1)[-1]}
+    for k, v in {**tbx_values,
         "@@PMCP_VERSION@@": PMCP_VERSION, "@@MANIFEST@@": manifest,
         "@@SELFTEST_SHA@@": sha(selftest), "@@SELFTEST_SIZE@@": str(len(selftest)),
         "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_OLD@@": "\n".join(old), "@@AA_OLD@@": "\n".join(aa_old),

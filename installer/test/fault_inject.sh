@@ -22,6 +22,7 @@ BK="$BKROOT/$(pf appimg)"
 BKSYS="$BKROOT/$(pf system)"
 JXE_SIZE=$(pf lsd_jxe.size)
 [ -n "$JXE_SIZE" ] && [ -d "$BK" ] || { echo "profile $PMCP_PROFILE: no lsd.jxe size or no backup at $BK"; exit 99; }
+. "$H/lsd_state.inc"
 export PMCP_TEST_GAWK="${PMCP_TEST_GAWK:-$REPO/upstream/tools/gawk-3.1.5/gawk}"
 W=$(mktemp -d /tmp/pmcp-fi.XXXX)
 export PMCP_TEST_GEMLOG="$W/gem.log"   # the GEM button log outside the unit tree (the tree checks stay exact)
@@ -38,8 +39,7 @@ fresh_unit() {
     mkfile -n $JXE_SIZE "$W/unit/ifs/lsd.jxe" 2>/dev/null || truncate -s $JXE_SIZE "$W/unit/ifs/lsd.jxe"
     cp "$BK/eso/bin/apps/dio_manager" "$U/eso/bin/apps/dio_manager"
     cp "$BK/eso/bin/apps/gal" "$U/eso/bin/apps/gal"
-    cp "$BK/eso/hmi/lsd/lsd.sh" "$U/eso/hmi/lsd/lsd.sh"
-    cp "$BK/eso/hmi/lsd/jars/"* "$U/eso/hmi/lsd/jars/"
+    lsd_state_into_unit "$U"
     echo "factory persist content" > "$W/unit/mnt/persist/etc/ffs3.2ver"
     cp -R "$SDB/pmcp" "$W/sd"
     awk -v inc="$H/no_printf.inc" '{print} /^unset LD_PRELOAD$/ && !done {while ((getline l < inc) > 0) print l; done=1}' \
@@ -49,7 +49,16 @@ fresh_unit() {
         "$W/sd/pmcp.sh" > "$W/sd/pmcp-fi.sh"
 }
 # one shasum process for the whole tree (same lines as one per file); default: the unit
-snapshot() { (cd "${1:-$W/unit}" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2); }
+# (a unit that started with MIB Toolbox's lsd.sh ends with the FACTORY lsd.sh after restore, so Toolbox's lsd.sh counts as the
+# factory one in a snapshot; the Toolbox jar is never removed, so it stays in the tree and the comparison checks that)
+snapshot() { (cd "${1:-$W/unit}" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2) | snap_norm; }
+STOCK_LSD=$(pf stock.LSD | sed -n 2p); STOCK_GAL=$(pf stock.GAL | sed -n 2p)
+snap_norm() {
+    if [ "$HAS_TBX" = yes ]; then sed "s#^$(pf toolbox_nai.lsd_sh | sed -n 1p)  \(.*/lsd/lsd.sh\)\$#$STOCK_LSD  \1#"; else cat; fi
+}
+# which packages the profile has: a profile without np, ui or Android Auto runs its own (shorter) chains
+HAS_FULL=yes
+for _p in np ui aa; do case " $(pf packages | tr '\n' ' ')" in *" $_p "*) ;; *) HAS_FULL=no ;; esac; done
 mode_digest() {
     _mode_file="$W/unit/mnt/persist/pmcp/native-speedlimit-mode"
     if [ -e "$_mode_file" ]; then shasum -a 256 < "$_mode_file" | cut -d' ' -f1; else echo absent; fi
@@ -126,6 +135,18 @@ galsim() {
 state() { run status; sed -n 's/^Unit state: //p' "$W/out"; }
 
 # every chain ends with restore (factory again), so a chain can be left out without changing the others
+if [ $HAS_FULL = no ]; then
+# profile without np, ui and Android Auto (MU1418): the packages it has, the main menu over unsupported files; no earlier cards
+OWN=("install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" \
+     "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-on zoom" "java-on dn" "java-on nai" \
+     "java-off nai" "java-off zoom" "java-off dn" "java-off rg" "rg-system-off" "restore" \
+     "install map-square-fps40" "rg-system-on" "java-on rg" "java-on nai" "restore" \
+     "install map-clean" "java-on nai" "java-on zoom" "java-off zoom" "java-off nai" "restore" \
+     "map-install map-square-fps40" "rg-system-on" "java-on rg" "java-on nai" "fx:java-unknown" "fx:rg-unknown" "features-reset" \
+     "rg-system-on" "java-on zoom" "fx:dio-mixed" "map-install map-square-fps40" "restore")
+OLDCARDS=no
+CHAIN=("${OWN[@]}")
+else
 OWN=("install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" "java-on ui" \
      "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-off ui" "java-on zoom" "restore" \
      "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore")
@@ -155,6 +176,7 @@ CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on
        "${MAIN[@]}" "${XAA[@]}")
 else
 CHAIN=("${OWN[@]}")
+fi
 fi
 # quick mode (daily work): the card's own actions only; the full run (earlier cards, replay cross-check) before RC
 [ "${PMCP_FAULT_QUICK:-0}" = 1 ] && CHAIN=("${OWN[@]}")
@@ -257,8 +279,8 @@ one_target() {
         esac
         # Android Auto must never be left dead: gal is the factory file, or a wrapper with a verified factory copy
         GALH=$(shasum -a 256 < "$U/eso/bin/apps/gal" | cut -d' ' -f1)
-        if [ "$GALH" != 3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9 ] \
-            && [ "$(shasum -a 256 < "$U/carplaymaps/aa/gal.real" 2>/dev/null | cut -d' ' -f1)" != 3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9 ]; then
+        if [ "$GALH" != $STOCK_GAL ] \
+            && [ "$(shasum -a 256 < "$U/carplaymaps/aa/gal.real" 2>/dev/null | cut -d' ' -f1)" != $STOCK_GAL ]; then
             bad "[$target] kill@$n ($killed): gal is not factory and no verified factory copy (Android Auto dead)"
         fi
         # AA left half done (killed aa-on / aa-remove, or restore before its AA step finished): aa-remove finishes it

@@ -73,6 +73,14 @@ STOCK_CFG_SHA="@@STOCK_CFG_SHA@@"
 STOCK_CFG_SIZE="@@STOCK_CFG_SIZE@@"
 STOCK_GAL_SHA="@@STOCK_GAL_SHA@@"
 STOCK_GAL_SIZE="@@STOCK_GAL_SIZE@@"
+#@@TBX_BEGIN
+# MIB Toolbox's NavActiveIgnore on this unit (profile toolbox_nai): its lsd.sh (the factory file plus exactly one BOOTCLASSPATH
+# line) and its jar. Both with exact hashes; nothing similar counts.
+TBX_LSD_SHA="@@TBX_LSD_SHA@@"
+TBX_LSD_SIZE="@@TBX_LSD_SIZE@@"
+TBX_JAR_SHA="@@TBX_JAR_SHA@@"
+TBX_JAR_SIZE="@@TBX_JAR_SIZE@@"
+#@@TBX_END
 # Every SHA-256 above (manifest, IDs, factory files) -> the SHA-1 the unit actually computes (factory sha1sum, hash_of).
 # Both are computed by build_sd.py from the same bytes; the self test proves the unit tool before any hash is trusted.
 HASHMAP='
@@ -132,6 +140,9 @@ DRV="$APP/armle/lib/dll/ipod-drvr-iap2.so"
 CFG="$MMX/mnt/system/etc/mm/iap2.cfg"
 RGDIR="$ROOT/rg"
 GAL="$APP/eso/bin/apps/gal"
+#@@TBX_BEGIN
+TBX_JAR="$APP/@@TBX_JAR_PATH@@"
+#@@TBX_END
 AADIR="$ROOT/aa"
 RAMDISK="$MMX/ramdisk"
 GAWK="$APP/armle/usr/bin/gawk"
@@ -414,7 +425,7 @@ java_set_consistent() {
 # file names exactly one existing plain JAR per package, each ours by name (pmcp-*.jar) or known to this card.
 java_part_tolerable() {
     [ "$MAPOK" = yes ] && [ "$RGSYS" != unknown ] && [ "$JAVAPART" = mixed ] || return 1
-    matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" && return 0
+    @@LSD_PRE@@ && return 0
     set -- `manifest_get LSD_JAVA`
     matches "$LSD" "$1" "$2" || return 1
     _t_line=`cat "$ROOT/HMI_BOOT" 2>/dev/null`
@@ -446,17 +457,25 @@ java_part_tolerable() {
 #   VIDEO: stage A (wrapper active, factory lsd.sh, no JAR of ours)   JAVA: stage A + lsd.sh block + a consistent JAR set
 detect_state() {
     STATE=UNKNOWN; STATE_WHY=""; RGSYS=unknown; JAVA_OLD_SET=""; JAVA_STRAY=""; AASYS=unknown; AAMODE=""
+#@@TBX_BEGIN
+    TBX=no; matches "$LSD" "$TBX_LSD_SHA" "$TBX_LSD_SIZE" && TBX=yes
+#@@TBX_END
     CORE_STATE=UNKNOWN; MAPOK=no; JAVAPART=mixed
     set -- `manifest_get WRAPPER`; W_SHA=$1; W_SIZE=$2
     set -- `manifest_get LSD_JAVA`; LJ_SHA=$1; LJ_SIZE=$2
     present=`our_jars_present`
     if [ ! -e "$ROOT" ] && [ -z "$present" ] && [ ! -e "$JARS/CarPlayNavigationPatch.jar" ] && [ ! -e "$JARS/CarPlayClusterControls.jar" ]; then
-        if matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" && matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" \
+        if @@LSD_PRE@@ && matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" \
             && matches "$DRV" "$STOCK_DRV_SHA" "$STOCK_DRV_SIZE" && matches "$CFG" "$STOCK_CFG_SHA" "$STOCK_CFG_SIZE" \
             && matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE"; then
             STATE=STOCK; CORE_STATE=STOCK; RGSYS=off; AASYS=off; return
         fi
         STATE_WHY="no carplaymaps, but lsd.sh, dio_manager, gal, the iAP2 driver or iap2.cfg is not the factory file"
+#@@TBX_BEGIN
+        if [ $TBX = yes ] && ! tbx_live; then
+            STATE_WHY="$STATE_WHY (lsd.sh has MIB Toolbox's NavActiveIgnore line, but $TBX_JAR is not Toolbox's file: nothing is merged)"
+        fi
+#@@TBX_END
         return
     fi
     if [ -e "$JARS/CarPlayNavigationPatch.jar" ] \
@@ -472,7 +491,7 @@ detect_state() {
     # the three parts, each repaired by its own main-menu button: map (2), Android Auto (3), features (4)
     MAPOK=no; JAVAPART=mixed
     matches "$DIO" "$W_SHA" "$W_SIZE" && MAPOK=yes
-    if [ -z "$present" ] && matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"; then
+    if [ -z "$present" ] && @@LSD_PRE_ROOT@@; then
         JAVAPART=none
     elif matches "$LSD" "$LJ_SHA" "$LJ_SIZE" && java_set_consistent; then
         JAVAPART=set
@@ -502,6 +521,29 @@ pmcp_root() {
         && matches "$ROOT/stock_first/dio_manager.real" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" \
         && matches "$ROOT/rollback/lsd.sh" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"
 }
+#@@TBX_BEGIN
+
+# MIB Toolbox's NavActiveIgnore (profile toolbox_nai), taken over: the unit's lsd.sh is the factory file plus one line that loads
+# its jar. Install keeps the factory text in carplaymaps/rollback/lsd.sh (from this card) and saves both Toolbox files in
+# carplaymaps/rollback/toolbox-nai/ (audit); the first Java package then writes our lsd.sh block, which has no Toolbox line.
+# The way back (java-off of the last package, restore, features-reset) is always the FACTORY lsd.sh, never Toolbox's.
+# The Toolbox jar itself is never deleted: after the switch nothing loads it.
+tbx_live() {
+    matches "$LSD" "$TBX_LSD_SHA" "$TBX_LSD_SIZE" && matches "$TBX_JAR" "$TBX_JAR_SHA" "$TBX_JAR_SIZE"
+}
+tbx_saved() {
+    matches "$ROOT/rollback/toolbox-nai/lsd.sh" "$TBX_LSD_SHA" "$TBX_LSD_SIZE" \
+        && matches "$ROOT/rollback/toolbox-nai/@@TBX_JAR_NAME@@" "$TBX_JAR_SHA" "$TBX_JAR_SIZE"
+}
+# lsd.sh is a file the Java part may start from: the factory file, or Toolbox's with its jar
+lsd_pre() {
+    matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" || tbx_live
+}
+# the same inside our install: Toolbox's state counts only with both audit copies in carplaymaps
+lsd_pre_root() {
+    matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" || { tbx_live && tbx_saved; }
+}
+#@@TBX_END
 
 # Android Auto (aa-on, this card or an earlier one): gal replaced by its wrapper, carplaymaps/aa with the factory gal copy
 # gal.real, or leftovers of an interrupted aa-on / aa-off (.aa-new, gal.pmcp-new, gal.pmcp-restore).
@@ -1223,7 +1265,7 @@ rollback_install() {
     say "Rolling back"
     cp "$ROOT/stock_first/dio_manager.real" "$DIO.pmcp-rb" 2>/dev/null && chmod 755 "$DIO.pmcp-rb" && mv "$DIO.pmcp-rb" "$DIO"
     rm -f "$DIO.pmcp-new" 2>/dev/null
-    if matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" && [ -x "$DIO" ] && matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"; then
+    if matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" && [ -x "$DIO" ] && @@LSD_PRE@@; then
         remove_root
         say "PMCP_ROLLBACK_OK (factory files verified)"
     else
@@ -1238,6 +1280,11 @@ do_verify() {
     detect_state
     say "Unit state: $STATE"
     [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
+#@@TBX_BEGIN
+    if [ "$TBX" = yes ] && [ "$STATE" = STOCK ]; then
+        say "  lsd.sh: factory + MIB Toolbox's NavActiveIgnore line, with its jar (exact hashes): taken over, both files are saved first"
+    fi
+#@@TBX_END
     if [ "$STATE" = VIDEO ] || [ "$STATE" = JAVA ]; then
         say "Installed: `cat "$ROOT/PMCP_VERSION"` variant `cat "$ROOT/VARIANT" 2>/dev/null`"
     fi
@@ -1251,6 +1298,9 @@ do_install() {
     verify_payload
     firmware_identity
     detect_state
+#@@TBX_BEGIN
+    if [ "$STATE" != STOCK ] && [ -n "$STATE_WHY" ]; then say "  $STATE_WHY"; fi
+#@@TBX_END
     [ "$STATE" = STOCK ] || fail "UNIT_NOT_FACTORY_STATE_$STATE"
     say "Unit is in factory state; installing variant $ARG"
 
@@ -1270,6 +1320,17 @@ do_install() {
     say "Staging"
     cp "$DIO" "$NEW/stock_first/dio_manager.real" || fail "STOCK_DIO_COPY_FAILED"
     cp "$LSD" "$NEW/rollback/lsd.sh" || fail "STOCK_LSD_COPY_FAILED"
+#@@TBX_BEGIN
+    if [ "$TBX" = yes ]; then
+        # lsd.sh is Toolbox's: it and its jar are saved (audit), the factory text from this card is the way back
+        mkdir "$NEW/rollback/toolbox-nai" || fail "STAGE_CREATE_FAILED"
+        mv "$NEW/rollback/lsd.sh" "$NEW/rollback/toolbox-nai/lsd.sh" || fail "STOCK_LSD_COPY_FAILED"
+        cp "$TBX_JAR" "$NEW/rollback/toolbox-nai/@@TBX_JAR_NAME@@" || fail "TOOLBOX_JAR_COPY_FAILED"
+        set -- `manifest_get LSD_STOCK`
+        cp "$PAYLOAD/$3" "$NEW/rollback/lsd.sh" || fail "STOCK_LSD_COPY_FAILED"
+        say "  lsd.sh loads MIB Toolbox's NavActiveIgnore: both Toolbox files saved, the factory lsd.sh of this card is the way back"
+    fi
+#@@TBX_END
     cp "$PAYLOAD/$C_PATH" "$NEW/core.so" || fail "CORE_COPY_FAILED"
     while read k h s p; do
         case "$k" in
@@ -1293,6 +1354,11 @@ EOF
         "$NEW/security_bridge/carplay-pairing-helper" "$NEW/stock_first/dio_manager.real" || fail "CHMOD_FAILED"
     chmod 644 "$NEW/core.so" "$NEW/libcarplay-security-bridge.so" "$NEW/security_bridge/libCarPlayPairingCore.so" \
         "$NEW/rollback/lsd.sh" || fail "CHMOD_FAILED"
+#@@TBX_BEGIN
+    if [ "$TBX" = yes ]; then
+        chmod 644 "$NEW/rollback/toolbox-nai/lsd.sh" "$NEW/rollback/toolbox-nai/@@TBX_JAR_NAME@@" || fail "CHMOD_FAILED"
+    fi
+#@@TBX_END
 
     cp "$PAYLOAD/$W_PATH" "$DIO.pmcp-new" || fail "DIO_STAGE_FAILED"
     chmod 755 "$DIO.pmcp-new" || fail "CHMOD_FAILED"
@@ -1301,6 +1367,12 @@ EOF
     say "Verifying every staged copy"
     check "$NEW/stock_first/dio_manager.real" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" STAGED_STOCK_DIO
     check "$NEW/rollback/lsd.sh" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" STAGED_STOCK_LSD
+#@@TBX_BEGIN
+    if [ "$TBX" = yes ]; then
+        check "$NEW/rollback/toolbox-nai/lsd.sh" "$TBX_LSD_SHA" "$TBX_LSD_SIZE" STAGED_TOOLBOX_LSD
+        check "$NEW/rollback/toolbox-nai/@@TBX_JAR_NAME@@" "$TBX_JAR_SHA" "$TBX_JAR_SIZE" STAGED_TOOLBOX_JAR
+    fi
+#@@TBX_END
     check "$NEW/core.so" "$C_SHA" "$C_SIZE" STAGED_CORE
     while read k h s p; do
         case "$k" in
@@ -1317,7 +1389,7 @@ EOF
     check "$DIO.pmcp-new" "$W_SHA" "$W_SIZE" STAGED_WRAPPER_DIO
 
     # Re-check the live factory files right before the switch (nothing else may have changed them).
-    matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" || fail "LSD_CHANGED_DURING_INSTALL"
+    @@LSD_PRE@@ || fail "LSD_CHANGED_DURING_INSTALL"
     matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" || fail "DIO_CHANGED_DURING_INSTALL"
 
     say "Activating"
@@ -1417,7 +1489,12 @@ do_map_install() {
     say "removing everything first (verified factory files), then installing the map."
     do_restore
     do_install
+#@@AA_BEGIN
     say "Android Auto and the additional features were removed with it: press 3 and/or 4 now, then restart."
+#@@AA_END
+#@@NOAA_BEGIN
+    say "The additional features were removed with it: press 4 now, then restart."
+#@@NOAA_END
 }
 
 # listed_pmcp_jars "HMI_BOOT line" -> the JAR names of that set that are ours by name (pmcp-*.jar, plain file names),
@@ -1478,7 +1555,7 @@ do_features_reset() {
     # and lsd.sh must be the factory one or ours (another mod's lsd.sh is not replaced)
     if [ "$_x_java" = mixed ]; then
         set -- `manifest_get LSD_JAVA`
-        matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" || matches "$LSD" "$1" "$2" \
+        @@LSD_PRE@@ || matches "$LSD" "$1" "$2" \
             || fail "FEATURES_RESET_LSD_SH_IS_NOT_OURS_NOTHING_CHANGED"
     fi
     if [ "$RGSYS" = unknown ]; then
@@ -1603,7 +1680,7 @@ do_java_on() {
         cp "$PAYLOAD/$LJ_PATH" "$LSD.pmcp-new" || fail "LSD_STAGE_FAILED"
         chmod 755 "$LSD.pmcp-new" || fail "CHMOD_FAILED"
         check "$LSD.pmcp-new" "$LJ_SHA" "$LJ_SIZE" STAGED_LSD_JAVA
-        matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" || fail "LSD_CHANGED_DURING_JAVA_ON"
+        @@LSD_PRE@@ || fail "LSD_CHANGED_DURING_JAVA_ON"
     fi
     stage_set_files "$new"
     # Order: JAR, then HMI_BOOT (a new set id means a fresh trial boot), lsd.sh last as the switch.
@@ -1613,6 +1690,12 @@ do_java_on() {
         mv "$LSD.pmcp-new" "$LSD" || fail "LSD_ACTIVATION_FAILED_RUN_RESTORE"
     fi
     rm -f "$PERSIST/DISABLED" 2>/dev/null
+#@@TBX_BEGIN
+    if [ "$TBX" = yes ]; then
+        say "  lsd.sh no longer loads MIB Toolbox's NavActiveIgnore.jar (both Toolbox files are saved in carplaymaps/rollback/toolbox-nai; the jar stays in place, unused)"
+        case " $new " in *" nai "*) ;; *) say "PMCP_WARN=TOOLBOX_NAI_NOT_LOADED_ANY_MORE_ADD_THE_NAI_PACKAGE" ;; esac
+    fi
+#@@TBX_END
     detect_state
     [ "$STATE" = JAVA ] || fail "POST_JAVA_ON_STATE_${STATE}_RUN_RESTORE"
     flush
@@ -1993,6 +2076,18 @@ do_status() {
     say "Unit state: $STATE"
     [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
     [ -s "$ROOT/PMCP_VERSION" ] && say "Installed: `cat "$ROOT/PMCP_VERSION"` variant `cat "$ROOT/VARIANT" 2>/dev/null`"
+#@@TBX_BEGIN
+    if [ "$TBX" = yes ]; then
+        say "MIB Toolbox NavActiveIgnore: loaded by lsd.sh now (the first Java package of this card replaces that line)"
+    fi
+    if [ -d "$ROOT/rollback/toolbox-nai" ]; then
+        if tbx_saved; then
+            say "MIB Toolbox NavActiveIgnore: its lsd.sh and jar are saved in carplaymaps/rollback/toolbox-nai (verified)"
+        else
+            say "MIB Toolbox NavActiveIgnore: carplaymaps/rollback/toolbox-nai exists, but is not the exact Toolbox files"
+        fi
+    fi
+#@@TBX_END
     [ "$STATE" = JAVA ] && say "Java set: `boot_set_id`"
     [ -n "$JAVA_OLD_SET" ] && say "  packages of an earlier card: $JAVA_OLD_SET (4. Install additional features replaces them)"
     [ -n "$JAVA_STRAY" ] && say "  unused JAR files (not loaded): $JAVA_STRAY (4. Install additional features removes them)"
@@ -2011,6 +2106,16 @@ do_status() {
 }
 
 say "pmcp $PMCP_VERSION: $ACTION $ARG"
+#@@NOAA_BEGIN
+# This firmware profile has no Android Auto package: every Android Auto action says so and changes nothing (aa-log-clear
+# also deletes the saved CarPlay logs, so it stays)
+case "$ACTION" in
+    aa-log-clear) ;;
+    aa-*)
+        say "Android Auto is not available for this unit (@@PROFILE_ID@@): this card installs only CarPlay and its Java features."
+        fail "ANDROID_AUTO_NOT_AVAILABLE_FOR_@@PROFILE_ID@@_NOTHING_CHANGED" ;;
+esac
+#@@NOAA_END
 # Sharing this lock prevents an enable check from racing with a Java-set change or a full restore.
 case "$ACTION" in
     speedlimit-mode|java-on|java-off|java-update|features-reset) speedlimit_lock ;;
