@@ -114,9 +114,9 @@ PAYLOAD = {
     "JAR_ui": (PROJ / "build/ui-mu1161/pmcp-ui.jar",
                "5fea8d94bdb45b6556e3a7eec660326a88aa485b4539408f75796e4d814bc395", 29485, "jars/pmcp-ui2.jar"),
     # Tomasz's driver patch + our log gate: his RGI receive log only with /dev/shmem/pmcp-rgi-debug (rg/driver/)
-    "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-161/ipod-drvr-iap2-gated.so",
+    "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11/ipod-drvr-iap2-gated.so",
                   "519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3", 743272, "rg/ipod-drvr-iap2.so"),
-    "RG_CFG": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-161/iap2.cfg",
+    "RG_CFG": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11/iap2.cfg",
                "c61407d9c6cd0d2529afedad0c9a120d5da5a504739e273bbb3dbea1e0b9b491", 6079, "rg/iap2.cfg"),
     # rgi-observer pmcp-r1 (rg/reader/, prebuilt in the repository): a stuck driver read costs one invalid record, not the reader
     "RG_READER": (PROJ / "rg/reader/prebuilt/rgi-observer",
