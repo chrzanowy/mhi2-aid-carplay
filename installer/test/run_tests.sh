@@ -1,8 +1,11 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Host tests for pmcp.sh against a fake unit tree built from our MU1161 backup, plus an execution
-# test of the generated lsd.sh blocks (trial boot) over several simulated boots.
+# test of the generated lsd.sh blocks (trial boot) over several simulated boots, plus the firmware profile tests
+# (scripts/profile.py: validate, detect, a broken profile is refused).
 #   run_tests.sh SD_BUILD_DIR SHELL [SHELL...]
+#   PMCP_PROFILE=MU1161 (default): the firmware profile whose values (backup folder, lsd.jxe size, stock hashes, version
+#   tag) the tests expect; the same variable as for build_sd.py.
 #   PMCP_TEST_SCOPE=speedlimit runs the optional reader cases against a fresh unit.
 # Each scenario starts from a fresh factory tree. Exit status is the number of failed checks.
 set -u
@@ -29,12 +32,19 @@ if [ $# -gt 1 ] && [ -z "${PMCP_TEST_ONE_SHELL:-}" ]; then
 fi
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 T=$(cd "$(dirname "$0")" && pwd)   # installer/test (no_printf.inc)
-BK="${PMCP_BACKUP:-$REPO/backup/MU1161}/advanced/MU1161-appimg"
+PROJ=$(cd "$T/../.." && pwd)       # this project (any folder name)
+export PMCP_PROFILE="${PMCP_PROFILE:-MU1161}"
+pf() { python3 -I "$PROJ/scripts/profile.py" get "$PMCP_PROFILE" "$1"; }   # a profile value (lists: one item per line)
+BKROOT="${PMCP_BACKUP:-$REPO/backup/$(pf backup_dir)}"
+BK="$BKROOT/$(pf appimg)"
+BKSYS="$BKROOT/$(pf system)"
+JXE_SIZE=$(pf lsd_jxe.size)
+VTAG=$(pf version_tag)
 export PMCP_TEST_GAWK="${PMCP_TEST_GAWK:-$REPO/upstream/tools/gawk-3.1.5/gawk}"
 FAILS=0
 W=$(mktemp -d /tmp/pmcp-test.XXXX)
 export PMCP_TEST_GEMLOG="$W/gem.log"   # the GEM button log outside the unit tree (the tree checks stay exact)
-STOCK_LSD=97bbd4ecb51045b34c2a41955d9f53e1f144d174bff1aa8560e911525808e8d8
+STOCK_LSD=$(pf stock.LSD | sed -n 2p)
 LSD_JAVA=$(sed -n 's/^LSD_JAVA \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")
 jsha() { sed -n "s/^JAR_$1 \([0-9a-f]*\) .*/\1/p" "$SDB/pmcp/pmcp.sh"; }
 jid() { echo "$1-$(jsha "$1" | cut -c1-8)"; }
@@ -63,8 +73,8 @@ fresh_unit() {
     mkdir -p "$W/unit/ifs" "$W/unit/ramdisk" "$W/unit/mnt/app/eso/bin/apps" "$W/unit/mnt/app/eso/hmi/lsd/jars" "$W/unit/mnt/app/armle/usr/bin" "$W/unit/mnt/persist/etc" \
         "$W/unit/mnt/app/armle/lib/dll" "$W/unit/mnt/system/etc/mm"
     cp "$BK/armle/lib/dll/ipod-drvr-iap2.so" "$W/unit/mnt/app/armle/lib/dll/"
-    cp "$BK/../MU1161-system/mm/iap2.cfg" "$W/unit/mnt/system/etc/mm/"
-    mkfile -n 55830309 "$W/unit/ifs/lsd.jxe" 2>/dev/null || truncate -s 55830309 "$W/unit/ifs/lsd.jxe"
+    cp "$BKSYS/mm/iap2.cfg" "$W/unit/mnt/system/etc/mm/"
+    mkfile -n $JXE_SIZE "$W/unit/ifs/lsd.jxe" 2>/dev/null || truncate -s $JXE_SIZE "$W/unit/ifs/lsd.jxe"
     cp "$BK/eso/bin/apps/dio_manager" "$W/unit/mnt/app/eso/bin/apps/dio_manager"
     cp "$BK/eso/bin/apps/gal" "$W/unit/mnt/app/eso/bin/apps/gal"
     mkdir -p "$W/unit/ramdisk"
@@ -110,7 +120,7 @@ EXPB2="${PMCP_EXPB2_SD:-$SDB/../sd-b2bcbbe3}/pmcp/pmcp.sh"
 runexpb2() { PMCP_TEST_ROOT="$W/unit" $SH "$EXPB2" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 run13() { PMCP_TEST_ROOT="$W/unit" $SH "$V13" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
 runexp() { PMCP_TEST_ROOT="$W/unit" $SH "$EXP" "$@" > "$W/out" 2>&1; echo $? > "$W/rc"; }
-STOCK_GAL=3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9
+STOCK_GAL=$(pf stock.GAL | sed -n 2p)
 gal_start() {
     sed -e "s#/mnt/app/carplaymaps#$W/unit/mnt/app/carplaymaps#g" -e "s#/mnt/persist/pmcp#$W/unit/mnt/persist/pmcp#g" \
         -e "s#/ramdisk/#$W/unit/ramdisk/#g" \
@@ -150,6 +160,106 @@ for SH in "$@"; do
     U="$W/unit/mnt/app"
 
     if [ "${PMCP_TEST_SCOPE:-all}" != speedlimit ]; then
+    echo "[0] firmware profiles (scripts/profile.py)"
+    PP="$PROJ/scripts/profile.py"
+    prof() { python3 -I "$PP" "$@" > "$W/pout" 2>&1; echo $? > "$W/prc"; }
+    prof_is() { [ "$(cat "$W/prc")" = "$1" ] && ok "$2" || { bad "$2 (exit $(cat "$W/prc"), wanted $1)"; sed 's/^/       | /' "$W/pout" | tail -3; }; }
+    prof validate; prof_is 0 "every profile validates"
+    grep -qx "ok $PMCP_PROFILE" "$W/pout" && ok "validate lists $PMCP_PROFILE" || bad "validate output: $(cat "$W/pout")"
+    prof detect "$(pf train)" "$(pf mu)"; prof_is 0 "detect: train and MU of $PMCP_PROFILE"
+    [ "$(cat "$W/pout")" = "$PMCP_PROFILE" ] && ok "detect names $PMCP_PROFILE" || bad "detect printed: $(cat "$W/pout")"
+    prof detect MHI2_XX_VWG13_P0000 "$(pf mu)"; prof_is 1 "detect: unknown train is an error"
+    grep -q "no single profile" "$W/pout" && ok "unknown train: readable message" || bad "unknown train message: $(cat "$W/pout")"
+    prof detect "$(pf train)" 9999; prof_is 1 "detect: known train, unknown MU is an error"
+    prof detect MHI2_US_VWG13_P3662 1418; prof_is 1 "detect: MU1418 (no profile yet) is an error"
+    prof detect "" ""; prof_is 1 "detect: empty train and MU is an error"
+    prof get NOPE train; prof_is 1 "get: unknown profile is an error"
+    prof get mu1161 train; prof_is 1 "get: a lower-case id is an error"
+    prof get "$PMCP_PROFILE" no.such.key; prof_is 1 "get: unknown key is an error"
+    prof pins "$PMCP_PROFILE"; prof_is 0 "pins"
+    [ "$(wc -l < "$W/pout" | tr -d ' ')" = 6 ] && [ "$(sed -n 1p "$W/pout" | cut -d' ' -f1)" = "$(pf lsd_jxe.file)" ] && ok "pins: lsd.jxe and the five stock files" || bad "pins: $(cat "$W/pout")"
+    # the pinned backup files really are what the profile says (the build and install.sh trust these)
+    pins_bad=0
+    while read -r rel want; do
+        [ "$(h "$BKROOT/$rel")" = "$want" ] || { pins_bad=1; echo "       | backup file differs from its pin: $rel"; }
+    done < "$W/pout"
+    [ $pins_bad = 0 ] && ok "backup files match the profile pins" || bad "backup files differ from the profile pins"
+    # a broken profile is refused: work on a copy of scripts/profile.py and the profile (profile.py reads profiles/ next to it)
+    cat > "$W/mut.py" <<'PY'
+import json, sys
+path, expr = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+exec(expr)
+json.dump(d, open(path, "w"))
+PY
+    pt_fresh() {
+        rm -rf "$W/pt"; mkdir -p "$W/pt/scripts" "$W/pt/profiles"
+        cp "$PP" "$W/pt/scripts/profile.py"; cp -R "$PROJ/profiles/$PMCP_PROFILE" "$W/pt/profiles/"
+    }
+    pt_mut() { python3 -I "$W/mut.py" "$W/pt/profiles/$PMCP_PROFILE/$1" "$2"; }
+    pt_refused() {   # LABEL FILE EXPR: validate must fail on the mutated copy
+        pt_fresh; pt_mut "$2" "$3"; python3 -I "$W/pt/scripts/profile.py" validate > "$W/pout" 2>&1; echo $? > "$W/prc"
+        [ "$(cat "$W/prc")" != 0 ] && grep -q "^profile: " "$W/pout" && ok "refused: $1" || { bad "not refused: $1 ($(cat "$W/pout" | tail -1))"; }
+    }
+    pt_fresh; python3 -I "$W/pt/scripts/profile.py" validate > "$W/pout" 2>&1 && ok "control: an unmodified copy validates" || bad "control copy: $(cat "$W/pout")"
+    pt_refused "stock hash in capitals" profile.json 'd["stock"]["LSD"][1] = d["stock"]["LSD"][1].upper()'
+    pt_refused "stock hash too short" profile.json 'd["stock"]["DIO"][1] = d["stock"]["DIO"][1][:63]'
+    pt_refused "stock hash not hex" profile.json 'd["stock"]["GAL"][1] = "z" * 64'
+    pt_refused "lsd_jxe hash too short" profile.json 'd["lsd_jxe"]["sha256"] = d["lsd_jxe"]["sha256"][:40]'
+    pt_refused "lsd.jar hash wrong" profile.json 'd["lsd_jar_sha256"][0] = "00"'
+    pt_refused "empty lsd.jar hash list" profile.json 'd["lsd_jar_sha256"] = []'
+    pt_refused "rg driver hash wrong" profile.json 'd["rg_driver_in_sha256"] = "x"'
+    pt_refused "size not a number" profile.json 'd["stock"]["LSD"][2] = "16567"'
+    pt_refused "size zero" profile.json 'd["lsd_jxe"]["size"] = 0'
+    pt_refused "unknown key" profile.json 'd["surprise"] = 1'
+    pt_refused "missing key (packages)" profile.json 'del d["packages"]'
+    pt_refused "missing key (mu)" profile.json 'del d["mu"]'
+    pt_refused "schema 2" profile.json 'd["schema"] = 2'
+    pt_refused "id differs from the directory" profile.json 'd["id"] = "MU9999"'
+    pt_refused "unknown package" profile.json 'd["packages"].append("zz")'
+    pt_refused "package twice" profile.json 'd["packages"].append(d["packages"][0])'
+    pt_refused "stock path with .." profile.json 'd["stock"]["LSD"][0] = "../x"'
+    pt_refused "absolute stock path" profile.json 'd["stock"]["LSD"][0] = "/x"'
+    pt_refused "stock key missing" profile.json 'del d["stock"]["GAL"]'
+    pt_refused "lsd.sh state list without stock first" profile.json 'd["lsd_sh_states"] = ["toolbox_nai"]'
+    pt_refused "bad version_tag" profile.json 'd["version_tag"] = "MU 1"'
+    pt_refused "bad mathsls commit" profile.json 'd["mathsls_commit"] = "abc"'
+    # review 2026-11-12: values that reach pmcp.sh or a path must be exactly shaped
+    pt_refused "cluster with shell text" profile.json 'd["cluster"] = "791\"; touch /tmp/x; \""'
+    pt_refused "version_tag with a final newline" profile.json 'd["version_tag"] += "\n"'
+    pt_refused "mu with a final newline" profile.json 'd["mu"] += "\n"'
+    pt_refused "appimg absolute" profile.json 'd["appimg"] = "/etc"'
+    pt_refused "@system path escaping to /" profile.json 'd["stock"]["IAP2CFG"][0] = "@system//etc/x"'
+    pt_refused "backup_dir not MU<mu>" profile.json 'd["backup_dir"] = "MU0000"'
+    pt_refused "duplicate jar pin" profile.json 'd["lsd_jar_sha256"].append(d["lsd_jar_sha256"][0])'
+    pt_refused "empty package list" profile.json 'd["packages"] = []'
+    pt_refused "history jar outside jars/" history.json 'd["java_old"][0]["jar"] = "../x.jar"'
+    pt_refused "history unknown successor" history.json 'd["java_old"][0]["successor"] = "zz"'
+    pt_refused "history duplicate row" history.json 'd["rg_known"].append(dict(d["rg_known"][0]))'
+    pt_refused "history: sha1 wrong" history.json 'd["java_old"][0]["sha1"] = "00"'
+    pt_refused "history: sha256 in capitals" history.json 'd["rg_known"][0]["sha256"] = d["rg_known"][0]["sha256"].upper()'
+    pt_refused "history: AA set with 3 files" history.json 'd["aa_old"][0]["files"].pop()'
+    pt_refused "history: unknown key" history.json 'd["java_old"][0]["extra"] = 1'
+    pt_refused "history: top-level key missing" history.json 'del d["rg_known"]'
+    pt_fresh; rm "$W/pt/profiles/$PMCP_PROFILE/history.json"; python3 -I "$W/pt/scripts/profile.py" validate > "$W/pout" 2>&1; echo $? > "$W/prc"
+    prof_is 1 "refused: no history.json"
+    pt_fresh; echo '{' > "$W/pt/profiles/$PMCP_PROFILE/profile.json"; python3 -I "$W/pt/scripts/profile.py" validate > "$W/pout" 2>&1; echo $? > "$W/prc"
+    prof_is 1 "refused: profile.json is not JSON"
+    # two profiles with the same train and MU: detect must not pick one; with a different MU it tells them apart
+    pt_fresh; cp -R "$W/pt/profiles/$PMCP_PROFILE" "$W/pt/profiles/MU9999"; python3 -I "$W/mut.py" "$W/pt/profiles/MU9999/profile.json" 'd["id"] = "MU9999"'
+    python3 -I "$W/pt/scripts/profile.py" detect "$(pf train)" "$(pf mu)" > "$W/pout" 2>&1; echo $? > "$W/prc"
+    prof_is 1 "detect: two profiles with the same train and MU is an error"
+    python3 -I "$W/mut.py" "$W/pt/profiles/MU9999/profile.json" 'd["mu"] = "9999"; d["backup_dir"] = "MU9999"'
+    python3 -I "$W/pt/scripts/profile.py" detect "$(pf train)" 9999 > "$W/pout" 2>&1; echo $? > "$W/prc"
+    prof_is 0 "detect: a profile with another MU is found by its own MU"
+    [ "$(cat "$W/pout")" = MU9999 ] && ok "detect names MU9999" || bad "detect printed: $(cat "$W/pout")"
+    python3 -I "$W/pt/scripts/profile.py" detect "$(pf train)" "$(pf mu)" > "$W/pout" 2>&1; [ "$(cat "$W/pout")" = "$PMCP_PROFILE" ] && ok "detect still names $PMCP_PROFILE" || bad "detect printed: $(cat "$W/pout")"
+    # the card builder refuses an unknown profile before it writes anything
+    PMCP_PROFILE=NOPE python3 -I "$PROJ/installer/build_sd.py" "$W/nobuild" > "$W/pout" 2>&1; echo $? > "$W/prc"
+    prof_is 1 "build_sd.py: unknown profile refused"
+    [ ! -e "$W/nobuild" ] && ok "build_sd.py wrote nothing" || bad "build_sd.py created $W/nobuild"
+    rm -rf "$W/pt" "$W/nobuild"
+
     echo "[1] verify on factory unit"
     fresh_unit; before=$(snapshot "$W/unit")
     run verify; rc_is 0; expect_out "PMCP_VERIFY_OK state=STOCK" "state STOCK"
@@ -295,9 +405,10 @@ for SH in "$@"; do
     run verify; rc_is 0; ! grep -q "PMCP_WARN" "$W/out" && ok "SD read-only but gem.log writable: no warning" || bad "warned with gem.log"
     rm -f "$W/unit/sdlog"
 
-    echo "[10] not MU1161 (lsd.jxe size)"
-    fresh_unit; rm "$W/unit/ifs/lsd.jxe"; truncate -s 55840541 "$W/unit/ifs/lsd.jxe"
-    run install map-clean; rc_is 1; expect_out "NOT_MU1161_LSD_JXE_SIZE_55840541" "size gate"
+    echo "[10] not $PMCP_PROFILE (lsd.jxe size)"
+    BADSIZE=$((JXE_SIZE + 10232))
+    fresh_unit; rm "$W/unit/ifs/lsd.jxe"; truncate -s $BADSIZE "$W/unit/ifs/lsd.jxe"
+    run install map-clean; rc_is 1; expect_out "NOT_${PMCP_PROFILE}_LSD_JXE_SIZE_$BADSIZE" "size gate"
 
     echo "[11] modified factory lsd.sh: refused"
     fresh_unit; echo "# local edit" >> "$W/unit/mnt/app/eso/hmi/lsd/lsd.sh"; before=$(snapshot "$W/unit")
@@ -428,8 +539,8 @@ for SH in "$@"; do
         [ -f "$SDB/pmcp/menu/${ref##*/}" ] || bad "menu points to missing ${ref##*/}"
     done
     v=$(sed -n 's/^PMCP_VERSION="\(.*\)"$/\1/p' "$SDB/pmcp/pmcp.sh")
-    case "$v" in pmcp-0.7.0-mu1161-791-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;;
-        pmcp-0.7.0-exp-mu1161-791-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "experimental version carries a build id: $v" ;;
+    case "$v" in pmcp-0.7.0-$VTAG-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;;
+        pmcp-0.7.0-exp-$VTAG-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "experimental version carries a build id: $v" ;;
         *) bad "version $v" ;; esac
     aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen aa_advanced/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
     case "$v" in
@@ -811,7 +922,7 @@ PEOF
     run speedlimit-status; rc_is 0; expect_out "value=70" "status shows reader snapshot even during fallback"
     [ "$before" = "$(snapshot "$W/unit")" ] && ok "snapshot viewing is read-only" || bad "snapshot viewer changed files"
     cp "$SDB/pmcp/bin/selftest.bin" "$W/sd/bin/selftest.bin"
-    truncate -s 55830309 "$W/unit/ifs/lsd.jxe"
+    truncate -s $JXE_SIZE "$W/unit/ifs/lsd.jxe"
     rm -f "$SLP/DISABLED"
     run speedlimit-mode turnto; rc_is 0
     mkdir "$SLL"; echo owner > "$SLL/owner"

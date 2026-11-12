@@ -20,7 +20,7 @@ grep -q '^t=[0-9]*\.[0-9]s 8006 len=[0-9]* | 1:{1:{1:' "$W/raw.txt" && [ "$n6" -
 echo "ok    raw dump: 0x8006=$n6 0x8003=$n3 lines, nested fields decoded"
 javac -nowarn -d "$W/classes" "$BR/LiveModel.java" "$BR/MailboxReader.java" "$H/test/TestAaRg.java" 2>&1 | grep -v "^Note:" || true
 java -cp "$W/classes" com.cpmap.rgi.TestAaRg "$W/rg"
-# Optional: the same steps through the staged rg classes (rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa leaves them in
+# Optional: the same steps through the staged rg classes (rg/build.sh <profile> <lsd> <dir> lanes-uturn-asf-m-aa leaves them in
 # <dir>/lanes/guidance-src, and BuildInfo.java in <dir>/generated); PMCP_RG_STAGED=<that guidance-src>
 # PMCP_LSD_JAR=<converted MU1161 lsd.jar>. LiveBridge is needed since v1.5.0 (ArrowProgress/RoadName/FeedRecovery ask it
 # for the AA hold).

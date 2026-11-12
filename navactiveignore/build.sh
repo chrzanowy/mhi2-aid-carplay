@@ -4,8 +4,9 @@
 #
 #   build.sh <profile> <converted lsd.jar> <work dir>
 #
-# Profiles pin the converted jar and the firmware's HMI property IDs. A new
-# firmware (MU1161 after the backup) gets its own profile line, never a guess.
+# <profile> = a firmware profile (profiles/<ID>/profile.json, read by scripts/profile.py: the pinned converted jar and the
+# firmware's HMI property IDs), or K4525, the one built-in non-profile entry below. A new firmware gets its own profile,
+# never a guess.
 # Needs: JDK 11+ (javac, java, javap), python3, ASM 9.7 jars in $ASM_DIR.
 set -euo pipefail
 
@@ -14,12 +15,12 @@ H=$(cd "$(dirname "$0")" && pwd)
 BT="$H/../buildtools"     # Guard (try/catch around every hook call), RefCheck (J9 API check)
 : "${ASM_DIR:?set ASM_DIR to a directory with asm-9.7, asm-tree-9.7, asm-analysis-9.7}"
 
+# The profile is read before anything is written; an unknown or invalid profile stops here (profile.py exits non-zero).
+pf() { python3 -I "$H/../scripts/profile.py" get "$PROFILE" "$@"; }
 case "$PROFILE" in
-    K4525) JAR_SHA=f996e81650e9d748a4d6d3d072f1739bbd718d7b55a27dc9acb80b21b5ec1a2b; CARPLAY_PROP=2910009; AA_PROP=2910005 ;;
-    # Our car's backup (2026-10-21). The five patched classes are byte-identical to K4525.
-    # a0cc737c = time-stamped conversion, 573b603a = the same classes from jxe2jar_run.py (fixed timestamps)
-    MU1161) JAR_SHA=a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599; JAR_SHA_ALT=573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576; CARPLAY_PROP=2910009; AA_PROP=2910005 ;;
-    *) echo "unknown profile $PROFILE" >&2; exit 2 ;;
+    K4525) JAR_SHAS=f996e81650e9d748a4d6d3d072f1739bbd718d7b55a27dc9acb80b21b5ec1a2b; CARPLAY_PROP=2910009; AA_PROP=2910005 ;;
+    # MU1161: the five patched classes are byte-identical to K4525 (jar pins a0cc737c / 573b603a come from the profile).
+    *) JAR_SHAS=$(pf lsd_jar_sha256); CARPLAY_PROP=$(pf props.carplay_rg); AA_PROP=$(pf props.aa_rg) ;;
 esac
 
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
@@ -30,7 +31,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 [ "$(sha "$ASM_DIR/asm-tree-9.7.jar")" = 62f4b3bc436045c1acb5c3ba2d8ec556ec3369093d7f5d06c747eb04b56d52b1 ] || fail "asm-tree-9.7.jar hash"
 [ "$(sha "$ASM_DIR/asm-analysis-9.7.jar")" = 7bc6bcbc21379948a0c8c467fb0f864206e5b818f6bc0b546872f5c9f941556f ] || fail "asm-analysis-9.7.jar hash"
 JAR_GOT=$(sha "$STOCK_JAR")
-[ "$JAR_GOT" = "$JAR_SHA" ] || [ "$JAR_GOT" = "${JAR_SHA_ALT:-none}" ] || fail "converted jar is not the pinned $PROFILE jar"
+grep -qx "$JAR_GOT" <<< "$JAR_SHAS" || fail "converted jar is not the pinned $PROFILE jar"
 
 CP="$ASM_DIR/asm-9.7.jar:$ASM_DIR/asm-tree-9.7.jar:$ASM_DIR/asm-analysis-9.7.jar"
 CLASSES="de/esolutions/fw/comm/dsi/carplay/impl/DSICarplayProxy

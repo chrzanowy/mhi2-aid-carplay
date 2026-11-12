@@ -69,7 +69,7 @@ Planned rows (later, they need changes in `core.so`): map layout, fps, IDR.
 ## Build
 
 ```sh
-ASM_DIR=/path/to/asm-9.7 ui/build.sh <converted MU1161 lsd.jar> <fresh dir>
+ASM_DIR=/path/to/asm-9.7 ui/build.sh MU1161 <converted MU1161 lsd.jar> <fresh dir>
 ```
 
 The build checks the hash of every input. It then runs these steps:

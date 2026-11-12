@@ -1,11 +1,11 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Build the optional native-map speed-limit road text package from exact MU1161 classes.
-#   ASM_DIR=/path/to/asm-9.7 build.sh <converted lsd.jar> <fresh work dir>
+#   ASM_DIR=/path/to/asm-9.7 build.sh <profile id, e.g. MU1161> <converted lsd.jar> <fresh work dir>
 # Requires JDK 17+ and Python 3. JAVA_HOME may select the JDK.
 set -euo pipefail
 
-STOCK_JAR=${1:?converted lsd jar}; W=${2:?fresh work dir}
+PROFILE=${1:?profile id}; STOCK_JAR=${2:?converted lsd jar}; W=${3:?fresh work dir}
 H=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$H/.." && pwd)
 : "${ASM_DIR:?set ASM_DIR to a directory with ASM 9.7 jars}"
@@ -16,12 +16,12 @@ fi
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 sha() { python3 -I -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$1"; }
-# converted MU1161 lsd.jar: 573b603a (jxe2jar_run.py, fixed timestamps) or a0cc737c (same classes, time-stamped);
-# the patcher also pins every class it reads
-case "$(sha "$STOCK_JAR")" in
-    573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576|a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599) ;;
-    *) fail "converted jar is not the pinned MU1161 image" ;;
-esac
+# The profile is read before anything is written; an unknown or invalid profile stops here (profile.py exits non-zero).
+pf() { python3 -I "$REPO/scripts/profile.py" get "$PROFILE" "$@"; }
+JAR_SHAS=$(pf lsd_jar_sha256)
+FW_TRAIN=$(pf train_full); FW_MU=$(pf mu)
+# the converted lsd.jar must be one of the profile's pinned images (the patcher also pins every class it reads)
+grep -qx "$(sha "$STOCK_JAR")" <<< "$JAR_SHAS" || fail "converted jar is not the pinned $PROFILE image"
 [ "$(sha "$ASM_DIR/asm-9.7.jar")" = adf46d5e34940bdf148ecdd26a9ee8eea94496a72034ff7141066b3eea5c4e9d ] || fail "asm-9.7.jar hash"
 [ "$(sha "$ASM_DIR/asm-tree-9.7.jar")" = 62f4b3bc436045c1acb5c3ba2d8ec556ec3369093d7f5d06c747eb04b56d52b1 ] || fail "asm-tree-9.7.jar hash"
 [ "$(sha "$ASM_DIR/asm-analysis-9.7.jar")" = 7bc6bcbc21379948a0c8c467fb0f864206e5b818f6bc0b546872f5c9f941556f ] || fail "asm-analysis-9.7.jar hash"
@@ -61,15 +61,15 @@ PY
 "$JAVA" -Xverify:all -cp "$TOOLS_CP" TestNativeSpeedLimitPatch "$W/stock" "$W/patched"
 
 # Identical to build.ps1, including manifest, sorted entries, timestamp and class version checks.
-python3 -I - "$W/patched" "$W/pmcp-sl.jar" <<'PY'
+python3 -I - "$W/patched" "$W/pmcp-sl.jar" "$PROFILE" <<'PY'
 from pathlib import Path
 import hashlib, struct, sys, zipfile
-root, target = Path(sys.argv[1]), Path(sys.argv[2])
+root, target, profile = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 classes = sorted(root.rglob('*.class'))
 if not classes:
     raise ValueError('No generated classes')
 with zipfile.ZipFile(target, 'x') as z:
-    entries = [('META-INF/MANIFEST.MF', b'Manifest-Version: 1.0\nCreated-By: MU1161 native speed-limit road text\n\n')]
+    entries = [('META-INF/MANIFEST.MF', ('Manifest-Version: 1.0\nCreated-By: ' + profile + ' native speed-limit road text\n\n').encode())]
     for path in classes:
         data = path.read_bytes()
         if data[:4] != b'\xca\xfe\xba\xbe' or struct.unpack('>H', data[6:8])[0] != 46:
@@ -92,12 +92,13 @@ TEST_CP="$(java_path "$W/pmcp-sl.jar")$CP_SEP$STOCK_CP"
 "$JAVAC" --release 8 -g:none -Xlint:-options -cp "$TEST_CP" -d "$W/tests" "$H"/test/com/pmcp/sl/*.java
 "$JAVA" -Xverify:all -cp "$(java_path "$W/tests")$CP_SEP$TEST_CP" com.pmcp.sl.TestNativeSpeedLimit
 
-python3 -I - "$STOCK_JAR" "$W/pmcp-sl.jar" "$W/patched" "$W/BUILD-VALIDATION.json" <<'PY'
+python3 -I - "$STOCK_JAR" "$W/pmcp-sl.jar" "$W/patched" "$W/BUILD-VALIDATION.json" "$FW_TRAIN" "$FW_MU" <<'PY'
 from pathlib import Path
 import hashlib, json, sys
-stock, jar, classes, target = map(Path, sys.argv[1:])
+stock, jar, classes, target = map(Path, sys.argv[1:5])
+train, mu = sys.argv[5:7]
 report = {
-    'firmware': 'MHI2_ER_VWG13_P4512_1 MU1161',
+    'firmware': train + ' MU' + mu,
     'source_stock_jar_sha256': hashlib.sha256(stock.read_bytes()).hexdigest(),
     'helper_jar_sha256': hashlib.sha256(jar.read_bytes()).hexdigest(),
     'helper_jar_size': jar.stat().st_size,

@@ -1,11 +1,11 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Packages F (pmcp-zoom.jar: steering-wheel zoom) and G (pmcp-dn.jar: day/night resend) from MU1161's own classes.
+# Packages F (pmcp-zoom.jar: steering-wheel zoom) and G (pmcp-dn.jar: day/night resend) from the unit's own classes.
 #
-#   build.sh <converted MU1161 lsd.jar> <work dir>
+#   build.sh <profile id, e.g. MU1161> <converted lsd.jar> <work dir>
 set -euo pipefail
 
-STOCK_JAR=${1:?converted lsd jar}; W=${2:?work dir}
+PROFILE=${1:?profile id}; STOCK_JAR=${2:?converted lsd jar}; W=${3:?work dir}
 H=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$H/../.." && pwd)
 BT="$H/../buildtools"     # Guard (try/catch around every hook call), RefCheck (J9 API check)
@@ -15,8 +15,11 @@ sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pin() { [ "$(sha "$1")" = "$2" ] || fail "hash $1"; }
 
-# converted MU1161 lsd.jar: a0cc737c (time-stamped) or 573b603a (same classes, jxe2jar_run.py fixed timestamps)
-[ "$(sha "$STOCK_JAR")" = a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599 ] || pin "$STOCK_JAR" 573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576
+# The profile is read before anything is written; an unknown or invalid profile stops here (profile.py exits non-zero).
+pf() { python3 -I "$H/../scripts/profile.py" get "$PROFILE" "$@"; }
+JAR_SHAS=$(pf lsd_jar_sha256)
+# the converted lsd.jar must be one of the profile's pinned images
+grep -qx "$(sha "$STOCK_JAR")" <<< "$JAR_SHAS" || fail "converted jar is not the pinned $PROFILE jar"
 pin "$ASM_DIR/asm-9.7.jar" adf46d5e34940bdf148ecdd26a9ee8eea94496a72034ff7141066b3eea5c4e9d
 pin "$ASM_DIR/asm-tree-9.7.jar" 62f4b3bc436045c1acb5c3ba2d8ec556ec3369093d7f5d06c747eb04b56d52b1
 pin "$ASM_DIR/asm-analysis-9.7.jar" 7bc6bcbc21379948a0c8c467fb0f864206e5b818f6bc0b546872f5c9f941556f
@@ -48,15 +51,15 @@ for pair in "zoom:$KP" "dn:$AH"; do
 done
 
 for d in zoom dn; do
-python3 -I - "$W/$d" "$W/pmcp-$d.jar" "$d" <<'EOF'
+python3 -I - "$W/$d" "$W/pmcp-$d.jar" "$d" "$PROFILE" <<'EOF'
 import os, sys, zipfile
-src, dst, name = sys.argv[1:]
+src, dst, name, profile = sys.argv[1:]
 files = sorted(os.path.relpath(os.path.join(d, f), src) for d, _, fs in os.walk(src) for f in fs if f.endswith('.class'))
 def add(z, n, data):
     i = zipfile.ZipInfo(n, date_time=(2026, 10, 21, 0, 0, 0)); i.compress_type = zipfile.ZIP_DEFLATED
     i.external_attr = 0o100644 << 16; z.writestr(i, data)
 with zipfile.ZipFile(dst, 'w') as z:
-    add(z, 'META-INF/MANIFEST.MF', ('Manifest-Version: 1.0\nCreated-By: pmcp package %s, MU1161\n' % name).encode())
+    add(z, 'META-INF/MANIFEST.MF', ('Manifest-Version: 1.0\nCreated-By: pmcp package %s, %s\n' % (name, profile)).encode())
     for f in files: add(z, f, open(os.path.join(src, f), 'rb').read())
 EOF
 done

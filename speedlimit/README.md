@@ -102,7 +102,7 @@ On a POSIX host, set `JAVA_HOME` to the JDK or put its tools on `PATH`, then run
 
 ```sh
 ASM_DIR=/path/to/asm-9.7 \
-  ./speedlimit/build.sh /path/to/MU1161-stock-lsd.jar /path/to/fresh-build
+  ./speedlimit/build.sh MU1161 /path/to/MU1161-stock-lsd.jar /path/to/fresh-build
 ```
 
 On Windows, run the PowerShell builder from the repository root.

@@ -12,7 +12,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))   # python3 -I leaves the script directory out
-from build_rescue import HERE, mib_card, write_manifest  # noqa: E402
+from build_rescue import FW, HERE, mib_card, write_manifest  # noqa: E402
 
 STUFF_TAIL = """
 # >>> pmcp log card: the card is writable now (M.I.B. remounted it); copy the saved AA and CarPlay logs to it, read-only on the unit
@@ -22,7 +22,7 @@ fi
 # <<< pmcp
 """
 
-README = """CARD 3 - LOGS: copy the saved Android Auto and CarPlay logs to this card (VW MHI2 MU1161, M.I.B. 3.6.0)
+README = """CARD 3 - LOGS: copy the saved Android Auto and CarPlay logs to this card (VW MHI2 %(id)s, M.I.B. 3.6.0)
 ======================================================================================================
 
 Before: in GEM -> pmcp_stream_map_aid -> pmcp_advanced -> aa_advanced, "AA save log: copy this start's AA log to the
@@ -53,7 +53,7 @@ def main():
     mib_card(out, "", STUFF_TAIL)
     (out / "pmcp-logs").mkdir()
     (out / "pmcp-logs/pmcp-logs.sh").write_bytes((HERE / "logcard/pmcp-logs.sh").read_bytes())
-    (out / "PMCP_LOGS_README.txt").write_text(README)
+    (out / "PMCP_LOGS_README.txt").write_text(README % {"id": FW["id"]})
     if (out / "pmcp").exists() or (out / "pmcp-rescue").exists():
         sys.exit("log card must not contain the pmcp installer or the rescue script")
     write_manifest(out, "PMCP_LOGS_MANIFEST.txt", ("stuff.sh", "pmcp-logs", "Swdlautorun", "metainfo2", "finalScript"))

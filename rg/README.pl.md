@@ -9,7 +9,7 @@ manewrów iAP2 wg luka-dev; tablica manewrów dla strzałek zastępczych: harman
 Źródła: `upstream/tomasz` @ `024dd159` (MU1427), `7925a83` (pasy MU1367 v1.4.0), `1d69473` (MU1367 v1.4.3),
 `d20527f` (MU1367 v1.4.4), `MU1367-v1.4.5` / `MU1367-v1.4.6` (`6610cbb`, `d680311`).
 
-Od v1.4 jest **jedna** paczka Java prowadzenia, `rg`, budowana przez `rg/build.sh <lsd.jar> <katalog> lanes-uturn-asf-m` (od v1.5.0 `lanes-uturn-asf-m-aa`, od v1.7.0
+Od v1.4 jest **jedna** paczka Java prowadzenia, `rg`, budowana przez `rg/build.sh <profil> <lsd.jar> <katalog> lanes-uturn-asf-m` (od v1.5.0 `lanes-uturn-asf-m-aa`, od v1.7.0
 `lanes-uturn-asf-m-aa-r`; plik od v1.7.0 `pmcp-guidance7.jar`).
 Zawiera wszystko, co niżej: port MU1427, jego pasy, nasze pasy do zawracania, jego pasek odległości / nazwę ulicy /
 odzyskiwanie strumienia i strzałki zastępcze. Paczek `rg` (bez pasów) i `rglu` z v1.3 już nie ma; `java-update` (przycisk 4)

@@ -62,7 +62,7 @@ MANIFEST='
 '
 SELFTEST_SHA="@@SELFTEST_SHA@@"
 SELFTEST_SIZE="@@SELFTEST_SIZE@@"
-STOCK_JXE_SIZE=55830309
+STOCK_JXE_SIZE=@@STOCK_JXE_SIZE@@
 STOCK_LSD_SHA="@@STOCK_LSD_SHA@@"
 STOCK_LSD_SIZE="@@STOCK_LSD_SIZE@@"
 STOCK_DIO_SHA="@@STOCK_DIO_SHA@@"
@@ -340,8 +340,8 @@ EOF
 firmware_identity() {
     say "Firmware identity"
     [ -s "$JXE" ] || fail "LSD_JXE_MISSING"
-    [ "`size_of "$JXE"`" = "$STOCK_JXE_SIZE" ] || fail "NOT_MU1161_LSD_JXE_SIZE_`size_of "$JXE"`"
-    say "  ok lsd.jxe size $STOCK_JXE_SIZE (MU1161)"
+    [ "`size_of "$JXE"`" = "$STOCK_JXE_SIZE" ] || fail "NOT_@@PROFILE_ID@@_LSD_JXE_SIZE_`size_of "$JXE"`"
+    say "  ok lsd.jxe size $STOCK_JXE_SIZE (@@PROFILE_ID@@)"
 }
 
 # Our JAR files (this card's and earlier cards') present in the HMI jars directory, one file name per line
@@ -1286,7 +1286,7 @@ EOF
     cp "$0" "$NEW/tools/pmcp.sh" && cp "$SD/bin/sha256.awk" "$NEW/tools/sha256.awk" || fail "TOOLS_COPY_FAILED"
     echo "$PMCP_VERSION" > "$NEW/PMCP_VERSION"
     echo "$ARG" > "$NEW/VARIANT"
-    echo "MU1161/791" > "$NEW/PROFILE"
+    echo "@@PROFILE_ID@@/@@PROFILE_CLUSTER@@" > "$NEW/PROFILE"
     echo "$PMCP_VERSION" > "$NEW/VERSION"
     touch "$NEW/CLUSTER_AUTO_ENABLE" || fail "MARKER_FAILED"
     chmod 755 "$NEW/dio_manager.wrapper.sh" "$NEW/altscreen-most-bridge" "$NEW/carplay-cluster-supervisor" \

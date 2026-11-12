@@ -48,7 +48,7 @@ The title is cut to 80 characters. AA and MirrorLink stay factory.
 
 ```sh
 ASM_DIR=upstream/tools/jxe2jar/repo/tools/uninline/lib \
-  nowplaying/build.sh archives/x-mu1161/jar/lsd-mu1161.jar build/np-mu1161
+  nowplaying/build.sh MU1161 archives/x-mu1161/jar/lsd-mu1161.jar build/np-mu1161
 ```
 
 Result: ASM verifier OK, classes at version 46 (the stock `HsmTarget` and `CurrentStationInfo` from the converter are 49; the patcher lowers

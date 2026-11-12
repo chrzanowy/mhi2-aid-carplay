@@ -47,7 +47,7 @@ Tytuł jest przycinany do 80 znaków. AA i MirrorLink zostają fabryczne.
 
 ```sh
 ASM_DIR=upstream/tools/jxe2jar/repo/tools/uninline/lib \
-  nowplaying/build.sh archives/x-mu1161/jar/lsd-mu1161.jar build/np-mu1161
+  nowplaying/build.sh MU1161 archives/x-mu1161/jar/lsd-mu1161.jar build/np-mu1161
 ```
 
 Wynik: weryfikator ASM OK, klasy w wersji 46 (stockowe `HsmTarget` i `CurrentStationInfo` z konwertera mają 49; patcher obniża

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """pmcp: add the route-guidance log gate (log-gate.S) to our patched MU1161 iAP2 driver. Never modifies the input.
 
-Input  = rg/build.sh output ipod-drvr-iap2.so (Tomasz's B2+B3+B4 chain on our driver), sha256 76926bde...
+Input  = rg/build.sh output ipod-drvr-iap2.so (Tomasz's B2+B3+B4 chain on our driver), sha256 76926bde... for MU1161
+         (profile key rg_driver_in_sha256; rg/build.sh passes it as IN_SHA_HEX, the default below is MU1161's)
 Output = the same driver plus 76 bytes appended to the injected RX segment at 0xb571c, its PT_LOAD filesz/memsz grown
 by that much, and one branch changed: publication_receive_hook's final `b b2_receive_resume` (0xb5568) -> the gate.
-Every other byte must stay identical (checked). Usage: patch-log-gate.py IN GATE_BIN OUT
+Every other byte must stay identical (checked). Usage: patch-log-gate.py IN GATE_BIN OUT [IN_SHA_HEX]
 """
 import hashlib, struct, sys
 
-IN_SHA = "76926bde9bdf1e06fdfe57fd324bbd8772bcb2a98a58ac444b4822e25a331b48"
+IN_SHA = "76926bde9bdf1e06fdfe57fd324bbd8772bcb2a98a58ac444b4822e25a331b48"   # MU1161 (default when no 4th argument)
 SEG_VADDR, SEG_END = 0xB5000, 0xB571C
 BRANCH_AT, BRANCH_OLD, RESUME = 0xB5568, 0xEAFFFEED, 0xB5124
 OPEN_PLT, CLOSE_PLT = 0x4CB8, 0x4D3C
@@ -26,9 +27,15 @@ def b_to(at, target, link=False):
 
 def main():
     src, gate_path, out = sys.argv[1:4]
+    in_sha = IN_SHA
+    if len(sys.argv) == 5:
+        in_sha = sys.argv[4]
+        assert len(in_sha) == 64 and all(c in "0123456789abcdef" for c in in_sha), "IN_SHA_HEX is not a lowercase sha256"
+    elif len(sys.argv) != 4:
+        sys.exit("usage: patch-log-gate.py IN GATE_BIN OUT [IN_SHA_HEX]")
     data = open(src, "rb").read()
     gate = open(gate_path, "rb").read()
-    assert sha(data) == IN_SHA, "input is not our patched driver 76926bde"
+    assert sha(data) == in_sha, "input is not our patched driver %s" % in_sha[:8]
     assert len(data) == SEG_END, "injected segment is not at the end of the file"
     assert len(gate) % 4 == 0 and len(gate) <= 0x1000 - (SEG_END - SEG_VADDR)
     # The gate must be exactly what log-gate.S says: check the branch/call words against the expected targets.

@@ -76,7 +76,7 @@ python3 -I aa/feeder/test/run_host_test.py <feeder zbudowany na komputer>   # cc
 aa/hook/test/run_keyframe_test.sh ; aa/hook/test/run_rg_test.sh
 aa/hook/build.sh   build/aa-g2 gamma     # obraz Dockera qnx65-armv7-toolchain:8.5; dwa buildy, muszą być identyczne
 aa/feeder/build.sh build/aa-v10/feeder
-rg/build.sh <skonwertowany lsd.jar> build/rg-mu1161-lanes-uturn-asf-m-aa lanes-uturn-asf-m-aa   # pakiet rg
+rg/build.sh MU1161 <skonwertowany lsd.jar> build/rg-mu1161-lanes-uturn-asf-m-aa lanes-uturn-asf-m-aa   # pakiet rg
 python3 -I installer/build_sd.py build/sd
 python3 -I installer/build_logcard.py build/karta3-logi   # karta 3 (logi), osobna karta SD
 ```

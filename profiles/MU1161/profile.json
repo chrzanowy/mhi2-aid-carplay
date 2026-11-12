@@ -6,6 +6,7 @@
   "label": "VW MHI2 Discover Pro MU1161 (train MHI2_ER_VWG13_P4512) + AID 12.3\" part 791",
   "car": "Passat B8",
   "train": "MHI2_ER_VWG13_P4512",
+  "train_full": "MHI2_ER_VWG13_P4512_1",
   "mu": "1161",
   "backup_dir": "MU1161",
   "appimg": "advanced/MU1161-appimg",

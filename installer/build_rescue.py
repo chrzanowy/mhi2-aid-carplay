@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the pmcp rescue card (a separate SD card) from the pinned M.I.B. 3.6.0 zip. Host tool.
 
-  python3 -I build_rescue.py OUT_DIR
+  [PMCP_PROFILE=MU1161] python3 -I build_rescue.py OUT_DIR   (the profile only names the unit in the README)
 
 Output = the M.I.B. 3.6.0 tree exactly as in the zip, with three changes:
   - _Swdlautorun.txt renamed to Swdlautorun.txt (armed: the unit enters update mode by itself);
@@ -11,6 +11,7 @@ metainfo2.txt and Launcher/final/finalScript.sh (SHA1 checked by metainfo2) stay
 outside metainfo2's reach (M.I.B.'s own comment in stuff.sh). The card carries no pmcp installer.
 """
 import hashlib
+import os
 import pathlib
 import sys
 import zipfile
@@ -23,6 +24,18 @@ ZIP_SHA = "4bfc6e725b5cc60c3c8c73081609dabfe1a2016b5d8671e2438592e673a98086"
 PREFIX = "M.I.B._More-Incredible-Bash-3.6.0/"
 STUFF_SHA = "bac7f77c6b267f438a57d1dca92550d9ead0e4ad5b4c8505e480b180e0096964"
 FINAL_SHA1 = "ba391875e14a8794b683cc02556990fcb555fe08"
+
+
+def _load_profile():
+    # scripts/profile.py shares its name with a stdlib module, so load it by path (python3 -I has no script dir on sys.path)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pmcp_fwprofile", PROJ / "scripts/profile.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.load(os.environ.get("PMCP_PROFILE", "MU1161"))   # same profile as the build_sd.py run
+
+
+FW = _load_profile()
 
 STUFF_HEAD = """# >>> pmcp rescue card: undo our HMI start changes first, without any redirect (see pmcp-rescue.sh)
 if [ -f ${2}/pmcp-rescue/pmcp-rescue.sh ]; then
@@ -38,7 +51,7 @@ fi
 # <<< pmcp
 """
 
-README = """CARD 2 - RESCUE: CarPlay map on the AID (VW MHI2 MU1161, M.I.B. 3.6.0)
+README = """CARD 2 - RESCUE: CarPlay map on the AID (VW MHI2 %(id)s, M.I.B. 3.6.0)
 ========================================================================
 
 When: after "Install all features" the head unit screen stays black or keeps restarting, and
@@ -121,7 +134,7 @@ def main():
     mib_card(out, STUFF_HEAD, STUFF_TAIL)
     (out / "pmcp-rescue").mkdir()
     (out / "pmcp-rescue/pmcp-rescue.sh").write_bytes((HERE / "rescue/pmcp-rescue.sh").read_bytes())
-    (out / "PMCP_RESCUE_README.txt").write_text(README)
+    (out / "PMCP_RESCUE_README.txt").write_text(README % {"id": FW["id"]})
     if (out / "pmcp").exists():
         sys.exit("rescue card must not contain the pmcp installer")
     write_manifest(out, "PMCP_RESCUE_MANIFEST.txt", ("stuff.sh", "pmcp-rescue", "Swdlautorun", "metainfo2", "finalScript"))

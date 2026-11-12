@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+    [Parameter(Mandatory = $true)][string]$FirmwareProfile,   # firmware profile id, e.g. MU1161 (profiles/<ID>/profile.json)
     [Parameter(Mandatory = $true)][string]$StockJar,
     [Parameter(Mandatory = $true)][string]$Jdk,
     [Parameter(Mandatory = $true)][string]$AsmDirectory,
@@ -15,9 +16,17 @@ $BuildRoot = [IO.Path]::GetFullPath($BuildRoot)
 $Jdk = [IO.Path]::GetFullPath($Jdk)
 $AsmDirectory = [IO.Path]::GetFullPath($AsmDirectory)
 
-if ((Get-FileHash -LiteralPath $StockJar -Algorithm SHA256).Hash.ToLowerInvariant() -ne
-    '573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576') {
-    throw 'The converted firmware is not the pinned MU1161 image'
+# The profile is read before anything is written; scripts/profile.py exits non-zero for an unknown or invalid profile.
+function Get-ProfileValue([string]$Key) {
+    $out = @(& python -I (Join-Path $repo 'scripts/profile.py') get $FirmwareProfile $Key)
+    if ($LASTEXITCODE -or $out.Count -eq 0) { throw "Profile $FirmwareProfile / ${Key}: not available" }
+    return $out
+}
+$pinnedJars = @(Get-ProfileValue 'lsd_jar_sha256')
+$fwTrain = @(Get-ProfileValue 'train_full')[0]
+$fwMu = @(Get-ProfileValue 'mu')[0]
+if ($pinnedJars -notcontains (Get-FileHash -LiteralPath $StockJar -Algorithm SHA256).Hash.ToLowerInvariant()) {
+    throw "The converted firmware is not the pinned $FirmwareProfile image"
 }
 if (Test-Path -LiteralPath $BuildRoot) {
     throw 'Use a fresh output directory'
@@ -86,12 +95,12 @@ $jar = Join-Path $BuildRoot 'pmcp-sl.jar'
 $pack = @'
 from pathlib import Path
 import hashlib, json, struct, sys, zipfile
-root, target = Path(sys.argv[1]), Path(sys.argv[2])
+root, target, profile = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 classes = sorted(root.rglob('*.class'))
 if not classes:
     raise ValueError('No generated classes')
 with zipfile.ZipFile(target, 'x') as z:
-    entries = [('META-INF/MANIFEST.MF', b'Manifest-Version: 1.0\nCreated-By: MU1161 native speed-limit road text\n\n')]
+    entries = [('META-INF/MANIFEST.MF', ('Manifest-Version: 1.0\nCreated-By: ' + profile + ' native speed-limit road text\n\n').encode())]
     for path in classes:
         data = path.read_bytes()
         if data[:4] != b'\xca\xfe\xba\xbe' or struct.unpack('>H', data[6:8])[0] != 46:
@@ -105,7 +114,7 @@ with zipfile.ZipFile(target, 'x') as z:
         z.writestr(item, data)
 print('NATIVE_SPEED_LIMIT_JAR', target.stat().st_size, hashlib.sha256(target.read_bytes()).hexdigest())
 '@
-& python -I -c $pack $patched $jar
+& python -I -c $pack $patched $jar $FirmwareProfile
 if ($LASTEXITCODE) { throw 'Deterministic JAR packaging failed' }
 & $java -cp $toolClasspath RefCheck $StockJar $jar
 if ($LASTEXITCODE) { throw 'J9 API compatibility check failed' }
@@ -123,7 +132,7 @@ if ($LASTEXITCODE) { throw 'Host test compilation failed' }
 if ($LASTEXITCODE) { throw 'Native speed-limit host tests failed' }
 
 $report = [ordered]@{
-    firmware = 'MHI2_ER_VWG13_P4512_1 MU1161'
+    firmware = "$fwTrain MU$fwMu"
     source_stock_jar_sha256 = (Get-FileHash -LiteralPath $StockJar -Algorithm SHA256).Hash.ToLowerInvariant()
     helper_jar_sha256 = (Get-FileHash -LiteralPath $jar -Algorithm SHA256).Hash.ToLowerInvariant()
     helper_jar_size = (Get-Item -LiteralPath $jar).Length

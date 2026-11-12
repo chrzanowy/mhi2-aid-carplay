@@ -8,12 +8,20 @@
 #   - state is STOCK/VIDEO/JAVA/PARTIAL (never UNKNOWN), and restore (or nothing, for STOCK) gives the factory tree.
 #   fault_inject.sh SD_BUILD_DIR SHELL
 #   PMCP_FAULT_SCOPE=speedlimit runs native-limit actions with one retained companion package.
+#   PMCP_PROFILE=MU1161 (default): firmware profile (profiles/<ID>/) whose backup folder and lsd.jxe size the unit copy uses.
 #   PMCP_FAULT_QUICK=1: own chain only, no replay cross-check (daily); PMCP_FAULT_JOBS=N parallel workers (default 6).
 set -u
 SDB=$(cd "${1:?sd build dir}" && pwd); SH=${2:?shell}
 REPO=$(cd "$(dirname "$0")/../../.." && pwd)
 H=$(cd "$(dirname "$0")" && pwd)
-BK="${PMCP_BACKUP:-$REPO/backup/MU1161}/advanced/MU1161-appimg"
+PROJ=$(cd "$H/../.." && pwd)       # this project (any folder name)
+export PMCP_PROFILE="${PMCP_PROFILE:-MU1161}"
+pf() { python3 -I "$PROJ/scripts/profile.py" get "$PMCP_PROFILE" "$1" || exit 99; }   # a profile value
+BKROOT="${PMCP_BACKUP:-$REPO/backup/$(pf backup_dir)}"
+BK="$BKROOT/$(pf appimg)"
+BKSYS="$BKROOT/$(pf system)"
+JXE_SIZE=$(pf lsd_jxe.size)
+[ -n "$JXE_SIZE" ] && [ -d "$BK" ] || { echo "profile $PMCP_PROFILE: no lsd.jxe size or no backup at $BK"; exit 99; }
 export PMCP_TEST_GAWK="${PMCP_TEST_GAWK:-$REPO/upstream/tools/gawk-3.1.5/gawk}"
 W=$(mktemp -d /tmp/pmcp-fi.XXXX)
 export PMCP_TEST_GEMLOG="$W/gem.log"   # the GEM button log outside the unit tree (the tree checks stay exact)
@@ -26,8 +34,8 @@ fresh_unit() {
     mkdir -p "$W/unit/ifs" "$W/unit/ramdisk" "$U/eso/bin/apps" "$U/eso/hmi/lsd/jars" "$U/armle/usr/bin" "$W/unit/mnt/persist/etc" \
         "$U/armle/lib/dll" "$W/unit/mnt/system/etc/mm"
     cp "$BK/armle/lib/dll/ipod-drvr-iap2.so" "$U/armle/lib/dll/"
-    cp "$BK/../MU1161-system/mm/iap2.cfg" "$W/unit/mnt/system/etc/mm/"
-    mkfile -n 55830309 "$W/unit/ifs/lsd.jxe" 2>/dev/null || truncate -s 55830309 "$W/unit/ifs/lsd.jxe"
+    cp "$BKSYS/mm/iap2.cfg" "$W/unit/mnt/system/etc/mm/"
+    mkfile -n $JXE_SIZE "$W/unit/ifs/lsd.jxe" 2>/dev/null || truncate -s $JXE_SIZE "$W/unit/ifs/lsd.jxe"
     cp "$BK/eso/bin/apps/dio_manager" "$U/eso/bin/apps/dio_manager"
     cp "$BK/eso/bin/apps/gal" "$U/eso/bin/apps/gal"
     cp "$BK/eso/hmi/lsd/lsd.sh" "$U/eso/hmi/lsd/lsd.sh"

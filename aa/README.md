@@ -83,7 +83,7 @@ python3 -I aa/feeder/test/run_host_test.py <feeder built for the host>   # cc -O
 aa/hook/test/run_keyframe_test.sh ; aa/hook/test/run_rg_test.sh
 aa/hook/build.sh   build/aa-g2 gamma     # Docker image qnx65-armv7-toolchain:8.5; two builds, must be identical
 aa/feeder/build.sh build/aa-v10/feeder
-rg/build.sh <converted lsd.jar> build/rg-mu1161-lanes-uturn-asf-m-aa lanes-uturn-asf-m-aa   # package rg
+rg/build.sh MU1161 <converted lsd.jar> build/rg-mu1161-lanes-uturn-asf-m-aa lanes-uturn-asf-m-aa   # package rg
 python3 -I installer/build_sd.py build/sd
 python3 -I installer/build_logcard.py build/card3-logs   # card 3 (logs), a separate SD card
 ```

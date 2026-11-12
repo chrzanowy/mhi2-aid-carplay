@@ -1,13 +1,17 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Package E (native route guidance, port of tomasz-twardzicki MU1427 v1.2.0) for MU1161:
+# Package E (native route guidance, port of tomasz-twardzicki MU1427 v1.2.0) for a firmware profile (so far MU1161):
 #   - pmcp-rg.jar: Tomasz's PatchLive applied to OUR six NavSD classes + his bridge helpers compiled against
 #     OUR converted lsd.jar, then his TestLive integration test on the desktop JVM;
 #   - ipod-drvr-iap2.so: his driver patch chain reproduced on our driver (see rg/README.md);
 #   - iap2.cfg: our factory file + his [ident] section;
 #   - rgi-observer: his prebuilt reader (GPL, source release/reader.c), hash-pinned.
 #
-#   build.sh <converted MU1161 lsd.jar> <work dir> [lanes]
+#   build.sh <profile id, e.g. MU1161> <converted lsd.jar> <work dir> [lanes]
+#
+# The profile (profiles/<ID>/profile.json, via scripts/profile.py) gives the pinned lsd.jar images, the backup folder and the
+# stock driver / iap2.cfg (path and SHA-256) and the input hash of the log gate. The driver chain below (virtual MU1427 stock,
+# B4 patch, usage block offsets) is the one worked out on the MU1161 driver; another driver stops at its assertions.
 #
 # "lanes": pmcp-rg.jar additionally carries Tomasz's MU1367 v1.4.0 native lane guidance (rg/lanes/, iAP2 0x5204 -> the
 # factory LaneGuidance builder) and is tested with his TestLanes; driver, cfg and reader are the same.
@@ -31,8 +35,8 @@
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # do not write __pycache__ into upstream/tomasz (review 2)
 
-STOCK_JAR=${1:?converted lsd jar}; W=${2:?work dir}; MODE=${3:-base}
-case "$MODE" in base|lanes|lanes-uturn|lanes-uturn-asf|lanes-uturn-asf-m|lanes-uturn-asf-m-aa|lanes-uturn-asf-m-aa-r) ;; *) echo "FAIL: third argument must be lanes, lanes-uturn, lanes-uturn-asf, lanes-uturn-asf-m, lanes-uturn-asf-m-aa, lanes-uturn-asf-m-aa-r or nothing" >&2; exit 1 ;; esac
+PROFILE=${1:?profile id}; STOCK_JAR=${2:?converted lsd jar}; W=${3:?work dir}; MODE=${4:-base}
+case "$MODE" in base|lanes|lanes-uturn|lanes-uturn-asf|lanes-uturn-asf-m|lanes-uturn-asf-m-aa|lanes-uturn-asf-m-aa-r) ;; *) echo "FAIL: fourth argument must be lanes, lanes-uturn, lanes-uturn-asf, lanes-uturn-asf-m, lanes-uturn-asf-m-aa, lanes-uturn-asf-m-aa-r or nothing" >&2; exit 1 ;; esac
 ASF=no; case "$MODE" in *-asf|*-asf-m|*-asf-m-aa|*-asf-m-aa-r) ASF=yes ;; esac
 MAN=no; case "$MODE" in *-asf-m|*-asf-m-aa|*-asf-m-aa-r) MAN=yes ;; esac
 AA=no; case "$MODE" in *-aa|*-aa-r) AA=yes ;; esac
@@ -43,16 +47,35 @@ REPO=$(cd "$H/../.." && pwd)
 T="$REPO/upstream/tomasz"            # git 024dd159c4d99890c9b17ea500325e4d2b5dcbde
 RG="$T/MU1427/route-guidance"
 REL="$T/releases/CarPlay_Maps_VC_Full_Toolboxes/VW_SKODA_ALL_CarPlay_Maps_VC_FULL_MQB_Toolbox_V4/Custom/carplay_native_guidance"
-BK="${PMCP_BACKUP:-$REPO/backup/MU1161}/advanced"   # M.I.B. backup of the unit
+# The profile is read before anything is written; an unknown or invalid profile stops here (profile.py exits non-zero).
+pf() { python3 -I "$H/../scripts/profile.py" get "$PROFILE" "$@"; }
+JAR_SHAS=$(pf lsd_jar_sha256)
+PL=$(pf id | tr 'A-Z' 'a-z')                          # build ids: pmcp-mu1161-rg-...
+BKR="${PMCP_BACKUP:-$REPO/backup/$(pf backup_dir)}"   # M.I.B. backup of the unit
+# stock files of the unit: stock.<KEY> = [path, sha256, size]; path is relative to appimg, "@system/..." to system
+stock_path() {
+    local rel; rel=$(pf "stock.$1" | sed -n 1p)
+    case "$rel" in
+        @system/*) echo "$BKR/$(pf system)/${rel#@system/}" ;;
+        *) echo "$BKR/$(pf appimg)/$rel" ;;
+    esac
+}
+stock_sha() { pf "stock.$1" | sed -n 2p; }
+DRV_STOCK=$(stock_path IAP2DRV); DRV_STOCK_SHA=$(stock_sha IAP2DRV)
+CFG_STOCK=$(stock_path IAP2CFG); CFG_STOCK_SHA=$(stock_sha IAP2CFG)
+# stock_path/stock_sha run in $(...) without errexit: check what they gave before anything uses it
+for v in "$DRV_STOCK_SHA" "$CFG_STOCK_SHA"; do [[ "$v" =~ ^[0-9a-f]{64}$ ]] || fail "profile $PROFILE: bad stock pin '$v'"; done
+[ -f "$DRV_STOCK" ] && [ -f "$CFG_STOCK" ] || fail "stock driver or iap2.cfg not in the backup: $DRV_STOCK $CFG_STOCK"
+GATE_IN_SHA=$(pf rg_driver_in_sha256)
 : "${ASM_DIR:?set ASM_DIR}"
 PY="$REPO/upstream/tools/venv-elftools/bin/python"   # pyelftools 0.31 for Tomasz's patch scripts
 
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
-pin() { [ "$(sha "$1")" = "$2" ] || fail "hash $1"; }
+pin() { [ -n "$2" ] || fail "no pin for $1"; [ "$(sha "$1")" = "$2" ] || fail "hash $1"; }
 
-# converted MU1161 lsd.jar: a0cc737c (time-stamped) or 573b603a (same classes, jxe2jar_run.py fixed timestamps)
-[ "$(sha "$STOCK_JAR")" = a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599 ] || pin "$STOCK_JAR" 573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576
+# the converted lsd.jar must be one of the profile's pinned images
+grep -qx "$(sha "$STOCK_JAR")" <<< "$JAR_SHAS" || fail "converted jar is not the pinned $PROFILE jar"
 pin "$ASM_DIR/asm-9.7.jar" adf46d5e34940bdf148ecdd26a9ee8eea94496a72034ff7141066b3eea5c4e9d
 pin "$ASM_DIR/asm-tree-9.7.jar" 62f4b3bc436045c1acb5c3ba2d8ec556ec3369093d7f5d06c747eb04b56d52b1
 pin "$ASM_DIR/asm-analysis-9.7.jar" 7bc6bcbc21379948a0c8c467fb0f864206e5b818f6bc0b546872f5c9f941556f
@@ -89,23 +112,23 @@ if [ $R146 = yes ]; then
     pin "$H/lanes/v146/TestQuietQnx.java" fa3488097ff02ed862d40111b40f8d84f392171605e06b673d7279c55cf81214      # tests/java
 fi
 pin "$REL/driver/ipod-drvr-iap2.so" 3760797aed4886a6c4480e3a8de79be427a3d8587450a56c424721306ca15d8b
-pin "$BK/MU1161-appimg/armle/lib/dll/ipod-drvr-iap2.so" 7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c
-pin "$BK/MU1161-system/mm/iap2.cfg" 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37
+pin "$DRV_STOCK" "$DRV_STOCK_SHA"
+pin "$CFG_STOCK" "$CFG_STOCK_SHA"
 
 CP="$ASM_DIR/asm-9.7.jar:$ASM_DIR/asm-tree-9.7.jar:$ASM_DIR/asm-analysis-9.7.jar"
 NAV=de/vw/mib/bap/mqbab2/navsd/functions
 [ ! -e "$W" ] || fail "work dir exists: $W"
 mkdir -p "$W"/{stock,helpers,patcher,patched,tests,generated,report,driver}
 W=$(cd "$W" && pwd); STOCK_JAR=$(cd "$(dirname "$STOCK_JAR")" && pwd)/$(basename "$STOCK_JAR")
-LB="$RG/bridge"; EXTRA=""; ID=pmcp-mu1161-rg-1; WHAT="Tomasz MU1427 v1.2.0 port"; TL="$H/lanes/TestLanes.java"
+LB="$RG/bridge"; EXTRA=""; ID=pmcp-$PL-rg-1; WHAT="Tomasz MU1427 v1.2.0 port"; TL="$H/lanes/TestLanes.java"
 if [ "$MODE" != base ]; then
     # Tomasz's lane edits on the pinned bridge sources (LiveModel, LiveBridge, PatchLive, TestLive) + LaneData
     LB=$(python3 -I "$H/lanes/apply_lanes.py" "$T" "$W/lanes" | tail -1)
     [ -f "$LB/LaneData.java" ] && [ -f "$LB/PatchLive.java" ] || fail "lane sources not staged"
-    EXTRA="$LB/LaneData.java"; ID=pmcp-mu1161-rg-lanes-1; WHAT="Tomasz MU1427 v1.2.0 port + MU1367 v1.4.0 lanes"
+    EXTRA="$LB/LaneData.java"; ID=pmcp-$PL-rg-lanes-1; WHAT="Tomasz MU1427 v1.2.0 port + MU1367 v1.4.0 lanes"
     if [ "$MODE" != lanes ]; then
         python3 -I "$H/lanes/uturn.py" "$LB" "$H/lanes/TestLanes.java" || fail "uturn.py"
-        TL="$LB/TestLanes.java"; ID=pmcp-mu1161-rg-lanes-2; WHAT="$WHAT + VW U-turn lanes"
+        TL="$LB/TestLanes.java"; ID=pmcp-$PL-rg-lanes-2; WHAT="$WHAT + VW U-turn lanes"
     fi
     if [ $ASF = yes ]; then
         python3 -I "$H/lanes/asf.py" "$LB" "$H/lanes" || fail "asf.py"
@@ -116,24 +139,24 @@ if [ "$MODE" != base ]; then
         # quiet-route hold for Apple Maps (Tomasz's MU1367 v1.4.4, Java only): rg/lanes/hold.py
         python3 -I "$H/lanes/hold.py" "$LB" "$H/lanes" || fail "hold.py"
         EXTRA="$EXTRA $LB/GuidanceEvidence.java"
-        ID=pmcp-mu1161-rg-lanes-asf-2; WHAT="$WHAT + MU1367 v1.4.3 bargraph, road name, feed recovery + v1.4.4 quiet-route hold"
+        ID=pmcp-$PL-rg-lanes-asf-2; WHAT="$WHAT + MU1367 v1.4.3 bargraph, road name, feed recovery + v1.4.4 quiet-route hold"
     fi
     if [ $MAN = yes ]; then
         python3 -I "$H/lanes/maneuvers.py" "$LB" "$H/lanes" || fail "maneuvers.py"
-        ID=pmcp-mu1161-rg-lanes-asfm-2; WHAT="$WHAT + harman-f maneuver fallbacks"
+        ID=pmcp-$PL-rg-lanes-asfm-2; WHAT="$WHAT + harman-f maneuver fallbacks"
     fi
     if [ $AA = yes ]; then
         python3 -I "$H/lanes/aa.py" "$LB" || fail "aa.py"
-        ID=pmcp-mu1161-rg-lanes-asfm-aa-1; WHAT="$WHAT + Android Auto (pmcp gamma)"
+        ID=pmcp-$PL-rg-lanes-asfm-aa-1; WHAT="$WHAT + Android Auto (pmcp gamma)"
     fi
     if [ $R146 = yes ]; then
         # tomasz-twardzicki MU1367 v1.4.5/v1.4.6 CarPlay guidance fixes (after aa.py, so aa.py's output is unchanged)
         python3 -I "$H/lanes/v146.py" "$LB" "$H/lanes" || fail "v146.py"
         cp "$H/lanes/TestPmcp146.java" "$LB/TestPmcp146.java"
-        ID=pmcp-mu1161-rg-lanes-asfm-aa-r-1; WHAT="$WHAT + MU1367 v1.4.5/v1.4.6 reroute, placeholder, U-turn side, Apple names"
+        ID=pmcp-$PL-rg-lanes-asfm-aa-r-1; WHAT="$WHAT + MU1367 v1.4.5/v1.4.6 reroute, placeholder, U-turn side, Apple names"
         # AA 1.1 (experimental, A171): AA road name, lanes, destination only while the AID does not show the AA map
         python3 -I "$H/lanes/aa11.py" "$LB" "$H/lanes" || fail "aa11.py"
-        ID=pmcp-mu1161-rg-lanes-asfm-aa-r-aa11-1; WHAT="$WHAT + AA 1.1 road, lanes, destination off the AA map"
+        ID=pmcp-$PL-rg-lanes-asfm-aa-r-aa11-1; WHAT="$WHAT + AA 1.1 road, lanes, destination off the AA map"
     fi
 fi
 
@@ -165,15 +188,15 @@ fi
 java -cp "$W/patcher:$CP" Verify "$W/patched" "$STOCK_JAR" $(find "$W/patched" -name '*.class' | sort)
 for f in $(find "$W/patched" -name '*.class'); do [ "$(xxd -s 6 -l 2 -p "$f")" = 002e ] || fail "class version not 46: $f"; done
 for f in $(cd "$W/helpers" && find . -name '*.class'); do [ -f "$W/patched/$f" ] || fail "helper class not packaged: $f"; done
-python3 -I - "$W/patched" "$W/pmcp-rg.jar" "$WHAT" <<'EOF'
+python3 -I - "$W/patched" "$W/pmcp-rg.jar" "$WHAT" "$PROFILE" <<'EOF'
 import os, sys, zipfile
-src, dst, what = sys.argv[1:]
+src, dst, what, profile = sys.argv[1:]
 files = sorted(os.path.relpath(os.path.join(d, f), src) for d, _, fs in os.walk(src) for f in fs if f.endswith('.class'))
 def add(z, name, data):
     i = zipfile.ZipInfo(name, date_time=(2026, 10, 21, 0, 0, 0)); i.compress_type = zipfile.ZIP_DEFLATED
     i.external_attr = 0o100644 << 16; z.writestr(i, data)
 with zipfile.ZipFile(dst, 'w') as z:
-    add(z, 'META-INF/MANIFEST.MF', ('Manifest-Version: 1.0\nCreated-By: pmcp package E (route guidance, %s), MU1161\n' % what).encode())
+    add(z, 'META-INF/MANIFEST.MF', ('Manifest-Version: 1.0\nCreated-By: pmcp package E (route guidance, %s), %s\n' % (what, profile)).encode())
     for f in files: add(z, f, open(os.path.join(src, f), 'rb').read())
 EOF
 java -cp "$W/patcher:$CP" RefCheck "$STOCK_JAR" "$W/pmcp-rg.jar"
@@ -236,7 +259,7 @@ for c in $CLASSES; do
 done
 
 # ---- driver: Tomasz's chain on a "virtual MU1427 stock" (our code + his usage block), then our usage block back
-"$PY" -I - "$BK/MU1161-appimg/armle/lib/dll/ipod-drvr-iap2.so" "$REL/driver/ipod-drvr-iap2.so" "$W/driver/virtual-mu1427-stock.so" <<'EOF'
+"$PY" -I - "$DRV_STOCK" "$REL/driver/ipod-drvr-iap2.so" "$W/driver/virtual-mu1427-stock.so" <<'EOF'
 import hashlib, sys
 ours = open(sys.argv[1], 'rb').read(); his = open(sys.argv[2], 'rb').read()
 A, B = 0xae3f0, 0xae490      # QNX usage block (DATE, version, TAGID, debuglink CRC): the only stock difference
@@ -246,7 +269,7 @@ open(sys.argv[3], 'wb').write(virt)
 EOF
 "$PY" -I "$RG/patch-activation.py" "$W/driver/virtual-mu1427-stock.so" "$W/driver/b4-mu1427.so"
 pin "$W/driver/b4-mu1427.so" 3760797aed4886a6c4480e3a8de79be427a3d8587450a56c424721306ca15d8b
-python3 -I - "$BK/MU1161-appimg/armle/lib/dll/ipod-drvr-iap2.so" "$W/driver/b4-mu1427.so" "$W/ipod-drvr-iap2.so" <<'EOF'
+python3 -I - "$DRV_STOCK" "$W/driver/b4-mu1427.so" "$W/ipod-drvr-iap2.so" <<'EOF'
 import sys
 ours = open(sys.argv[1], 'rb').read(); b4 = open(sys.argv[2], 'rb').read()
 A, B = 0xae3f0, 0xae490
@@ -259,7 +282,7 @@ open(sys.argv[3], 'wb').write(out)
 EOF
 
 # ---- iap2.cfg: our factory file + Tomasz's [ident] section --------------------------------------------
-cp "$BK/MU1161-system/mm/iap2.cfg" "$W/iap2.cfg"
+cp "$CFG_STOCK" "$W/iap2.cfg"
 printf '# pmcp route guidance (tomasz-twardzicki MU1427 B1 identification)\n[ident]\nsendmsgs=0x5200,0x5203\nrecvmsgs=0x5201,0x5202,0x5204\n' >> "$W/iap2.cfg"
 cp "$REL/rgi-observer" "$W/rgi-observer"
 # pmcp reader pmcp-r1 (rg/reader/reader.c, survives a stuck driver read), prebuilt in the repository so no QNX toolchain is
@@ -279,7 +302,7 @@ if [ "${PMCP_GATE:-1}" = 1 ]; then
         cp "$H/driver/log-gate.bin" "$W/driver/gate/log-gate.bin"
     fi
     pin "$W/driver/gate/log-gate.bin" c0c553567165efbfb3ccf63592ab3a7c8afe910a3ba4a5dcb85509820cebfc55
-    python3 -I "$H/driver/patch-log-gate.py" "$W/ipod-drvr-iap2.so" "$W/driver/gate/log-gate.bin" "$W/ipod-drvr-iap2-gated.so"
+    python3 -I "$H/driver/patch-log-gate.py" "$W/ipod-drvr-iap2.so" "$W/driver/gate/log-gate.bin" "$W/ipod-drvr-iap2-gated.so" "$GATE_IN_SHA"
     pin "$W/ipod-drvr-iap2-gated.so" 519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3
 fi
 

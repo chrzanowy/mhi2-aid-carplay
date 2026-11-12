@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# One-command installer: builds both SD cards for the CarPlay map on the AID (VW MHI2 MU1161 + AID 791)
-# from your own M.I.B. backup, checks every input and output by SHA-256, runs the host tests and, if you
+# One-command installer: builds both SD cards for the CarPlay map on the AID (VW MHI2 + AID 791, firmware profiles
+# in profiles/: today MU1161) from your own M.I.B. backup, checks every input and output by SHA-256, runs the host tests and, if you
 # want, copies the cards onto SD cards. It never touches the car: changes on the head unit happen only
 # later, when you press buttons in the green engineering menu (GEM). See docs/en/09-in-car-guide.md.
 #
 #   ./install.sh                       interactive (recommended)
-#   ./install.sh --backup DIR          M.I.B. backup folder of your unit (the folder with MU1161-lsd.jxe)
+#   ./install.sh --backup DIR          M.I.B. backup folder of your unit (the folder with MU<nnnn>-lsd.jxe)
+#   ./install.sh --check-backup        only identify the firmware profile of the backup and check its files, then stop
 #   ./install.sh --no-cards            build only, do not offer to write SD cards
 #   ./install.sh --skip-host-tests     skip the installer tests (only if gawk 3.1.5 cannot be built)
 #   ./install.sh --help
@@ -29,6 +30,8 @@ CARD_WRITING=no
 BACKUP=""
 NO_CARDS=no
 SKIP_TESTS=no
+CHECK_BACKUP=no
+PROFILE=""
 
 # ---- pinned inputs (every one is checked before use) --------------------------------------------------------------
 MIB_URL="https://github.com/Mr-MIBonk/M.I.B._More-Incredible-Bash/archive/refs/tags/V3.6.0.zip"
@@ -42,14 +45,9 @@ ELF_URL="https://files.pythonhosted.org/packages/py3/p/pyelftools/pyelftools-0.3
 ELF_SHA=f52de7b3c7e8c64c8abc04a79a1cf37ac5fb0b8a49809827130b858944840607
 GAWK_URL="https://ftp.gnu.org/gnu/gawk/gawk-3.1.5.tar.gz"
 GAWK_SHA=463dcb9d0ca398b1d4f5a332f6cd9cec56441265fca616f2ea1b44d459e9f0f8
-LSD_JAR_SHA=573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576   # jxe2jar_run.py output (fixed timestamps)
 CORE_BASE=mod/carplay_maps_vc/omonob/payload/profiles/MU1102/791/core.so
-# Files of the unit that the build reads, with the exact firmware they must come from (train MHI2_ER_VWG13_P4512, MU1161)
-BACKUP_PINS="MU1161-lsd.jxe 201c2f5c3434c43e77e37544a1d90d43e03ab3ea3802306f865dcdf1400f9a8c
-advanced/MU1161-appimg/eso/hmi/lsd/lsd.sh 97bbd4ecb51045b34c2a41955d9f53e1f144d174bff1aa8560e911525808e8d8
-advanced/MU1161-appimg/eso/bin/apps/dio_manager 609e42723ab3e36c7be5ceade81e03672ba4acd251f8eeb8b100e074aaf3c250
-advanced/MU1161-appimg/armle/lib/dll/ipod-drvr-iap2.so 7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c
-advanced/MU1161-system/mm/iap2.cfg 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37"
+# Everything about the unit's firmware (train, MU, pinned backup files, jar hash, packages) is in profiles/<ID>/profile.json,
+# read with scripts/profile.py; the profile is picked in step 4 from the backup and must match exactly one.
 
 # ---- output helpers ------------------------------------------------------------------------------------------------
 LOGDIR="$PROJ/logs"
@@ -115,6 +113,23 @@ run_long() {
     [ $rc -eq 0 ] || die "$desc failed (exit code $rc)" "search the log for 'FAIL' to see which check failed"
 }
 
+PROF_PY="$PROJ/scripts/profile.py"
+pget() {        # KEY [PROFILE]: one value of the profile (lists: one item per line)
+    python3 -I "$PROF_PY" get "${2:-$PROFILE}" "$1"
+}
+profile_ids() { python3 -I "$PROF_PY" list; }
+supported_labels() {
+    local i
+    for i in $(profile_ids); do printf '%s: %s\n' "$i" "$(pget label "$i")"; done
+}
+has_pkg() {     # PACKAGE: is it in the profile's package list?
+    local list   # called as "if has_pkg": errexit is off here, so a profile.py failure must stop the run explicitly
+    list=$(pget packages) || die "cannot read the package list of profile $PROFILE" "run again; if it persists the profile is damaged"
+    list=" $(echo $list) "
+    case "$list" in *" $1 "*) return 0 ;; esac
+    return 1
+}
+
 sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
 
 check_sha() {   # FILE SHA LABEL
@@ -163,7 +178,8 @@ while [ $# -gt 0 ]; do
         --backup) BACKUP=${2:?--backup needs a folder}; shift 2 ;;
         --no-cards) NO_CARDS=yes; shift ;;
         --skip-host-tests) SKIP_TESTS=yes; shift ;;
-        -h|--help) sed -n '3,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --check-backup) CHECK_BACKUP=yes; shift ;;
+        -h|--help) sed -n '3,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) say "unknown option: $1 (see ./install.sh --help)"; exit 2 ;;
     esac
 done
@@ -171,7 +187,7 @@ done
 say ""
 say "============================================================================================"
 say "  CarPlay map on the Active Info Display - installer builder"
-say "  VW MHI2 Discover Pro MU1161 (train MHI2_ER_VWG13_P4512) + AID 12.3\" part 791"
+say "  VW MHI2 Discover Pro + AID 12.3\" part 791 (firmware profiles in profiles/)"
 say "============================================================================================"
 say "  Log file: $LOG"
 
@@ -186,7 +202,7 @@ step 1 "Safety briefing" \
     "$WS/archives, and the SD cards you pick by typing their name." \
     "" \
     "This modifies the infotainment of a car, at your own risk. It was tested on one car." \
-    "It only works for exactly: MU1161, train MHI2_ER_VWG13_P4512, AID part 791 (12.3\")." \
+    "It only works for firmware that has a profile in profiles/ (step 4 matches your backup), AID part 791 (12.3\")." \
     "Never cross-flash other firmware to make a unit fit."
 ask_yes "Does your car have a Discover Pro MHI2 with the 12.3\" Active Info Display (part ...791)?" \
     || die "this installer is only for MHI2 + AID 791" "see the projects under Credits in README.md for other units"
@@ -271,9 +287,15 @@ ok "workspace: $WS"
 step 4 "Checking your M.I.B. backup (read-only)" \
     "The build uses files from your own unit, so it can only produce exactly what was tested." \
     "It needs the M.I.B. backup folder, named like MU1161-MHI2_ER_VWG13_P4512-..., which holds" \
-    "MU1161-lsd.jxe and advanced/ ('app.img to folder' in the M.I.B. backup menu). Nothing in it is changed."
+    "MU<nnnn>-lsd.jxe and advanced/ ('app.img to folder' in the M.I.B. backup menu). Nothing in it is changed." \
+    "The firmware profile (profiles/<ID>/) is taken from the backup's train and MU number; it must match exactly one."
 if [ -z "$BACKUP" ]; then
-    cands=$( { ls -d "$WS"/backup/MU1161* /Volumes/*/backup/MU1161* /media/*/*/backup/MU1161* /run/media/*/*/backup/MU1161* 2>/dev/null || true; } | while read -r d; do if [ -f "$d/MU1161-lsd.jxe" ]; then echo "$d"; fi; done)
+    cands=""
+    for pid in $(profile_ids); do
+        bdir=$(pget backup_dir "$pid"); bjxe=$(pget lsd_jxe.file "$pid")
+        found=$( { ls -d "$WS"/backup/"$bdir"* /Volumes/*/backup/"$bdir"* /media/*/*/backup/"$bdir"* /run/media/*/*/backup/"$bdir"* 2>/dev/null || true; } | while read -r d; do if [ -f "$d/$bjxe" ]; then echo "$d"; fi; done)
+        [ -z "$found" ] || cands="${cands:+$cands$'\n'}$found"
+    done
     if [ -n "$cands" ]; then
         info "Backups found:"
         i=0; while read -r d; do i=$((i + 1)); info "  $i) $d"; done <<< "$cands"
@@ -289,27 +311,55 @@ if [ -z "$BACKUP" ]; then
     fi
 fi
 BACKUP=$(printf '%s' "$BACKUP" | sed -e "s/^[\"']//" -e "s/[\"'] *$//" -e 's/ *$//' -e 's/\\ / /g')
-[ -n "$BACKUP" ] && [ -d "$BACKUP" ] || die "backup folder not found: '$BACKUP'" "give the folder that contains MU1161-lsd.jxe"
+[ -n "$BACKUP" ] && [ -d "$BACKUP" ] || die "backup folder not found: '$BACKUP'" "give the folder that contains MU<nnnn>-lsd.jxe"
 BACKUP=$(cd "$BACKUP" && pwd)
 info "backup: $BACKUP"
-if [ -f "$BACKUP/MU1161-version.txt" ]; then
-    train=$(sed -n "s/^Current train = '\(.*\)'.*/\1/p" "$BACKUP/MU1161-version.txt" | tr -d '\r')
-    mu=$(sed -n "s/^MainUnit version = '\(.*\)'.*/\1/p" "$BACKUP/MU1161-version.txt" | tr -d '\r')
+set -- "$BACKUP"/MU[0-9][0-9][0-9][0-9]-version.txt
+[ $# -le 1 ] || die "the backup holds $# MU<nnnn>-version.txt files" "the backup is mixed from several units; make it again into an empty folder"
+if [ $# -eq 1 ] && [ -f "$1" ]; then
+    train=$(sed -n "s/^Current train = '\(.*\)'.*/\1/p" "$1" | tr -d '\r')
+    mu=$(sed -n "s/^MainUnit version = '\(.*\)'.*/\1/p" "$1" | tr -d '\r')
     info "unit reports: train=$train, main unit version=$mu"
-    [ "$train" = MHI2_ER_VWG13_P4512 ] && [ "$mu" = 1161 ] \
-        || die "this unit runs $train / MU$mu, not MHI2_ER_VWG13_P4512 / MU1161" "this build only supports MU1161 P4512; never cross-flash to make it fit"
-    ok "firmware train MHI2_ER_VWG13_P4512, MU1161"
+    [ -n "$train" ] && [ -n "$mu" ] || die "$(basename "$1") has no train / main unit version" "make the backup again with M.I.B."
+    [ "$(basename "$1")" = "MU$mu-version.txt" ] || die "$(basename "$1") reports main unit version $mu" "the backup is damaged or mixed; make it again"
+    PROFILE=$(python3 -I "$PROF_PY" detect "$train" "$mu" 2>&1 || true)   # (|| true: the ERR trap must not fire inside)
+    case "$PROFILE" in
+        ""|*[!A-Z0-9]*) die "this unit runs $train / MU$mu, which has no firmware profile (${PROFILE#profile: })" \
+                            "supported: $(supported_labels | tr '\n' ';' | sed 's/;$//'). Never cross-flash to make a unit fit." ;;
+    esac
 else
-    warn "MU1161-version.txt not in the backup; the file hashes below decide"
+    set -- "$BACKUP"/MU[0-9][0-9][0-9][0-9]-lsd.jxe
+    [ $# -eq 1 ] && [ -f "$1" ] || die "no single MU<nnnn>-version.txt or MU<nnnn>-lsd.jxe in the backup" "give the M.I.B. backup folder of your unit"
+    mu=$(basename "$1" | sed 's/^MU\([0-9]*\)-.*/\1/')
+    for pid in $(profile_ids); do
+        [ "$(pget mu "$pid")" = "$mu" ] && PROFILE="${PROFILE:+$PROFILE }$pid"
+    done
+    case "$PROFILE" in
+        ""|*" "*) die "no single firmware profile for MU$mu (matches: ${PROFILE:-none}) and no version.txt to tell the train" \
+                      "supported: $(supported_labels | tr '\n' ';' | sed 's/;$//'). Never cross-flash to make a unit fit." ;;
+    esac
+    warn "MU$mu-version.txt not in the backup; profile $PROFILE is taken from the MU number and the file hashes below decide"
 fi
-[ -d "$BACKUP/advanced/MU1161-appimg" ] || die "advanced/MU1161-appimg is missing in the backup" \
+LABEL=$(pget label)
+APPIMG=$(pget appimg)
+ok "firmware profile $PROFILE (train $(pget train), MU$(pget mu)): $LABEL"
+[ -d "$BACKUP/$APPIMG" ] || die "$APPIMG is missing in the backup" \
     "make the backup again with the 'app.img to folder' option (docs/en/01-mib-install-backup.md)"
 while read -r rel want; do
     check_sha "$BACKUP/$rel" "$want" "backup $rel"
-done <<< "$BACKUP_PINS"
-ls "$BACKUP"/advanced/MU1161-appimg/eso/hmi/lsd/jars/*.jar > /dev/null 2>&1 || die "backup has no eso/hmi/lsd/jars/*.jar" "make the backup again"
-ok "your unit's files are exactly the tested MU1161 firmware"
+done <<< "$(python3 -I "$PROF_PY" pins "$PROFILE")"
+ls "$BACKUP/$APPIMG"/eso/hmi/lsd/jars/*.jar > /dev/null 2>&1 || die "backup has no eso/hmi/lsd/jars/*.jar" "make the backup again"
+ok "your unit's files are exactly the tested $PROFILE firmware"
 export PMCP_BACKUP="$BACKUP"
+export PMCP_PROFILE="$PROFILE"
+VERSION_TAG=$(pget version_tag)
+PROFILE_LC=$(printf '%s' "$PROFILE" | tr 'A-Z' 'a-z')
+JXE_FILE=$(pget lsd_jxe.file)
+LSD_JAR_SHA=$(pget lsd_jar_sha256 | tail -n 1)   # the last one is what jxe2jar_run.py produces (fixed timestamps)
+if [ "$CHECK_BACKUP" = yes ]; then
+    ok "--check-backup: profile $PROFILE recognised and every pinned backup file matches; stopping here, nothing else was done"
+    exit 0
+fi
 
 # ---- 5. dependencies -----------------------------------------------------------------------------------------------
 step 5 "Downloading the pinned sources and tools" \
@@ -333,8 +383,8 @@ clone_pinned() {    # NAME URL COMMIT DEST SPARSE_PATH...
 }
 clone_pinned "M.I.B. (base core.so)" https://github.com/Mr-MIBonk/M.I.B._More-Incredible-Bash \
     3a2526a386f54ec7f49bbc32984ef7edb1106d33 "$WS/upstream/mib" "$(dirname "$CORE_BASE")"
-clone_pinned "mathsls (MU1161/791 binaries)" https://github.com/mathsls/MHI2-Carplay-Maps \
-    cdd576b02a282853bd764a82b9a94e6474f39052 "$WS/upstream/mathsls" MU1161/791_AID12.3/payload
+clone_pinned "mathsls ($PROFILE/$(pget cluster) binaries)" https://github.com/mathsls/MHI2-Carplay-Maps \
+    "$(pget mathsls_commit)" "$WS/upstream/mathsls" "$(pget mathsls_payload)"
 clone_pinned "tomasz-twardzicki (route guidance)" https://github.com/tomasz-twardzicki/MHI2-Carplay-Maps \
     024dd159c4d99890c9b17ea500325e4d2b5dcbde "$WS/upstream/tomasz" MU1427/route-guidance \
     releases/CarPlay_Maps_VC_Full_Toolboxes/VW_SKODA_ALL_CarPlay_Maps_VC_FULL_MQB_Toolbox_V4/Custom/carplay_native_guidance
@@ -403,8 +453,8 @@ if [ -e "$BUILD" ]; then
     warn "an earlier build folder was moved to $old (nothing deleted; remove it yourself when not needed)"
 fi
 mkdir -p "$BUILD"
-LSD_JAR="$BUILD/lsd-mu1161.jar"
-run_long "convert MU1161-lsd.jxe (about 55 MB)" python3 -I "$PROJ/scripts/jxe2jar_run.py" "$TOOLS/jxe2jar/repo/src" "$BACKUP/MU1161-lsd.jxe" "$LSD_JAR"
+LSD_JAR="$BUILD/lsd-$PROFILE_LC.jar"
+run_long "convert $JXE_FILE (about $(($(pget lsd_jxe.size) / 1000000)) MB)" python3 -I "$PROJ/scripts/jxe2jar_run.py" "$TOOLS/jxe2jar/repo/src" "$BACKUP/$JXE_FILE" "$LSD_JAR"
 check_sha "$LSD_JAR" "$LSD_JAR_SHA" "converted lsd.jar"
 
 # ---- 7. components ------------------------------------------------------------------------------------------------
@@ -413,17 +463,34 @@ step 7 "Building the components" \
     "settings page." \
     "Every component checks its inputs, verifies its patched bytes and runs its own host test."
 run "core.so map layout variants (from the pinned omonob base)" python3 -I "$PROJ/patches/mu1161/build_core.py" \
-    "$WS/upstream/mib/$CORE_BASE" "$BUILD/mu1161-791/tuning"
-run_long "NavActiveIgnore.jar" bash "$PROJ/navactiveignore/build.sh" MU1161 "$LSD_JAR" "$BUILD/nai-mu1161-v2"
-run_long "pmcp-np.jar (track title and artist, CarPlay and Android Auto)" bash "$PROJ/nowplaying/build.sh" "$LSD_JAR" "$BUILD/np-mu1161-aa11"
-run_long "pmcp-zoom.jar and pmcp-dn.jar (zoom, day/night)" bash "$PROJ/hmiextras/build.sh" "$LSD_JAR" "$BUILD/extras-mu1161-v2"
-run_long "route guidance (pmcp-rg.jar with lanes, distance bar, street, maneuver fallbacks, Android Auto arrows, road, lanes and destination, reroute; iAP2 driver, iap2.cfg, reader)" \
-    bash "$PROJ/rg/build.sh" "$LSD_JAR" "$BUILD/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11" lanes-uturn-asf-m-aa-r
-run_long "optional native-map speed-limit reader (pmcp-sl.jar)" bash "$PROJ/speedlimit/build.sh" "$LSD_JAR" "$BUILD/sl-mu1161"
-run_long "CarPlay settings page in App-Connect (pmcp-ui.jar)" bash "$PROJ/ui/build.sh" "$LSD_JAR" "$BUILD/ui-mu1161"
-run "rg finds the speed-limit helper in pmcp-sl.jar (rg/lanes/TestSpeedLimitText real)" java -Xverify:all \
-    -cp "$BUILD/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11/tests:$BUILD/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11/pmcp-rg.jar:$BUILD/sl-mu1161/pmcp-sl.jar:$LSD_JAR" \
-    com.cpmap.rgi.TestSpeedLimitText real
+    "$WS/upstream/mib/$CORE_BASE" "$BUILD/$VERSION_TAG/tuning"
+# one build per package of the profile; the build scripts take the profile id first
+RG_DIR="$BUILD/rg-$PROFILE_LC-lanes-uturn-asf-m-aa-r-aa11"
+SL_DIR="$BUILD/sl-$PROFILE_LC"
+if has_pkg nai; then
+    run_long "NavActiveIgnore.jar" bash "$PROJ/navactiveignore/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/nai-$PROFILE_LC-v2"
+fi
+if has_pkg np; then
+    run_long "pmcp-np.jar (track title and artist, CarPlay and Android Auto)" bash "$PROJ/nowplaying/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/np-$PROFILE_LC-aa11"
+fi
+if has_pkg zoom || has_pkg dn; then
+    run_long "pmcp-zoom.jar and pmcp-dn.jar (zoom, day/night)" bash "$PROJ/hmiextras/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/extras-$PROFILE_LC-v2"
+fi
+if has_pkg rg; then
+    run_long "route guidance (pmcp-rg.jar with lanes, distance bar, street, maneuver fallbacks, Android Auto arrows, road, lanes and destination, reroute; iAP2 driver, iap2.cfg, reader)" \
+        bash "$PROJ/rg/build.sh" "$PROFILE" "$LSD_JAR" "$RG_DIR" lanes-uturn-asf-m-aa-r
+fi
+if has_pkg sl; then
+    run_long "optional native-map speed-limit reader (pmcp-sl.jar)" bash "$PROJ/speedlimit/build.sh" "$PROFILE" "$LSD_JAR" "$SL_DIR"
+fi
+if has_pkg ui; then
+    run_long "CarPlay settings page in App-Connect (pmcp-ui.jar)" bash "$PROJ/ui/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/ui-$PROFILE_LC"
+fi
+if has_pkg rg && has_pkg sl; then
+    run "rg finds the speed-limit helper in pmcp-sl.jar (rg/lanes/TestSpeedLimitText real)" java -Xverify:all \
+        -cp "$RG_DIR/tests:$RG_DIR/pmcp-rg.jar:$SL_DIR/pmcp-sl.jar:$LSD_JAR" \
+        com.cpmap.rgi.TestSpeedLimitText real
+fi
 ok "all components built"
 
 # ---- 8. installer and card folders ------------------------------------------------------------------------------

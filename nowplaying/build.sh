@@ -1,18 +1,19 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Package D: build pmcp-np.jar (CarPlay track title / artist / album on the cluster) from MU1161's own classes.
+# Package D: build pmcp-np.jar (CarPlay track title / artist / album on the cluster) from the unit's own classes.
 #
-#   build.sh <converted lsd.jar> <work dir>
+#   build.sh <profile id, e.g. MU1161> <converted lsd.jar> <work dir>
 #
 # Needs: JDK 11+ (tested with 25) (javac, java, javap), python3, ASM 9.7 jars in $ASM_DIR.
 set -euo pipefail
 
-STOCK_JAR=${1:?converted lsd jar}; W=${2:?work dir}
+PROFILE=${1:?profile id}; STOCK_JAR=${2:?converted lsd jar}; W=${3:?work dir}
 H=$(cd "$(dirname "$0")" && pwd)
 BT="$H/../buildtools"     # Guard (try/catch around every hook call), RefCheck (J9 API check)
 : "${ASM_DIR:?set ASM_DIR to a directory with asm-9.7, asm-tree-9.7, asm-analysis-9.7}"
-JAR_SHA=a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599   # MU1161, our backup
-JAR_SHA_ALT=573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576   # same classes, jxe2jar_run.py with fixed timestamps
+# The profile is read before anything is written; an unknown or invalid profile stops here (profile.py exits non-zero).
+pf() { python3 -I "$H/../scripts/profile.py" get "$PROFILE" "$@"; }
+JAR_SHAS=$(pf lsd_jar_sha256)
 
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -21,7 +22,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 [ "$(sha "$ASM_DIR/asm-tree-9.7.jar")" = 62f4b3bc436045c1acb5c3ba2d8ec556ec3369093d7f5d06c747eb04b56d52b1 ] || fail "asm-tree-9.7.jar hash"
 [ "$(sha "$ASM_DIR/asm-analysis-9.7.jar")" = 7bc6bcbc21379948a0c8c467fb0f864206e5b818f6bc0b546872f5c9f941556f ] || fail "asm-analysis-9.7.jar hash"
 JAR_GOT=$(sha "$STOCK_JAR")
-[ "$JAR_GOT" = "$JAR_SHA" ] || [ "$JAR_GOT" = "$JAR_SHA_ALT" ] || fail "converted jar is not the pinned MU1161 jar"
+grep -qx "$JAR_GOT" <<< "$JAR_SHAS" || fail "converted jar is not the pinned $PROFILE jar"
 
 CP="$ASM_DIR/asm-9.7.jar:$ASM_DIR/asm-tree-9.7.jar:$ASM_DIR/asm-analysis-9.7.jar"
 CLASSES="de/vw/mib/asl/internal/carplay/target/HsmTarget
@@ -54,15 +55,15 @@ for c in $CLASSES; do
     diff "$W/report/$n.stock.txt" "$W/report/$n.patched.txt" > "$W/report/$n.diff" || true
 done
 
-python3 -I - "$W/out" "$W/pmcp-np.jar" <<'EOF'
+python3 -I - "$W/out" "$W/pmcp-np.jar" "$PROFILE" <<'EOF'
 import os, sys, zipfile
-src, dst = sys.argv[1:]
+src, dst, profile = sys.argv[1:]
 files = sorted(os.path.relpath(os.path.join(d, f), src) for d, _, fs in os.walk(src) for f in fs if f.endswith('.class'))
 def add(z, name, data):
     i = zipfile.ZipInfo(name, date_time=(2026, 10, 21, 0, 0, 0)); i.compress_type = zipfile.ZIP_DEFLATED
     i.external_attr = 0o100644 << 16; z.writestr(i, data)
 with zipfile.ZipFile(dst, 'w') as z:
-    add(z, 'META-INF/MANIFEST.MF', b'Manifest-Version: 1.0\nCreated-By: pmcp package D (now playing), MU1161\n')
+    add(z, 'META-INF/MANIFEST.MF', ('Manifest-Version: 1.0\nCreated-By: pmcp package D (now playing), ' + profile + '\n').encode())
     for f in files: add(z, f, open(os.path.join(src, f), 'rb').read())
 EOF
 

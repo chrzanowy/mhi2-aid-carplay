@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Assemble the complete pmcp INSTALL card (card 1) from the pinned M.I.B. 3.6.0 zip + a verified build_sd.py output. Host tool.
 
-  python3 -I build_card_install.py SD_BUILD_DIR OUT_DIR   (an -exp- build needs PMCP_CARD_EXPERIMENTAL=1)
+  python3 -I build_card_install.py SD_BUILD_DIR OUT_DIR   (an -exp- build needs PMCP_CARD_EXPERIMENTAL=1;
+                                                          PMCP_PROFILE as for build_sd.py, default MU1161)
 
 Output = the M.I.B. 3.6.0 tree exactly as in the zip (autorun stays DISARMED: _Swdlautorun.txt), plus
   - pmcp/ and esd/Launcher-sda0.esd from SD_BUILD_DIR (every file checked against its BUILD-MANIFEST.txt first);
@@ -24,7 +25,19 @@ ZIP_SHA = "4bfc6e725b5cc60c3c8c73081609dabfe1a2016b5d8671e2438592e673a98086"
 PREFIX = "M.I.B._More-Incredible-Bash-3.6.0/"
 MIB_ESD_SHA = "22739f7226f36d089e2e0485fe2b6874aba2ee6b7b57c807de7bc25c0fdc9121"   # = build_sd.py MIB_ESD
 
-README = """CARD 1 - INSTALL: CarPlay map on the AID (VW MHI2 MU1161, AID 791) - build %(ver)s
+
+def _load_profile():
+    # scripts/profile.py shares its name with a stdlib module, so load it by path (python3 -I has no script dir on sys.path)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pmcp_fwprofile", PROJ / "scripts/profile.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.load(os.environ.get("PMCP_PROFILE", "MU1161"))   # same profile as the build_sd.py run
+
+
+FW = _load_profile()
+
+README = """CARD 1 - INSTALL: CarPlay map on the AID (VW MHI2 %(id)s, AID %(cluster)s) - build %(ver)s
 ====================================================================================
 
 This is M.I.B. 3.6.0 plus the CarPlay-on-AID installer. Nothing starts by itself
@@ -59,7 +72,7 @@ def main():
     # 1. the installer build: exactly the files of its BUILD-MANIFEST.txt, nothing more, nothing less
     man = (sdb / "BUILD-MANIFEST.txt").read_text().splitlines()
     ver, entries = man[0], [l.split() for l in man[1:] if l.strip()]
-    if not ver.startswith(("pmcp-0.7.0-mu1161-791-", "pmcp-0.7.0-exp-mu1161-791-")):
+    if not ver.startswith(("pmcp-0.7.0-%s-" % FW["version_tag"], "pmcp-0.7.0-exp-%s-" % FW["version_tag"])):
         sys.exit("unexpected build version: %s" % ver)
     if "-exp-" in ver and os.environ.get("PMCP_CARD_EXPERIMENTAL") != "1":
         sys.exit("experimental build %s: set PMCP_CARD_EXPERIMENTAL=1 to make an install card of it" % ver)
@@ -103,7 +116,7 @@ def main():
         shutil.copyfile(sdb / rel, dst)
     if not (out / "esd/Launcher-sda0.esd").read_bytes().startswith((REPO / "archives/mib-3.6.0/Launcher-sda0.esd").read_bytes()):
         sys.exit("our menu file does not start with the unchanged M.I.B. menu")
-    (out / "PMCP_INSTRUKCJA.txt").write_text(README % {"ver": ver})
+    (out / "PMCP_INSTRUKCJA.txt").write_text(README % {"ver": ver, "id": FW["id"], "cluster": FW["cluster"]})
     shutil.copyfile(sdb / "BUILD-MANIFEST.txt", out / "BUILD-MANIFEST.txt")   # run_tests.sh reads it from the card root
     # 4. final guards and the card manifest
     for bad in ("Swdlautorun.txt", "pmcp-rescue", "PMCP_RESCUE_README.txt", "pmcp-ratunek", "PMCP_RATUNEK_README.txt",

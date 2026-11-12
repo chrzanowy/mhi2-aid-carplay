@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Assemble the pmcp tree for the M.I.B. SD card (SD#2) from pinned inputs. Host tool, read-only on inputs.
 
-  python3 -I build_sd.py OUT_DIR
+  [PMCP_PROFILE=MU1161] python3 -I build_sd.py OUT_DIR
 
+PMCP_PROFILE (default MU1161) names the firmware profile: profiles/<ID>/profile.json holds the facts about the unit
+(stock file pins, jxe size, backup folder, packages), profiles/<ID>/history.json the older cards' files this installer
+still replaces. The pins of this tool's own build results (PAYLOAD) stay below, per profile.
 Every input is checked against its SHA-256 and size before use; the output must not exist yet.
 The patched lsd.sh is generated here from the verified factory file, so the unit only copies
 a file whose hash is known in advance. Output: OUT_DIR/pmcp/... (installer, payload, one script per GEM button in pmcp/menu/) and
@@ -10,6 +13,7 @@ OUT_DIR/esd/Launcher-sda0.esd (the M.I.B. 3.6.0 menu with one pmcp screen append
 plus OUT_DIR/BUILD-MANIFEST.txt with every output hash.
 """
 import hashlib
+import importlib.util
 import os
 import pathlib
 import shutil
@@ -18,31 +22,50 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent  # workspace: upstream/, backup/, archives/ next to this project
 PROJ = HERE.parent         # this project (any folder name)
-PMCP_BASE_VERSION = "pmcp-0.7.0-mu1161-791"   # release v1.7.0: Android Auto 1.1 (road, lanes, destination, song title), CarPlay rg fixes
+
+
+def _load_profile_module():
+    # scripts/profile.py shares its name with a stdlib module, so load it by path (python3 -I has no script dir on sys.path)
+    spec = importlib.util.spec_from_file_location("pmcp_fwprofile", PROJ / "scripts/profile.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+fwprofile = _load_profile_module()
+PROFILE_ID = os.environ.get("PMCP_PROFILE", "MU1161")
+FW = fwprofile.load(PROFILE_ID)               # facts about this unit firmware (exits on a malformed profile)
+HIST = fwprofile.load_history(PROFILE_ID)     # earlier cards of this profile (hashes only)
+# release v1.7.0: Android Auto 1.1 (road, lanes, destination, song title), CarPlay rg fixes
+PMCP_BASE_VERSION = "pmcp-0.7.0-" + FW["version_tag"]
 # Experimental card from the same tree (PMCP_BUILD_EXPERIMENTAL=1): "-exp-" in the version, plus the diagnostics buttons
 # (AA record, AA output switches are in every card since AA 1.0). Same payload otherwise, so it never forces another set.
 if os.environ.get("PMCP_BUILD_EXPERIMENTAL") == "1":
-    PMCP_BASE_VERSION = PMCP_BASE_VERSION.replace("-mu1161-", "-exp-mu1161-")
+    PMCP_BASE_VERSION = "pmcp-0.7.0-exp-" + FW["version_tag"]
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)
-BACKUP = pathlib.Path(os.environ.get("PMCP_BACKUP", REPO / "backup/MU1161")) / "advanced/MU1161-appimg"
-MATHSLS = REPO / "upstream/mathsls/MU1161/791_AID12.3/payload"  # git cdd576b02a282853bd764a82b9a94e6474f39052
-TUNING = PROJ / "build/mu1161-791/tuning"
+BACKUP_ROOT = pathlib.Path(os.environ.get("PMCP_BACKUP", REPO / "backup" / FW["backup_dir"]))
+BACKUP = BACKUP_ROOT / FW["appimg"]
+SYSTEM = BACKUP_ROOT / FW["system"]
+MATHSLS = REPO / "upstream/mathsls" / FW["mathsls_payload"]  # pinned commit: profile mathsls_commit
+TUNING = PROJ / "build" / FW["version_tag"] / "tuning"
 # The GEM menu file of the M.I.B. version on the user's SD card (MIB_V3.6.0.zip, esd/Launcher-sda0.esd).
 # The unit links engdefs/z_Launcher-sda0.esd to this file on the card, so adding a screen here changes nothing on the unit.
 MIB_ESD = (REPO / "archives/mib-3.6.0/Launcher-sda0.esd",
            "22739f7226f36d089e2e0485fe2b6874aba2ee6b7b57c807de7bc25c0fdc9121", 111474)
 # Java packages (stage B+): name -> GEM label. Each needs a "JAR_<name>" entry in PAYLOAD.
-JAVA_PACKAGES = [("nai", "nai: AID map stays while the iPhone navigates (NavActiveIgnore)"),
-                 ("np", "np: CarPlay song title and artist on the AID"),
-                 ("rg", "rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)"),
-                 ("zoom", "zoom: CarPlay map zoom with the steering wheel arrows"),
-                 ("dn", "dn: CarPlay map day/night on the AID (sent again after start)"),
-                 # optional (not in button 3), output off until enabled with speedlimit-mode
-                 ("sl", "sl: native VW map speed limit in the AID road text (optional, output off until enabled)"),
-                 # in main 4: the settings page in App-Connect settings, also "Save" for a trial start (ui/README.md)
-                 ("ui", "ui: AID navigation configuration in App-Connect settings, saves trial starts without the card")]
+JAVA_PACKAGES_ALL = [("nai", "nai: AID map stays while the iPhone navigates (NavActiveIgnore)"),
+                      ("np", "np: CarPlay song title and artist on the AID"),
+                      ("rg", "rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)"),
+                      ("zoom", "zoom: CarPlay map zoom with the steering wheel arrows"),
+                      ("dn", "dn: CarPlay map day/night on the AID (sent again after start)"),
+                      # optional (not in button 3), output off until enabled with speedlimit-mode
+                      ("sl", "sl: native VW map speed limit in the AID road text (optional, output off until enabled)"),
+                      # in main 4: the settings page in App-Connect settings, also "Save" for a trial start (ui/README.md)
+                      ("ui", "ui: AID navigation configuration in App-Connect settings, saves trial starts without the card")]
+# only what the profile supports reaches the card, the GEM menu and the settings page
+JAVA_PACKAGES = [x for x in JAVA_PACKAGES_ALL if x[0] in FW["packages"]]
 # rg = everything for route guidance in one package: Tomasz's port + his lanes, our VW U-turn lanes, his MU1367
 # v1.4.3 distance bar / street name / feed recovery, the maneuver fallbacks, the quiet-route hold (v1.4.3) and, since
 # v1.5.0, the VW arrows from Android Auto (rg/build.sh lanes-uturn-asf-m-aa: lanes-uturn-asf-m + rg/lanes/aa.py; with
@@ -60,18 +83,17 @@ VARIANTS = ["map-clean", "card-clean", "url-map-hybrid", "map-clean-l40", "map-s
 # (2026-10-31: no lag difference, no artefacts; IDR every 10 gave artefacts). map-square is 30 fps.
 START_VARIANT = "map-square-fps40"
 
-STOCK = {
-    "IAP2DRV": (BACKUP / "armle/lib/dll/ipod-drvr-iap2.so", "7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c", 739925),
-    "IAP2CFG": (BACKUP.parent / "MU1161-system/mm/iap2.cfg", "1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37", 5951),
-    "LSD": (BACKUP / "eso/hmi/lsd/lsd.sh", "97bbd4ecb51045b34c2a41955d9f53e1f144d174bff1aa8560e911525808e8d8", 16567),
-    "DIO": (BACKUP / "eso/bin/apps/dio_manager", "609e42723ab3e36c7be5ceade81e03672ba4acd251f8eeb8b100e074aaf3c250", 686249),
-    # Android Auto receiver: aa-on replaces it by the AA wrapper and keeps this factory file as carplaymaps/aa/gal.real
-    "GAL": (BACKUP / "eso/bin/apps/gal", "3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9", 1269219),
-}
+# Pins of the unit's factory files come from the profile: path relative to the backup's appimg folder, "@system/..." to its
+# system folder. Android Auto receiver (GAL): aa-on replaces it by the AA wrapper and keeps this factory file as
+# carplaymaps/aa/gal.real
+STOCK = {k: ((SYSTEM / path[len("@system/"):]) if path.startswith("@system/") else (BACKUP / path), h, size)
+         for k, (path, h, size) in FW["stock"].items()}
 
-# key -> (source, sha256, size, path inside payload/)
-PAYLOAD = {
-    "BRIDGE": (MATHSLS / "profiles/MU1161/791/altscreen-most-bridge",
+# Pins of this tool's own build results and of the vendored files, per profile (reviewed after each change; not facts about
+# the unit, so they are not in profile.json). key -> (source, sha256, size, path inside payload/)
+PAYLOAD_BY_PROFILE = {}
+PAYLOAD_BY_PROFILE["MU1161"] = {
+    "BRIDGE": (MATHSLS / "profiles" / FW["id"] / FW["cluster"] / "altscreen-most-bridge",
                "fed7dce45f923384fec47861c448b753913f0561ed7e2a279860a5d13f8a44f4", 67835, "common/altscreen-most-bridge"),
     "SUPERVISOR": (MATHSLS / "common/carplay-cluster-supervisor",
                    "8e6ac3a85f04c3faca4850c9f09021bdd628fa1653d718f9c3db3be9d8057569", 56849, "common/carplay-cluster-supervisor"),
@@ -127,7 +149,7 @@ PAYLOAD = {
 # gal wrapper. Built into build/ by those scripts (docker, QNX 6.5 toolchain).
 # The three QNX binaries are prebuilt in aa/prebuilt/ (built with Docker, see aa/prebuilt/README.md), so install.sh
 # needs no QNX toolchain: hook g2 (A-AA24), libdmdt_flush.so (unchanged since AA 1), feeder v10 (A-AA33).
-PAYLOAD.update({
+PAYLOAD_BY_PROFILE["MU1161"].update({
     "AA_WRAPPER": (PROJ / "aa/unit/gal.wrapper.sh", "57b63037a7d82d45f47773ec76e99ad659490f6d29d540f20de90930f0d65137", 3259, "aa/gal.wrapper.sh"),
     # v1.7.0: hook g2 + raw dump of the navigation messages (/ramdisk/pmcp-aa-rg-raw.txt, A166) + road name, lanes and
     # destination into the rg mailbox (AA 1.1, A171); the same file as experimental card 9c0c4493 (car 2026-11-12, A174)
@@ -146,182 +168,21 @@ PAYLOAD.update({
 # AA sets of earlier (experimental) cards: whole tuples of (sha256, sha1, size) for hook, feeder, hook settings, feeder
 # settings, as they were on that card. pmcp.sh aa_state reports them as "old" with that card's AA_BOOT; aa-install (main menu 3) and aa-on
 # brings them up to date. Only the hashes go to the card, so no earlier build is needed here.
-AA_OLD = [
-    # AA 3 (1.5) feeder v6 (card 892eed6f)
-    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("a71e02fc8a20e3d0080d0a04cf301e85a3c06fb32dc0b95b71e0c7244cae9f7c", "de660427721dec1db848d7391b5f3289daffdf59", 28744),
-              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
-              ("50f6b4e78e589c75841afe36640dbd655a027bdf1edef7d8fb1884a446f2237c", "95a77038130433aef2e83a887fd7a9ef95ca0b88", 358)]),
-    # AA 3 (1.7) feeder v6 (card 892eed6f)
-    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("a71e02fc8a20e3d0080d0a04cf301e85a3c06fb32dc0b95b71e0c7244cae9f7c", "de660427721dec1db848d7391b5f3289daffdf59", 28744),
-              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
-              ("28d3de87de2621c118d441f044d49960817d1d7669ceb2e6ff4c7891e4d073e4", "01bcfbcf5d8377102df318aa9a7f32299e855213", 282)]),
-    # AA 3 (1.5) v7 with probe C (card 9766265d)
-    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
-              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
-              ("9dc1cda65298c89f05d14c62ef72c22902602e8dbff5556ef2598cf2b1403f7a", "f0d7e75d0275183d64deea5c84947d5ad2b51b5b", 708)]),
-    # AA 3 (1.7) v7 with probe C (card 9766265d)
-    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
-              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
-              ("08b43660b37df4837436d197968b96e8f216bc483ad1b945bcfb5164d9b72c3c", "c535ce56ffc52b8bc689b54dd3aca01c278307d9", 802)]),
-    # gamma hook g1, probe C (card 662eb7a8)
-    ("gamma", [("aa0b97fc61ec554c0ca81340fe04d53214afe0c3b7c0ac2b891b15d9e7014ddc", "9d1645d7d3be0af6922c865369ee282f6b623dd9", 131136),
-              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("e09c810b52e35ee24484b57494752ee0a8aa5f805a301834f553cb66944842ad", "9728be87cd01538c7089d9eaf5cf1215a2847bfa", 825)]),
-    # gamma hook g2, probe C (card 9766265d)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("e09c810b52e35ee24484b57494752ee0a8aa5f805a301834f553cb66944842ad", "9728be87cd01538c7089d9eaf5cf1215a2847bfa", 825)]),
-    # AA 3 (1.5) v7 without probe C (card a32f55db)
-    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
-              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
-              ("c29014492e545971404c6d46775bc82d36666bd8d3aedd5c0548e8aee37f5a51", "9f5774fa9e36057794408ae8bcadc3e5a837ad39", 686)]),
-    # AA 3 (1.7) v7 without probe C (card a32f55db)
-    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
-              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
-              ("3588fc0dac530d9b2cd6caaaafbd532aa7990af04baa8ec3b980c4271036b21a", "0bda2030b907637e6c683074a0181660148a687f", 780)]),
-    # gamma hook g2, v7 without probe C (card a32f55db)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("27b32b35168e43e9f31e397f6cbf0cf1390cd2d7ca486dd93644e693739c1778", "b5e04e25546c9c821f83bcd2b8f6ef46f1f2da51", 29476),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("1f14e9d60c5cc939d53f195f8805738f1758a6e819b1aec3bdc8538fd26ffff5", "6b8e1b47b473bb725a0ecc70bbe4b0601cc19afd", 803)]),
-    # AA 3 (1.5) feeder v8, 5 s (card fc01e707)
-    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
-              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
-              ("c29014492e545971404c6d46775bc82d36666bd8d3aedd5c0548e8aee37f5a51", "9f5774fa9e36057794408ae8bcadc3e5a837ad39", 686)]),
-    # AA 3 (1.7) feeder v8, 5 s (card fc01e707)
-    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
-              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
-              ("3588fc0dac530d9b2cd6caaaafbd532aa7990af04baa8ec3b980c4271036b21a", "0bda2030b907637e6c683074a0181660148a687f", 780)]),
-    # gamma g2, feeder v8, 5 s (card fc01e707)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("1f14e9d60c5cc939d53f195f8805738f1758a6e819b1aec3bdc8538fd26ffff5", "6b8e1b47b473bb725a0ecc70bbe4b0601cc19afd", 803)]),
-    # AA 3 (1.5) feeder v8, 10 s (card 2d4483e5)
-    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
-              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
-              ("83ce7aecd794219bda21103b425d720bee100135bab904fca3b5b0d234237013", "037f5b702bada4af1a1708e02f60a5764c20b1a9", 755)]),
-    # AA 3 (1.7) feeder v8, 10 s (card 2d4483e5)
-    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
-              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
-              ("ae2771afc6ef1344ded3d1054afa1b28b1c892010eecaf4d46e2e680f5cc5953", "b9c94f5373308b64d4c4fa6fcaeae38357c6e2cd", 849)]),
-    # gamma g2, feeder v8, 10 s (card 2d4483e5)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("c8d19ef4c522726366b44c402fbec0f47b45387f228b87d26fbf39ecfd58ca09", "14dbf37a63745a6529f2eab1a0978cffd46d991b", 872)]),
-    # AA 3 (1.5) feeder v8, 5 s + start sync 3 s (card ab9fb348)
-    ("sync15", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
-              ("4a6de359a582ff79ad791882ba6d24178f40ec20c912bbc2f6e211a86504bddc", "1196e1be3a921c78f4ba955b3e7e9e49063adb7c", 1514),
-              ("325f2a753f243b71b52422715e885937e5d2134ea74170965ec4b1316dbdd721", "b11ccc89ccb05f32f9d787951a7d507fae497814", 958)]),
-    # AA 3 (1.7) feeder v8, 5 s + start sync 3 s (card ab9fb348)
-    ("sync17", [("dd72104b416d11c455c35101f0869b2d36bc0c28eafa8e8fa46e2bf71fc80a9c", "6c76d1ee5ac7b2e1ae73a04230a320985f581f7e", 120396),
-              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
-              ("99288ee3709ced0080ef18d8f5f314a3c36b690001ddba73b37838572a474323", "1bd09c81b5a492f477bf2f8893789eb7e12e0416", 1578),
-              ("374c0f580779febd49e4ba2d0ad065c8174ebce3b0840ff9cf2bab68497af490", "a11c570448ac1bb9a99bd9fecf014f6b9e65e165", 1052)]),
-    # gamma g2, feeder v8, 5 s + start sync 3 s (card ab9fb348)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("5ec1a19129b0cf8f45445f514bcc813395f127a11e98abdb524fa9864e38e652", "2c4c3152991319c42ad890fdedaf363c88f9e3ee", 30048),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("65452c93449c1afc44fef6e70d00bd228ffd5d8580f9256b02876ae9c25bad9e", "efbc281e90e41e7ba85878d1230e3cfbc2fa022f", 1075)]),
-    # gamma g2, feeder v9 (cards f2a7ceb5 / fd0c7a7c, v1.4.1 / v1.4.2 experimental)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("5d2a0a026321196c1a2745dcb8e32f896e7fb3cace7a036bb910357f54afc630", "1441f41c60806e93e8bb84c1cf68be0080c35a94", 33464),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("eaae73415ec6a2a3f4351764dcfdb96cd87d90aa3034cadd03bec52a09aad97a", "67dd89345f0a46640dda69f3d8b4d1b10832a9c5", 857)]),
-    # gamma g2, feeder v10 at 2 Mbit/s (card 030b7df2)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", "5b86be4b6630da664e77d7435e8ffb04ca92ca51", 34856),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("c26c69a8562f4773edbbbf287ecf20e52d208f27135b944df04c6f8bbf70dccc", "785285dbeb3c719d83833b59aab31382d9137dee", 1160)]),
-    # gamma g2, feeder v11 (direct MOST writer opt-in), 6 Mbit/s (experimental 0.5.0, card a55867ab)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("76901cc7caa8b6a6aa3111f31b8dd3ee974f779cff818aba8f221dd79367cad0", "43f2aa88ae12811824b3da4d8bd2772b3f35b6a7", 53796),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", "8cc8efcc2e8a8fcf05eec4e96eae0d59e8c0a62c", 1219)]),
-    # gamma g2, feeder v12 (card 15d19b43; the experimental set of cards c234a9ff / 02aa81cb, in the car 2026-11-10)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("f87923b5249775bdb47f1ca93b77a04bfdb0043c70d8ca80003c37f1f061e0d9", "9a8c2205228cf2a21c4ee5e197756e442dd512d8", 54868),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", "8cc8efcc2e8a8fcf05eec4e96eae0d59e8c0a62c", 1219)]),
-    # gamma g2, feeder v10 = the stable set of releases v1.5.0 and v1.5.1 (Android Auto 0.1 open alpha)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("c5f8b0ef3821b3a533cd762fab14ff984fffa0afe4fd66185e16ea57413149a7", "5b86be4b6630da664e77d7435e8ffb04ca92ca51", 34856),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", "8cc8efcc2e8a8fcf05eec4e96eae0d59e8c0a62c", 1219)]),
-    # gamma g2, feeder v13 (experimental set of card d82f8c73, confirmed in the car 2026-11-10, A153)
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("17a366da1d364bf9559df54b9d598516b3b21a026ec0786bba3e578c6c63a5f1", "978dbfe48e6ec7c3e4ccb0ca602c300b2eb99242", 56336),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("ac7157dabd7ae3ec61e8b9c453451b5716154b2b068d552dd96a94a83852e75d", "8cc8efcc2e8a8fcf05eec4e96eae0d59e8c0a62c", 1219)]),
-    # AA 1.0 (v1.6.0, card 64553e3b; exp card 555306ee): hook g2, feeder v14, feeder.conf with PMCP_AA_OUTPUT=direct
-    ("gamma", [("bdd76a85f22319c9750f7c55849b4053d4ce365446559025195673677bc73b05", "61b2d0d995c9fbfc7e8b68fb707a7d938a56c297", 132823),
-              ("0003c60c132b56990d6020fe1efad9e549397e9542db9f3d51624a8be4d905d3", "086a97e63713e75d3168d524f054fc434a1720f0", 56900),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", "c9cbdfc4536944af21eab325fbf281703c08f44d", 1566)]),
-    # experimental card b542b2d4 (A166): hook with the raw dump, feeder v15, the same hook settings and feeder.conf
-    ("gamma", [("0340ccca9e7d9953206809b28fc141c0d3b0a70f5d36918ab6fc628f99b69e0b", "59e22ec0266de8694880dc2114835a774d2ff09a", 136636),
-              ("395d99b756789e39b119eded68f90d4eceee269138d7f950447aa928ea464592", "c0b446643bf6d4770be41c0f3a3c6b6a19faf019", 58656),
-              ("716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839),
-              ("08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", "c9cbdfc4536944af21eab325fbf281703c08f44d", 1566)]),
-]
+# (profiles/<ID>/history.json, "aa_old": mode + the 4 files as [sha256, sha1, size], with a "note" per set)
+AA_OLD = [(e["mode"], [tuple(f) for f in e["files"]]) for e in HIST["aa_old"]]
 
-# Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): the v1.0-v1.3 driver and
-# Tomasz's reader. (kind, sha256, sha1, size): only their hashes go to the card, so no earlier build is needed here.
-RG_KNOWN = [
-    ("DRIVER", "76926bde9bdf1e06fdfe57fd324bbd8772bcb2a98a58ac444b4822e25a331b48", "7613f35cb8597dbaedd16fd83260a14c7f2d654f", 743196),
-    ("READER", "b683cef78828bfab2b8cdf43e4ea82e5d7c16d0d47730936d936e82af6ee08ac", "1b6cb87d2aa1148f28996f72cb00349519b19077", 16606),
-]
+# Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): (kind, sha256, sha1, size), only their
+# hashes go to the card, so no earlier build is needed here. List and notes: history.json "rg_known".
+RG_KNOWN = [(e["kind"], e["sha256"], e["sha1"], e["size"]) for e in HIST["rg_known"]]
 # Java packages of earlier cards that java-update replaces (pmcp.sh JAVA_OLD): (name, sha256, sha1, size, jar file on the
-# unit, successor). v1.2/v1.3 rg and rglu, v1.4.x rg, and the experimental cards' rg variants (rg/build.sh modes base,
-# lanes-uturn, lanes-uturn-aa, -asf, -asf-aa, -asf-m, -asf-m-aa): all become rg. Only their hashes go to the card.
-JAVA_OLD = [
-    ("rg", "717fb53c667c612e6f3b483ea93620559eaa23404a2e237d255f5af40798a754", "f748313879a40e3c8d69304dcfbfbbf003a412c6", 34082, "pmcp-rg.jar", "rg"),
-    ("rglu", "72ab72214ee91a0d95ba0ec4d57a65cbee95d8ee82cb23af82fcb6b082591a33", "29b4bbcacc1c4251b7a47efd3c11445ba33e41f8", 38529, "pmcp-rglu.jar", "rg"),
-    ("rglua", "a9a25b1eb9aeed1347bb9c6c38aef3549dc2416d844c10b203fd175319f62161", "809f18a0deb12667fe651c5309a6be5c63a3849a", 38832, "pmcp-rglua.jar", "rg"),
-    ("rgluasf", "a092ef2a617cd63cde454d2bb18e8ea249f374770474ac030e5aea53edc373ed", "4fa0c5b25cbddc70b7c672ce58043fbd8eb3f68d", 47187, "pmcp-rgluasf.jar", "rg"),
-    ("rgluasfa", "b3a35c9b40ae4bb5360189178b18218005a194f4585ee491a916bfce539c034d", "385c81be0210bdbd9f599a7739124d528f3d8770", 47510, "pmcp-rgluasfa.jar", "rg"),
-    ("rgluasfm", "13ca11c4e2a5fbe155165071f69fbee0e2b5b318e87fbfc079a9f76fefb62770", "517763a46b37afac546ec45e24b72cf15307ad9a", 47817, "pmcp-rgluasfm.jar", "rg"),
-    ("rgluasfma", "de39c893d8ea86abe4f57bc350fd7bd2d9b4a79f9023fc28a430cc2a20957ace", "ca03f2696567e24866b30e370159835a2cfae3db", 48161, "pmcp-rgluasfma.jar", "rg"),
-    # v1.4.0 rg (the same bytes as rgluasfm, under the v1.4.0 file name); v1.4.1 adds the speed-limit prefix hook
-    ("rg", "13ca11c4e2a5fbe155165071f69fbee0e2b5b318e87fbfc079a9f76fefb62770", "517763a46b37afac546ec45e24b72cf15307ad9a", 47817, "pmcp-guidance.jar", "rg"),
-    # v1.4.1/v1.4.2 rg (speed-limit prefix hook); v1.4.3 adds the quiet-route hold for Apple Maps (rg/lanes/hold.py)
-    ("rg", "8e25ae00d155c1cf47cb7661b376c93464ea505141bf83d915b1867047f437cb", "e7222ae3bf7a796ba7a87b09774bf073d9d74689", 49045, "pmcp-guidance2.jar", "rg"),
-    # v1.4.3 rg (quiet-route hold, without the Android Auto reader)
-    ("rg", "7b1874847c5cf9714ed3b7e24c948b425aafc367c03a884d6309c8fda93c8661", "3cdf677c3824956b2da7546e9d69578af51030f6", 52951, "pmcp-guidance3.jar", "rg"),
-    # experimental cards f2a7ceb5 / 030b7df2 / b2bcbbe3 (v1.4.1/v1.4.2 + Android Auto): rg-aa = rg with the AA reader
-    ("rg-aa", "4f9215bfacb61e12cf2f1444a8b9297d2fa925d48bacd6ca6b778140088e9dc9", "c7125f3321201df065594a0ee84daecbcb3bcd67", 49388, "pmcp-guidance-aa.jar", "rg"),
-    # experimental card 84472aa9 (v1.4.3 + Android Auto): rg-aa with the quiet-route hold (this card's rg before the 10 s
-    # AA hold). 01221496 never went to a unit as pmcp-guidance4.jar (the 1.5.0 candidate card 5b099f03 was not written to
-    # an SD card), so no row for that file name is needed.
-    ("rg-aa", "01221496a8670e1a2de3b54a1aa1ed8512a9931c92c1823da98e018d44c71d7c", "9af25147b2bad492cde17451966f689a37cd077f", 53309, "pmcp-guidance-aa2.jar", "rg"),
-    # v1.5.1 ui (settings page without the Android Auto output row): this card's ui is pmcp-ui2.jar, so java-update
-    # (main menu 4) replaces it in place and keeps sl and its mode (without this row the v1.5.1 set is unknown and 4
-    # resets the whole Java set, dropping sl)
-    ("ui", "e11bd8d3e93a7f2671d9ae8b5e354a428c5c8f17d66f0f8b97b9a88cc14a17b1", "93b1347fac382331e0900c73ac331a22259b7681", 26657, "pmcp-ui.jar", "ui"),
-    # v1.5.0, v1.5.1 and v1.6.0 rg (rg/build.sh lanes-uturn-asf-m-aa, before rg/lanes/v146.py): this card's rg is
-    # pmcp-guidance5.jar, so java-update (main menu 4) replaces it in place and keeps sl, ui and the speed-limit mode
-    ("rg", "4e32e7f7e2af8613b264998911a278b50d4ebf0a4b5d0c6245089e782d6236ee", "c14f3a68ffff673697d13985749a85adbdb1e2b4", 53514, "pmcp-guidance4.jar", "rg"),
-    # RC test cards (v1.6.0 rg + v146) in pmcp-guidance5.jar; this card's rg (+ KombiView, AA 1.1 gate) is pmcp-guidance7.jar
-    ("rg", "70f714fbaf3efb85bf3235f72971f638c822a117838589bfdf46281037c38fa4", "8f212f550a6e7c30c66e008e5d0bea197b0c2dfa", 55780, "pmcp-guidance5.jar", "rg"),
-    # experimental card b542b2d4 (A166): rg + KombiView; this card's rg (+ AA 1.1 gate) is pmcp-guidance7.jar
-    ("rg", "637dc949c4eabb1eab487f1dcbe0cb566600c07f7e17c4ef671b0a053214de18", "1409b1b4c10430690256f08812da8e0f38c3f4c9", 64300, "pmcp-guidance6.jar", "rg"),
-    # v1.x np (CarPlay title only); this card's np (+ Android Auto title) is pmcp-np2.jar
-    ("np", "6b638868e65a6e573117cbf249850bb29e7b9aac3cd0502c2830652411f1dc23", "ead546cc8af3d2c5ac0035c0aecbd1faed8fe431", 17928, "pmcp-np.jar", "np"),
-]
+# unit, successor); only their hashes go to the card. List and notes: history.json "java_old".
+JAVA_OLD = [tuple(e[k] for k in fwprofile.JAVA_OLD_KEYS) for e in HIST["java_old"]]
+if PROFILE_ID not in PAYLOAD_BY_PROFILE:
+    sys.exit("no PAYLOAD pins for profile %s in build_sd.py (PAYLOAD_BY_PROFILE)" % PROFILE_ID)
+PAYLOAD = {k: v for k, v in PAYLOAD_BY_PROFILE[PROFILE_ID].items()
+           if not (k.startswith("JAR_") and k[4:] not in FW["packages"])}
+if FW["lsd_sh_states"] != ["stock"]:
+    sys.exit("profile %s: lsd_sh_states %r is not supported by this installer yet" % (PROFILE_ID, FW["lsd_sh_states"]))
 for name in VARIANTS:
     PAYLOAD["CORE_" + name] = (TUNING / name / "core.so", None, 75099, "core/%s/core.so" % name)
 
@@ -424,7 +285,7 @@ def patch_lsd(stock):
     expect = ['export LD_PRELOAD=/lib/libecpp-ne.so.4:/mnt/app/root/lib-target/libcgdrv.so', 'info "lsd.sh J9 started" ',
               '$J9 $VMOPTIONS $BOOTCLASSPATH -jxe $HMI_JXE &', 'unset LD_PRELOAD']
     if lines[j - 2:j + 2] != expect:
-        sys.exit("lsd.sh lines around J9 differ from the MU1161 factory file: %r" % lines[j - 2:j + 2])
+        sys.exit("lsd.sh lines around J9 differ from the %s factory file: %r" % (PROFILE_ID, lines[j - 2:j + 2]))
     out = lines[:j - 2] + LSD_PRE.split("\n") + lines[j - 2:]
     return "\n".join(out).encode("ascii")
 
@@ -606,7 +467,7 @@ def esd_block(version, top, feat, cp, aa):
         return ['keyValue', '    value   String sys 0x00000000 0', '    label   "%s"' % text, '    poll    0', '']
     def sc(name, label):
         return ['script', '    value   sys 1 0x0100 "/net/mmx/fs/sda0/pmcp/menu/%s.sh"' % name, '    label   "%s"' % label, '']
-    out = ['', '#' * 91, '#', '# Main -> M.I.B. -> pmcp: CarPlay and Android Auto map on the AID (Passat B8 MU1161 / 791), added on the SD card only',
+    out = ['', '#' * 91, '#', '# Main -> M.I.B. -> pmcp: CarPlay and Android Auto map on the AID (%s %s / %s), added on the SD card only' % (FW["car"], FW["id"], FW["cluster"]),
            '#', '#' * 91, 'screen pmcp_stream_map_aid =>M.I.B.<=', '']
     out += kv(version) + kv("Every button checks all files first and changes nothing on a mismatch. Photograph each result.")
     out += kv("2, 3 and 4 also replace versions this card does not support. Then restart (hold the volume knob ~10 s).")
@@ -744,6 +605,7 @@ def main():
         "@@PMCP_VERSION@@": PMCP_VERSION, "@@MANIFEST@@": manifest,
         "@@SELFTEST_SHA@@": sha(selftest), "@@SELFTEST_SIZE@@": str(len(selftest)),
         "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_OLD@@": "\n".join(old), "@@AA_OLD@@": "\n".join(aa_old),
+        "@@STOCK_JXE_SIZE@@": str(FW["lsd_jxe"]["size"]), "@@PROFILE_ID@@": FW["id"], "@@PROFILE_CLUSTER@@": FW["cluster"],
         "@@STOCK_GAL_SHA@@": STOCK["GAL"][1], "@@STOCK_GAL_SIZE@@": str(STOCK["GAL"][2]),
         "@@STOCK_LSD_SHA@@": STOCK["LSD"][1], "@@STOCK_LSD_SIZE@@": str(STOCK["LSD"][2]),
         "@@STOCK_DIO_SHA@@": STOCK["DIO"][1], "@@STOCK_DIO_SIZE@@": str(STOCK["DIO"][2]),

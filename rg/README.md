@@ -10,7 +10,7 @@ Sources: `upstream/tomasz` @ `024dd159` (MU1427), `7925a83` (MU1367 v1.4.0 lanes
 `d20527f` (MU1367 v1.4.4), `MU1367-v1.4.5` / `MU1367-v1.4.6` (`6610cbb`, `d680311`).
 
 Since v1.4 there is **one** route guidance Java package, `rg`. Since v1.7.0 it is built with
-`rg/build.sh <lsd.jar> <dir> lanes-uturn-asf-m-aa-r` (v1.5.0-v1.6.0: `lanes-uturn-asf-m-aa`, v1.4.x: `lanes-uturn-asf-m`).
+`rg/build.sh <profile> <lsd.jar> <dir> lanes-uturn-asf-m-aa-r` (v1.5.0-v1.6.0: `lanes-uturn-asf-m-aa`, v1.4.x: `lanes-uturn-asf-m`).
 It holds everything below: the MU1427 port, his lanes, our U-turn lanes, his distance bar / street name / feed recovery,
 the maneuver fallbacks, the quiet-route hold and (v1.5.0, `rg/lanes/aa.py`) the VW arrows from Android Auto: while an
 Android Auto phone is connected (connection type 3) it reads the AA hook's mailbox `/ramdisk/pmcp-aa-rg`, and a quiet
