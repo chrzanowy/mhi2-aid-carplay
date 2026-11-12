@@ -1606,7 +1606,7 @@ PEOF
         run160 aa-on; rc_is 0; aa_before=$(snapshot "$W/unit" | grep -e '/carplaymaps/aa/' -e '/apps/gal')
         run status; expect_out "packages of an earlier card: np rg" "v1.6.0 np and rg reported as an earlier card's package"
         grep -q -e "packages of an earlier card: rg ui" -e "earlier card: ui" "$W/out" && bad "v1.6.0 ui taken as an earlier package" || ok "v1.6.0 ui is this card's ui"
-        # experimental cards (A166) carry a newer AA set: v1.6.0's AA 1.0 is then an earlier card's set
+        # cards since A166 (and v1.7.0) carry a newer AA set: v1.6.0's AA 1.0 is then an earlier card's set
         if [ "$(sed -n 's/^AA_FEEDER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh")" = 0003c60c132b56990d6020fe1efad9e549397e9542db9f3d51624a8be4d905d3 ]; then
             expect_out "Android Auto: on" "v1.6.0 AA set is this card's"
         else
