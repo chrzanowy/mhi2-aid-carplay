@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "MU1161",
+  "cluster": "791",
+  "version_tag": "mu1161-791",
+  "label": "VW MHI2 Discover Pro MU1161 (train MHI2_ER_VWG13_P4512) + AID 12.3\" part 791",
+  "car": "Passat B8",
+  "train": "MHI2_ER_VWG13_P4512",
+  "mu": "1161",
+  "backup_dir": "MU1161",
+  "appimg": "advanced/MU1161-appimg",
+  "system": "advanced/MU1161-system",
+  "lsd_jxe": {"file": "MU1161-lsd.jxe", "size": 55830309,
+              "sha256": "201c2f5c3434c43e77e37544a1d90d43e03ab3ea3802306f865dcdf1400f9a8c"},
+  "lsd_jar_sha256": ["a0cc737ce40cf0ef95127fd9bf6d3c21a8ca2edeffe815a5d1adbbd2ae0f2599",
+                     "573b603a0b79b6c150d6c4363d5db2f9a1b644b21f81ab4a2329d5cdda0f1576"],
+  "props": {"carplay_rg": 2910009, "aa_rg": 2910005},
+  "stock": {
+    "IAP2DRV": ["armle/lib/dll/ipod-drvr-iap2.so", "7149a3e75b1b19e89021841759f420a6eced456b6c697a3dd1f0e436abea0b8c", 739925],
+    "IAP2CFG": ["@system/mm/iap2.cfg", "1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37", 5951],
+    "LSD": ["eso/hmi/lsd/lsd.sh", "97bbd4ecb51045b34c2a41955d9f53e1f144d174bff1aa8560e911525808e8d8", 16567],
+    "DIO": ["eso/bin/apps/dio_manager", "609e42723ab3e36c7be5ceade81e03672ba4acd251f8eeb8b100e074aaf3c250", 686249],
+    "GAL": ["eso/bin/apps/gal", "3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9", 1269219]
+  },
+  "lsd_sh_states": ["stock"],
+  "mathsls_payload": "MU1161/791_AID12.3/payload",
+  "mathsls_commit": "cdd576b02a282853bd764a82b9a94e6474f39052",
+  "rg_driver_in_sha256": "76926bde9bdf1e06fdfe57fd324bbd8772bcb2a98a58ac444b4822e25a331b48",
+  "packages": ["nai", "np", "rg", "zoom", "dn", "sl", "ui", "aa"]
+}
