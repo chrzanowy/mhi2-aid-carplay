@@ -100,6 +100,10 @@ M.I.B. 3.6.0. Na końcu `PMCP_LOGS/PMCP_LOGS_RESULT.txt` kończy się `RESULT=OK
 (`Swdlautorun.txt` -> `_Swdlautorun.txt`); żeby użyć jej ponownie, zmień nazwę z powrotem na komputerze. Szczegóły:
 `PMCP_LOGS_README.txt` na karcie.
 
+**Prywatność:** log Android Auto (`aa-log-N.txt`) zawiera surowe komunikaty nawigacji Google Maps: nazwy ulic,
+instrukcje i **adres celu**, oraz log widoku AID z godzinami. Przejrzyj go przed dołączeniem do publicznego zgłoszenia
+i usuń albo zamień adresy.
+
 ## Wyłączenie Android Auto
 
 - `aa_advanced` → **„AA remove (factory Android Auto back)”**: fabryczny `gal` (odbiornik Android Auto radia) wraca z kopii sprawdzonej

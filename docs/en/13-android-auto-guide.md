@@ -101,6 +101,10 @@ the way. At the end `PMCP_LOGS/PMCP_LOGS_RESULT.txt` ends with `RESULT=OK copied
 (`Swdlautorun.txt` -> `_Swdlautorun.txt`); rename it back on a computer to use it again. Details:
 `PMCP_LOGS_README.txt` on the card.
 
+**Privacy:** the Android Auto log (`aa-log-N.txt`) holds Google Maps' raw navigation messages: road names, the
+instructions and the **destination address**, and the AID view log with times. Read it before you attach it to a
+public issue, and remove or replace the addresses.
+
 ## Android Auto off
 
 - `aa_advanced` → **"AA remove (factory Android Auto back)"**: the factory `gal` (the unit's Android Auto receiver) comes back from its

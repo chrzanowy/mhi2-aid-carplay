@@ -25,7 +25,7 @@ this release ships the same files):
   starts, the feeder takes it back (at most 3 times) and sends the last key frame again, instead of leaving the AID
   without the map until the phone is reconnected. Reported on MU1367 by tomasz-twardzicki (v1.5.1-e).
 - **Diagnostics:** the AA hook writes the raw navigation messages to `/ramdisk/pmcp-aa-rg-raw.txt` (rotated; it holds
-  road names and the destination address, in RAM only until "AA save log"), rg writes which view the AID shows to `/ramdisk/pmcp-kombi-view.log`; "AA save log" copies both.
+  road names and the destination address, in RAM only until "AA save log"; read a saved AA log before posting it), rg writes which view the AID shows to `/ramdisk/pmcp-kombi-view.log`; "AA save log" copies both.
 - **Update:** main menu 4 replaces `rg` (`pmcp-guidance4.jar`/`5`/`6` → `pmcp-guidance7.jar`) and `np` (`pmcp-np.jar` →
   `pmcp-np2.jar`) in place with one trial start and one confirmation; `sl`, `ui` and the speed-limit mode stay. Main menu
   3 brings Android Auto 1.0 (v1.6.0) and the experimental sets in place to 1.1 and keeps the chosen AA output. A unit
