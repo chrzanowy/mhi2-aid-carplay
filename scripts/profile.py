@@ -26,7 +26,7 @@ LSD_STATES = {"stock", "toolbox_nai"}
 KEYS = {"schema": int, "id": str, "cluster": str, "version_tag": str, "label": str, "car": str, "train": str, "train_full": str,
         "mu": str, "backup_dir": str, "appimg": str, "system": str, "lsd_jxe": dict, "lsd_jar_sha256": list,
         "props": dict, "stock": dict, "lsd_sh_states": list, "mathsls_payload": str, "mathsls_commit": str,
-        "rg_driver_in_sha256": str, "packages": list}
+        "rg_driver_in_sha256": str, "packages": list, "toolbox_nai": dict}
 
 
 def _no_dups(pairs):
@@ -128,6 +128,26 @@ def validate(p, pid):
         fail("%s: lsd_jxe.file %r must be a file name" % (pid, p["lsd_jxe"]["file"]))
     for k, v in p["stock"].items():
         _relpath(v[0][len("@system/"):] if v[0].startswith("@system/") else v[0], "%s stock.%s" % (pid, k))
+    # toolbox_nai: the unit's lsd.sh already loads MIB2 Toolbox's NavActiveIgnore.jar (one extra BOOTCLASSPATH line).
+    # Only with "toolbox_nai" in lsd_sh_states, and then fully described: that lsd.sh, the jar and the exact line.
+    t = p["toolbox_nai"]
+    if "toolbox_nai" in p["lsd_sh_states"]:
+        if set(t) != {"lsd_sh", "jar", "line"}:
+            fail("%s: toolbox_nai needs lsd_sh, jar, line" % pid)
+        if not (isinstance(t["lsd_sh"], list) and len(t["lsd_sh"]) == 2):
+            fail("%s: toolbox_nai.lsd_sh is not [sha256, size]" % pid)
+        _hash(t["lsd_sh"][0], pid + " toolbox_nai.lsd_sh")
+        _size(t["lsd_sh"][1], pid + " toolbox_nai.lsd_sh")
+        if not (isinstance(t["jar"], list) and len(t["jar"]) == 3 and isinstance(t["jar"][0], str)):
+            fail("%s: toolbox_nai.jar is not [path, sha256, size]" % pid)
+        _relpath(t["jar"][0], pid + " toolbox_nai.jar")
+        _hash(t["jar"][1], pid + " toolbox_nai.jar")
+        _size(t["jar"][2], pid + " toolbox_nai.jar")
+        if not (isinstance(t["line"], str) and t["line"] and "\n" not in t["line"] and "\r" not in t["line"]
+                and "-Xbootclasspath/p:" in t["line"] and t["jar"][0].split("/")[-1] in t["line"]):
+            fail("%s: toolbox_nai.line must be one BOOTCLASSPATH line naming the jar" % pid)
+    elif t:
+        fail("%s: toolbox_nai is set but lsd_sh_states has no toolbox_nai" % pid)
     if not p["packages"]:
         fail("%s: packages is empty" % pid)
     if not p["props"]:

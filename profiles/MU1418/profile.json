@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "MU1418",
+  "cluster": "791",
+  "version_tag": "mu1418-791",
+  "label": "VW MHI2 Discover Pro MU1418 (train MHI2_US_VWG13_P3662, US) + AID 12.3\" part 791 (beta, one car)",
+  "car": "Golf (US)",
+  "train": "MHI2_US_VWG13_P3662",
+  "train_full": "MHI2_US_VWG13_P3662",
+  "mu": "1418",
+  "backup_dir": "MU1418",
+  "appimg": "advanced/MU1418-appimg",
+  "system": "advanced/MU1418-system",
+  "lsd_jxe": {"file": "MU1418-lsd.jxe", "size": 54250283,
+              "sha256": "33adfb85079fd659cde05f2ae6249dddb0cda05c51be8c483127160c7f2ba918"},
+  "lsd_jar_sha256": ["1ca9a5ffbb93ed61aa056dfedfffec803dace9ecb03405d4d1b5e82aebb26e8a"],
+  "props": {"carplay_rg": 2910009, "aa_rg": 2910005},
+  "stock": {
+    "IAP2DRV": ["armle/lib/dll/ipod-drvr-iap2.so", "af8d2ab3ecefed7951547ff3c858c1d03bf22512384b897d10883710bca365a7", 739925],
+    "IAP2CFG": ["@system/mm/iap2.cfg", "2597664cdc0aafaa7cf8d239b98d8dcd1c1e45cbb3f49ffc51dd68829d850eee", 5907],
+    "LSD": ["eso/hmi/lsd/lsd.sh", "b92e77a0fcaa4af244994bd213123b3e25d235a83e41b16d4152e097ac1afbac", 15911],
+    "DIO": ["eso/bin/apps/dio_manager", "2e454a71f224c64497e8738632ab2571b3f3280c4bc10a20f90e1b98587659e5", 653416],
+    "GAL": ["eso/bin/apps/gal", "efbc907e7ed92b5565ab8add6ac4190d982be304883d5d79e49aba531cfd2785", 1258334]
+  },
+  "lsd_sh_states": ["stock", "toolbox_nai"],
+  "mathsls_payload": "MU1161/791_AID12.3/payload",
+  "mathsls_commit": "cdd576b02a282853bd764a82b9a94e6474f39052",
+  "rg_driver_in_sha256": "5f8a93fe92eef32ee6b7b57d01b8b739401f39c24d5893f1380a9af1da43bbcc",
+  "packages": ["nai", "rg", "zoom", "dn", "sl"],
+  "toolbox_nai": {
+    "lsd_sh": ["1d7f488a9acf30c26ca47ebb6b2a586f5ae908407fc748b5ba46203925972c7f", 15999],
+    "jar": ["eso/hmi/lsd/jars/NavActiveIgnore.jar", "303f0c484ca935ecd1be6c266d24ffec8fc68e3b928393846331eda59fb3e5d9", 18057],
+    "line": "BOOTCLASSPATH=\"$BOOTCLASSPATH -Xbootclasspath/p:$BASE_DIR/lsd/jars/NavActiveIgnore.jar\""
+  }
+}

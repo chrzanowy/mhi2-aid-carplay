@@ -27,5 +27,6 @@
   "mathsls_payload": "MU1161/791_AID12.3/payload",
   "mathsls_commit": "cdd576b02a282853bd764a82b9a94e6474f39052",
   "rg_driver_in_sha256": "76926bde9bdf1e06fdfe57fd324bbd8772bcb2a98a58ac444b4822e25a331b48",
-  "packages": ["nai", "np", "rg", "zoom", "dn", "sl", "ui", "aa"]
+  "packages": ["nai", "np", "rg", "zoom", "dn", "sl", "ui", "aa"],
+  "toolbox_nai": {}
 }
