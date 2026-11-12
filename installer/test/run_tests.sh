@@ -615,7 +615,9 @@ PY
         set -- $args
         case "$1" in
             install|switch) grep -q "^CORE_$2 " <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") || bad "variant $2 of $(basename "$m") not in manifest" ;;
-            java-on|java-off) grep -q "^JAR_$2 " <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") || bad "package $2 of $(basename "$m") not in manifest" ;;
+            # a package the profile does not have yet keeps its button (it answers "not yet supported", test A1)
+            java-on|java-off) case " $UNSUP_PKGS " in *" $2 "*) ;; *)
+                grep -q "^JAR_$2 " <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") || bad "package $2 of $(basename "$m") not in manifest" ;; esac ;;
         esac
     done
     nmenu=$(ls "$SDB"/pmcp/menu/*.sh | wc -l | tr -d ' ')
@@ -1235,7 +1237,8 @@ PEOF
     run java-retry; rc_is 0; run java-confirm; rc_is 1; expect_out "SET_ALREADY_CONFIRMED" "confirm runs past a stale lock (set confirmed already)"
     expect_out_not() { grep -q "$1" "$W/out" && bad "$2" || ok "$2"; }
     expect_out_not "SPEEDLIMIT_LOCK_BUSY" "java-confirm does not wait for the lock"
-    run java-on np; rc_is 1; expect_out "SPEEDLIMIT_LOCK_BUSY" "package change waits for the lock"
+    LOCKPKG=np; [ $HAS_NP = yes ] || LOCKPKG=dn
+    run java-on $LOCKPKG; rc_is 1; expect_out "SPEEDLIMIT_LOCK_BUSY" "package change waits for the lock"
     run restore; rc_is 0; expect_out "PMCP_RESTORE_OK" "restore runs past a stale lock"
     [ ! -e "$SLP" ] && ok "full restore clears the mode" || bad "full restore left the mode"
     rm -rf "$SLL"
