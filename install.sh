@@ -616,6 +616,17 @@ fi
 step 11 "Done - what to do next in the car" \
     "Your build: $VERSION (GEM shows this in the header; any other version means stop)."
 NEXT="$BUILD/NEXT-STEPS.txt"
+# the button texts exactly as this card's GEM menu shows them (they depend on the profile's packages)
+menu_label() { tr -d '\r' < "$BUILD/sd/esd/Launcher-sda0.esd" | awk -v s="pmcp/menu/$1.sh\"" 'index($0, s) { getline; sub(/^[ \t]*label[ \t]*"/, ""); sub(/"[ \t]*$/, ""); print; exit }'; }
+L_FEAT=$(menu_label features-on); L_CONF=$(menu_label confirm)
+[ -n "$L_FEAT" ] && [ -n "$L_CONF" ] || die "card 1 menu: button texts for the next steps not found"
+if has_pkg aa; then
+    STEP3='  3. Optional, Android phone: "'"$(menu_label aa-install)"'".'
+    AA_NOTE=" (with Android Auto: connect the phone first)"
+else
+    STEP3="  3. Android Auto: not available for this unit ($PROFILE)."
+    AA_NOTE=""
+fi
 cat > "$NEXT" << EOF
 CarPlay map on the AID - next steps (build $VERSION)
 Full guide with photos: docs/en/09-in-car-guide.md
@@ -633,11 +644,11 @@ In the car, one visit, card 1 only (photograph the screen after every action):
   2. "2. Install CarPlay: the map on the AID (also repairs or updates it)" -> PMCP_INSTALL_OK. Restart (volume
      knob ~10 s). Start guidance in Apple/Google Maps, AID view = navigation map. No picture: iPhone Settings >
      General > CarPlay > this car > Forget This Car, reconnect. No map: stop here.
-  3. Optional, Android phone: "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)".
-  4. "4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)" -> PMCP_FEATURES_ON_OK.
+$STEP3
+  4. "$L_FEAT" -> PMCP_FEATURES_ON_OK.
      Restart: trial start.
-  5. Test. Everything works: "5. Confirm: everything works (in the first start after 3 or 4)" in the SAME start
-     (with Android Auto: connect the phone first). Then restart once more: done.
+  5. Test. Everything works: "$L_CONF" in the SAME start$AA_NOTE.
+     Then restart once more: done.
      Without Confirm the next start is factory again (safe). Black screen: hold the volume knob ~10 s.
   Undo everything: "8. Remove everything (back to factory files)".
 Card 2 (rescue) only for an emergency after Confirm: insert it, wait, remove it when the normal screen is back.

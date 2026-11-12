@@ -6,6 +6,9 @@ virtual cockpit) of a **VW Passat B8 (MY2018)** with a **Discover Pro MHI2** hea
 
 [Polska wersja: README.pl.md](README.pl.md)
 
+> **Beta: US Golf, MU1418 (`MHI2_US_VWG13_P3662`), AID 791.** A first, not yet car-tested build for this unit is on the
+> `beta` branch: how to test it in [BETA.md](BETA.md), what it does in [BETA-CHANGELOG.md](BETA-CHANGELOG.md).
+
 ![CarPlay map with native VW guidance on the AID](docs/img/aid-carplay-2026-10/IMG_1127.jpg)
 
 This repository holds only what is specific to this head unit. It builds on the work of the projects listed under

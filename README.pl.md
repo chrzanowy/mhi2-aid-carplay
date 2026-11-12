@@ -5,6 +5,9 @@ CarPlay i Android Auto na AID: mapa z telefonu i natywne prowadzenie VW na wirtu
 
 [English version: README.md](README.md)
 
+> **Beta: Golf z USA, MU1418 (`MHI2_US_VWG13_P3662`), AID 791.** Pierwszy, jeszcze niesprawdzony w aucie build dla tej
+> jednostki jest na gałęzi `beta`: jak testować w [BETA.md](BETA.md) (po angielsku), co robi w [BETA-CHANGELOG.md](BETA-CHANGELOG.md).
+
 ![Mapa CarPlay z natywnym prowadzeniem VW na AID](docs/img/aid-carplay-2026-10/IMG_1127.jpg)
 
 W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy projektów wymienionych w sekcji

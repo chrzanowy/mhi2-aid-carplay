@@ -1706,8 +1706,15 @@ PEOF
     grep -q "^bridge: MOST write failed: Not enough memory$" "$L2" && grep -q "^bridge line 200$" "$L2" && ! grep -q "^bridge line 201$" "$L2" \
         && grep -q "^--- carplaymaps-diagnostics/last-supervisor.log" "$L2" && ok "log content: last bridge log, first 200 lines" || bad "cp log: last-bridge.log"
     grep -q "^supervisor line 1$" "$L2" && grep -q "^--- state: VIDEO" "$L2" && [ "$(tail -1 "$L2")" = "--- end" ] && ok "log content: state, supervisor log, complete" || bad "cp log content"
+    ! grep -q "^--- pmcp-kombi-view.log" "$L2" && ok "log content: no AID view section without a view log" || bad "cp log: empty view section"
+    echo "kv old 1" > "$W/unit/ramdisk/pmcp-kombi-view.log.1"; echo "kv new 1" > "$W/unit/ramdisk/pmcp-kombi-view.log"
+    run cp-log-save; rc_is 0; expect_out "cp-log-3.txt" "third log"
+    L3="$U/carplaymaps/logs/cp-log-3.txt"
+    sed -n '/^--- pmcp-kombi-view.log.1$/,/^--- end$/p' "$L3" | grep -q '^kv old 1$' && sed -n '/^--- pmcp-kombi-view.log$/,/^--- end$/p' "$L3" | grep -q '^kv new 1$' \
+        && ok "log content: the AID view log, older part first" || bad "cp log: AID view log"
+    rm -f "$W/unit/ramdisk/pmcp-kombi-view.log.1" "$W/unit/ramdisk/pmcp-kombi-view.log"
     [ "$before" = "$(snapshot "$W/unit" | grep -v /logs/ | grep -v /ramdisk/)" ] && ok "log save wrote only carplaymaps/logs" || bad "cp log save changed other files"
-    for n in 3 4 5; do run cp-log-save; done; run cp-log-save; rc_is 1; expect_out "CP_LOGS_FULL_5" "sixth refused"
+    for n in 4 5; do run cp-log-save; done; run cp-log-save; rc_is 1; expect_out "CP_LOGS_FULL_5" "sixth refused"
     rm -rf "$W/med3"; logcard
     [ "$(ls "$W/med3/PMCP_LOGS" | grep -c '^cp-log-[1-5].txt$')" = 5 ] && cmp -s "$L2" "$W/med3/PMCP_LOGS/cp-log-2.txt" && ok "log card: CarPlay logs copied" || bad "log card: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
     grep -q "^RESULT=OK copied=5 aa_logs=0 cp_logs=5$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: RESULT=OK with cp_logs=5" || bad "log card result"

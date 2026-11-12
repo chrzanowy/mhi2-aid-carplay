@@ -1617,6 +1617,11 @@ do_cp_log_save() {
            for _l_x in adapter-status.txt guidance-evidence.txt; do
                echo "--- carplay-route-guidance/$_l_x"; cat "$RAMDISK/carplay-route-guidance/$_l_x" 2>/dev/null
            done
+           # which view the AID showed and when (rg's KombiView, A166): shows a cockpit that leaves the map during a route
+           for _l_x in pmcp-kombi-view.log.1 pmcp-kombi-view.log; do
+               [ -s "$RAMDISK/$_l_x" ] || continue
+               echo "--- $_l_x"; cat "$RAMDISK/$_l_x" 2>/dev/null
+           done
            echo "--- pmcp-speedlimit.state"; cat "$SL_STATE" 2>/dev/null
            echo "--- end"; } > "$_l_f.pmcp-new" 2>/dev/null; then
         rm -f "$_l_f.pmcp-new" 2>/dev/null

@@ -48,12 +48,38 @@ This must be a SEPARATE card: not the pmcp card (card 1), not the rescue card (c
 """
 
 
+# A profile without Android Auto (MU1418 beta): no aa_advanced screen, only the CarPlay log; delete is in features_advanced
+README_NOAA = """CARD 3 - LOGS: copy the saved CarPlay logs to this card (VW MHI2 %(id)s, M.I.B. 3.6.0)
+==========================================================================================
+
+Before: in GEM -> pmcp_stream_map_aid -> pmcp_advanced -> features_advanced, "CP save log: copy this start's CarPlay log
+to the unit (for the log card)", in the same start as the problem (the log lives in RAM until the next start). The unit
+keeps up to 5 saved logs in /mnt/app/carplaymaps/logs.
+
+What it does: insert it in slot SD1 and wait up to 60 s. The unit enters update mode by itself (answer Continue if
+asked; do NOT pull the card while it updates). At the end it copies to PMCP_LOGS/ on this card:
+  - the saved CarPlay logs (cp-log-1.txt ...),
+  - pmcp's boot log.
+It changes NOTHING on pmcp's files (it only reads them). To get there it runs the full M.I.B. 3.6.0 stuff.sh in update
+mode (SWDL), as when M.I.B. was installed: the unit re-installs M.I.B. 3.6.0 on the way.
+
+When the normal screen is back: remove the card. PMCP_LOGS/PMCP_LOGS_RESULT.txt ends with "RESULT=OK".
+After the copies are checked on a computer: GEM -> pmcp_stream_map_aid -> pmcp_advanced -> features_advanced, "Delete
+saved logs (after the log card copied them)".
+
+After each use M.I.B. disarms the card (Swdlautorun.txt -> _Swdlautorun.txt). To use it again, rename
+_Swdlautorun.txt back to Swdlautorun.txt on a computer.
+
+This must be a SEPARATE card: not the pmcp card (card 1), not the rescue card (card 2). Keep it out of the car until needed.
+"""
+
+
 def main():
     out = pathlib.Path(sys.argv[1])
     mib_card(out, "", STUFF_TAIL)
     (out / "pmcp-logs").mkdir()
     (out / "pmcp-logs/pmcp-logs.sh").write_bytes((HERE / "logcard/pmcp-logs.sh").read_bytes())
-    (out / "PMCP_LOGS_README.txt").write_text(README % {"id": FW["id"]})
+    (out / "PMCP_LOGS_README.txt").write_text((README if "aa" in FW["packages"] else README_NOAA) % {"id": FW["id"]})
     if (out / "pmcp").exists() or (out / "pmcp-rescue").exists():
         sys.exit("log card must not contain the pmcp installer or the rescue script")
     write_manifest(out, "PMCP_LOGS_MANIFEST.txt", ("stuff.sh", "pmcp-logs", "Swdlautorun", "metainfo2", "finalScript"))

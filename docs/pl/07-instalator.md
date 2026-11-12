@@ -1,9 +1,32 @@
-# Instalator pmcp: mapa CarPlay na AID, MU1161 / 791
+# Instalator pmcp: mapa CarPlay na AID, MU1161 / 791 (beta: MU1418 / 791)
 
 Stan: **przetestowany w aucie (październik 2026; prowadzenie v1.4 listopad 2026).** Kod: [`installer/`](../../installer/).
 Build SD tworzy `installer/build_sd.py` (w katalogu wyjściowym `BUILD-MANIFEST.txt` z hashami wszystkich plików, wersja
 w GEM `pmcp-0.7.0-mu1161-791-<id buildu>`, gdzie ID to pierwsze 8 znaków SHA-256 manifestu i szablonu `pmcp.sh`).
 Kartę instalacyjną składa `installer/build_card_install.py`, kartę ratunkową `installer/build_rescue.py`.
+
+## Profile firmware
+
+To, co zależy od firmware jednostki, leży w `profiles/<ID>/profile.json` (fakty o jednostce: train, MU, rozmiar i hash `lsd.jxe`,
+pliki fabryczne i ich hashe, dozwolone stany `lsd.sh`, paczki dla tej jednostki) i `profiles/<ID>/history.json` (wcześniejsze karty
+tego profilu, do aktualizacji w miejscu). Kod jest wspólny. Czyta je i sprawdza `scripts/profile.py`
+(`python3 -I scripts/profile.py validate <ID>`, `get <ID> <klucz>`, `list`).
+
+| Profil | Jednostka | `lsd.jxe` | Paczki | Stany `lsd.sh` | Status |
+|---|---|---|---|---|---|
+| `MU1161` | `MHI2_ER_VWG13_P4512`, AID 791 | 55 830 309 B | cp nai np rg zoom dn sl ui aa | fabryczny | stabilny |
+| `MU1418` | `MHI2_US_VWG13_P3662`, AID 791 | 54 250 283 B | cp nai rg zoom dn sl | fabryczny, NavActiveIgnore z MIB Toolbox | **beta**, tylko testy offline |
+
+- `install.sh` wybiera profil z nazwy folderu backupu i jego `version.txt`: train **i** MU muszą pasować do dokładnie jednego
+  profilu, inaczej stop. `./install.sh --check-backup` tylko rozpoznaje profil i sprawdza pliki backupu.
+- Jedna karta = jeden profil. Wersja w GEM go zawiera (`pmcp-0.7.0-mu1418-791-<id>`), a `pmcp.sh` najpierw sprawdza rozmiar
+  `lsd.jxe` jednostki: karta innego profilu zatrzymuje się, zanim cokolwiek zmieni (`NOT_<ID>_LSD_JXE_SIZE_<n>`).
+- Paczki, której profil nie wymienia, nie ma na karcie, w menu GEM ani na stronie ustawień.
+- `MU1418`, stan `toolbox_nai`: fabryczny `lsd.sh` plus dokładnie jedna linia MIB Toolbox dla `jars/NavActiveIgnore.jar`
+  (oba hashe przypięte). Instalacja mapy (2) zapisuje oba pliki w `carplaymaps/rollback/toolbox-nai/`; linia Toolboxa działa dalej
+  aż do paczek Java (4): wtedy `lsd.sh` to fabryczny plus nasz blok (jar Toolboxa zostaje na jednostce, nieużywany); nasz nai
+  to `pmcp-nai.jar`. „Usuń wszystko” wraca do **fabrycznego** `lsd.sh`;
+  NavActiveIgnore z Toolboxa można wgrać ponownie z Toolboxa. Każdy inny `lsd.sh` = stop.
 
 ## Paczki (budowane razem, wgrywane partiami przyciskami M.I.B.)
 
@@ -77,7 +100,7 @@ Warianty `core.so` (`switch` zmienia tylko ten plik, potem restart, bez „5. Co
    ok. 10–20 KB/s. Z `sha1sum` akcje trwają sekundy.)
 2. **Payload na SD:** hash i rozmiar każdego pliku równy manifestowi wbudowanemu w `pmcp.sh`. Pętla idzie po manifeście w samym
    skrypcie (bez pliku tymczasowego), więc niezapisywalna karta nie może pominąć kontroli.
-3. **Firmware:** `lsd.jxe` = 55,830,309 B (MU1161).
+3. **Firmware:** rozmiar `lsd.jxe` profilu karty (MU1161: 55 830 309 B; MU1418: 54 250 283 B).
 4. **Stan jednostki:**
    - `STOCK`: brak `/mnt/app/carplaymaps`, brak JAR-ów nawigacji/sterowania, `lsd.sh`, `dio_manager`, `gal`, sterownik iAP2 i `iap2.cfg` fabryczne.
      Tylko w tym stanie wolno `install`. Pozostałość `.carplaymaps-old-*` po przerwanym `restore` nie przeszkadza (sprząta ją `install`).
