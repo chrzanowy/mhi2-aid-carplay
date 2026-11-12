@@ -2112,15 +2112,26 @@ do_status() {
 
 say "pmcp $PMCP_VERSION: $ACTION $ARG"
 #@@NOAA_BEGIN
-# This firmware profile has no Android Auto package: every Android Auto action says so and changes nothing (aa-log-clear
-# also deletes the saved CarPlay logs, so it stays)
+# This firmware profile has no Android Auto package yet: the menu is the same as on every card, and every Android Auto
+# action says so and changes nothing (aa-log-clear also deletes the saved CarPlay logs, so it stays)
 case "$ACTION" in
     aa-log-clear) ;;
     aa-*)
-        say "Android Auto is not available for this unit (@@PROFILE_ID@@): this card installs only CarPlay and its Java features."
-        fail "ANDROID_AUTO_NOT_AVAILABLE_FOR_@@PROFILE_ID@@_NOTHING_CHANGED" ;;
+        say "Android Auto is not yet supported on this unit (@@PROFILE_ID@@). Nothing was changed. CarPlay and its features work as usual."
+        fail "ANDROID_AUTO_NOT_YET_SUPPORTED_ON_@@PROFILE_ID@@_NOTHING_CHANGED" ;;
 esac
 #@@NOAA_END
+#@@UNSUP_BEGIN
+# Java packages this firmware profile does not have yet (their buttons are on every card): say so, change nothing
+case "$ACTION" in
+    java-on|java-off)
+        case " @@UNSUP_PKGS@@ " in
+            *" $ARG "*)
+                say "Package $ARG is not yet supported on this unit (@@PROFILE_ID@@). Nothing was changed."
+                fail "PACKAGE_${ARG}_NOT_YET_SUPPORTED_ON_@@PROFILE_ID@@_NOTHING_CHANGED" ;;
+        esac ;;
+esac
+#@@UNSUP_END
 # Sharing this lock prevents an enable check from racing with a Java-set change or a full restore.
 case "$ACTION" in
     speedlimit-mode|java-on|java-off|java-update|features-reset) speedlimit_lock ;;

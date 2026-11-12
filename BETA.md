@@ -28,6 +28,9 @@ something does not match, and "Remove everything" brings back the factory files.
   its own version when you install the additional features (step 4). After "Remove everything" you can install the
   Toolbox one again from the Toolbox.
 
+The menu is the same as in the stable release. Android Auto (button 3 and everything under `aa_advanced`), song title
+and the settings page are **not yet supported** on this unit: those buttons say so and change nothing. Skip them.
+
 Take a photo of the screen after every button. The photos are the most useful report.
 
 ### Visit 1: only the map (please stop here and report first)
@@ -54,12 +57,13 @@ works. When the normal screen is back, remove it: the logs are in its `PMCP_LOGS
 
 ### Visit 2: route guidance, zoom, day/night (only after visit 1 worked)
 
-1. Card 1, green menu > pmcp_stream_map_aid. Press **"4. Install additional features: route guidance, zoom, day/night (needs 2)"**.
+1. Card 1, green menu > pmcp_stream_map_aid. Press **"4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)"**.
+   It says that song title and settings page are not yet supported on this unit and installs the rest.
    Expected: `PMCP_FEATURES_ON_OK`. Photo.
 2. Restart (volume knob ~10 s). This start is a **trial**.
 3. Test with a route: VW arrows, lanes and distance on the AID, street name, zoom with the steering wheel arrows (short
    press), day/night of the map.
-4. Everything works: in **the same start**, press **"5. Confirm: everything works (in the first start after 4)"**.
+4. Everything works: in **the same start**, press **"5. Confirm: everything works (in the first start after 3 or 4)"**.
    Then restart once more.
 5. Something is wrong: save the log as in visit 1, step 8, and just restart **without** Confirm. The next start loads
    none of the new Java parts again (the map stays). Report what you saw.

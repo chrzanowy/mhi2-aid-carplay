@@ -22,7 +22,10 @@ What it installs on MU1418:
   - `dn`: day/night of the map;
   - `sl` (advanced menu): optional native VW speed limit reader.
 - **Not in this beta:** Android Auto, song title (`np`) and the settings page in App-Connect (`ui`). This unit's classes
-  differ there; they come in a later beta. The menu says "Android Auto: not available for this unit (MU1418)".
+  differ there; they come in a later beta.
+- **The same menu as the stable release:** every button is there. Android Auto (3 and the `aa_advanced` screen) and the
+  `np` / `ui` buttons say "not yet supported on this unit (MU1418)" and change nothing; 4 installs the features this unit
+  has and names the ones it skips.
 - **MIB Toolbox NavActiveIgnore taken over:** a unit whose `lsd.sh` has exactly the Toolbox line (and the Toolbox jar,
   both hashes checked) is accepted. Both files are saved on the unit first; with the additional features our own nai
   replaces the line. "Remove everything" goes back to the factory `lsd.sh`; the Toolbox one can be installed again from the

@@ -21,7 +21,8 @@ tego profilu, do aktualizacji w miejscu). Kod jest wspólny. Czyta je i sprawdza
   profilu, inaczej stop. `./install.sh --check-backup` tylko rozpoznaje profil i sprawdza pliki backupu.
 - Jedna karta = jeden profil. Wersja w GEM go zawiera (`pmcp-0.7.0-mu1418-791-<id>`), a `pmcp.sh` najpierw sprawdza rozmiar
   `lsd.jxe` jednostki: karta innego profilu zatrzymuje się, zanim cokolwiek zmieni (`NOT_<ID>_LSD_JXE_SIZE_<n>`).
-- Paczki, której profil nie wymienia, nie ma na karcie, w menu GEM ani na stronie ustawień.
+- Menu GEM jest takie samo dla każdego profilu. Paczki, której profil nie wymienia (i Android Auto bez `aa`), nie ma na karcie;
+  jej przyciski mówią `..._NOT_YET_SUPPORTED_ON_<ID>_NOTHING_CHANGED` i niczego nie zmieniają, a 4 wymienia, co pomija.
 - `MU1418`, stan `toolbox_nai`: fabryczny `lsd.sh` plus dokładnie jedna linia MIB Toolbox dla `jars/NavActiveIgnore.jar`
   (oba hashe przypięte). Instalacja mapy (2) zapisuje oba pliki w `carplaymaps/rollback/toolbox-nai/`; linia Toolboxa działa dalej
   aż do paczek Java (4): wtedy `lsd.sh` to fabryczny plus nasz blok (jar Toolboxa zostaje na jednostce, nieużywany); nasz nai

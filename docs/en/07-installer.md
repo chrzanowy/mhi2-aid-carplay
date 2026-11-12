@@ -22,7 +22,8 @@ hash, the factory files and their hashes, the allowed `lsd.sh` states, the packa
   profile, otherwise it stops. `./install.sh --check-backup` only identifies the profile and checks the backup's files.
 - One card = one profile. The version in GEM carries it (`pmcp-0.7.0-mu1418-791-<id>`), and `pmcp.sh` checks the unit's
   `lsd.jxe` size first: a card of another profile stops before it changes anything (`NOT_<ID>_LSD_JXE_SIZE_<n>`).
-- A package the profile does not list is not on the card, not in the GEM menu and not in the settings page.
+- The GEM menu is the same on every profile. A package the profile does not list (and Android Auto without `aa`) is not on
+  the card; its buttons say `..._NOT_YET_SUPPORTED_ON_<ID>_NOTHING_CHANGED` and change nothing, and 4 names what it skips.
 - `MU1418`, state `toolbox_nai`: the factory `lsd.sh` plus exactly one MIB Toolbox line for `jars/NavActiveIgnore.jar`
   (both hashes pinned). Installing the map (2) saves both files to `carplaymaps/rollback/toolbox-nai/`; the Toolbox line keeps
   working until the Java packages (4): then `lsd.sh` becomes the factory one plus our block (the Toolbox jar stays on the

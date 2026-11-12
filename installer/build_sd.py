@@ -66,6 +66,9 @@ JAVA_PACKAGES_ALL = [("nai", "nai: AID map stays while the iPhone navigates (Nav
                       ("ui", "ui: AID navigation configuration in App-Connect settings, saves trial starts without the card")]
 # only what the profile supports reaches the card, the GEM menu and the settings page
 JAVA_PACKAGES = [x for x in JAVA_PACKAGES_ALL if x[0] in FW["packages"]]
+# The GEM menu is the same for every profile (beta decision 2026-11-13): a package or Android Auto that the profile does
+# not have keeps its button, which says "not yet supported" and changes nothing (pmcp.sh blocks NOAA / UNSUP).
+UNSUPPORTED = [n for n, _ in JAVA_PACKAGES_ALL if n not in FW["packages"]]
 # rg = everything for route guidance in one package: Tomasz's port + his lanes, our VW U-turn lanes, his MU1367
 # v1.4.3 distance bar / street name / feed recovery, the maneuver fallbacks, the quiet-route hold (v1.4.3) and, since
 # v1.5.0, the VW arrows from Android Auto (rg/build.sh lanes-uturn-asf-m-aa: lanes-uturn-asf-m + rg/lanes/aa.py; with
@@ -323,7 +326,7 @@ def render_template(tpl):
     the factory file; with TBX also the Toolbox state (lsd_pre / lsd_pre_root in the TBX block). For a profile without these
     features the result is exactly the text the template had before they existed (checked with compare_cards.py)."""
     import re
-    on = {"TBX": TBX, "AA": HAS_AA, "NOAA": not HAS_AA}
+    on = {"TBX": TBX, "AA": HAS_AA, "NOAA": not HAS_AA, "UNSUP": bool(UNSUPPORTED)}
     out, skip = [], 0
     for line in tpl.split("\n"):
         m = re.match(r"^#@@([A-Z]+)_(BEGIN|END)$", line)
@@ -437,7 +440,7 @@ if [ -f /net/rcc/dev/shmem/backup.mib ] || [ -f /net/rcc/dev/shmem/reboot.mib ] 
 fi
 trap '' 2
 echo "pmcp: %(label)s"
-echo "Do not press Back and do not remove the SD card until PMCP_FEATURES_ON_OK or PMCP_FAIL is shown."
+%(note)secho "Do not press Back and do not remove the SD card until PMCP_FEATURES_ON_OK or PMCP_FAIL is shown."
 PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh
 NEW=0
 for A in %(actions)s; do
@@ -480,21 +483,17 @@ def menu_entries():
     top = [("verify", "verify", "1. Check card and unit (read-only)"),
            ("map-install", "map-install " + START_VARIANT, "2. Install CarPlay: the map on the AID (also repairs or updates it)"),
            ("aa-install", "aa-install", "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)"),
-           ("features-on", FEATURES, "4. Install additional features: " + ", ".join(t for n, t in FEATURE_NAMES if n in FW["packages"]) + " (needs 2)"),
-           ("confirm", "confirm", "5. Confirm: everything works (in the first start after 3 or 4)" if HAS_AA
-            else "5. Confirm: everything works (in the first start after 4)"),
+           ("features-on", FEATURES, "4. Install additional features: " + ", ".join(t for n, t in FEATURE_NAMES) + " (needs 2)"),
+           ("confirm", "confirm", "5. Confirm: everything works (in the first start after 3 or 4)"),
            ("retry", "retry", "6. Try again: the next start is a new trial"),
            ("status", "status", "7. Status (read-only)"),
            ("restore", "restore", "8. Remove everything (back to factory files)")]
-    if not HAS_AA:
-        top = [e for e in top if e[0] != "aa-install"]
     feat = [("diag", None, "0. Diagnostics (read-only, photograph the screen)"),
             ("timeline", TIMELINE, "Start timeline: seconds from unit start to CarPlay, MOST, navigation (read-only)"),
             ("rglast", RGLAST, "RG last maneuver: what the iPhone sent and which VW arrow it gives (read-only)"),
             ("navdiag", NAVDIAG, "Navigation diagnostics: why the VW navigation does not start (read-only)"),
             ("cp-log-save", "cp-log-save", "CP save log: copy this start's CarPlay log to the unit (for the log card)"),
-            ("log-clear", "aa-log-clear", "Delete saved logs, CarPlay and AA (after the log card copied them)" if HAS_AA
-             else "Delete saved logs (after the log card copied them)"),
+            ("log-clear", "aa-log-clear", "Delete saved logs, CarPlay and AA (after the log card copied them)"),
             # package sl (On sl, then 5. Confirm), then one of these; the mode is kept across starts
             # the speed-limit mode is set on the unit: App-Connect > Settings > AID navigation configuration (package ui); pmcp.sh
             # speedlimit-mode stays for the tests and the command line
@@ -505,14 +504,15 @@ def menu_entries():
             ("java-update", "java-update", "Java update: packages of an earlier card -> this card's (rglu -> rg)")]
     feat = [e for e in feat if not ((e[0].startswith("rg-") and "rg" not in FW["packages"])
                                     or (e[0] == "speedlimit-status" and "sl" not in FW["packages"]))]
-    feat += [("java-on-" + n, "java-on " + n, "On " + label) for n, label in JAVA_PACKAGES] + \
-            [("java-off-" + n, "java-off " + n, "Off " + label) for n, label in JAVA_PACKAGES]
+    feat += [("java-on-" + n, "java-on " + n, "On " + label) for n, label in JAVA_PACKAGES_ALL] + \
+            [("java-off-" + n, "java-off " + n, "Off " + label) for n, label in JAVA_PACKAGES_ALL]
     cp = [("install-" + v, "install " + v, "Install map layout: " + v) for v in VARIANTS if v != START_VARIANT] + \
          [("switch-" + v, "switch " + v, "Switch map layout to: " + v) for v in VARIANTS]
-    return top, feat, cp, (AA_MENU + AA_EXP_MENU if HAS_AA else [])
+    return top, feat, cp, AA_MENU + AA_EXP_MENU
 
 
-# what main menu 4 installs, in the words of its label (only packages the profile has; nai and sl are not named there)
+# what main menu 4 installs, in the words of its label (the same label for every profile; a package the profile does not
+# have is named "not yet supported" when 4 runs; nai and sl are not named there)
 FEATURE_NAMES = [("rg", "route guidance"), ("zoom", "zoom"), ("dn", "day/night"), ("np", "song title"), ("ui", "settings page")]
 
 
@@ -537,6 +537,8 @@ AA_EXP_MENU = [] if "-exp-" not in PMCP_BASE_VERSION else [
 # RG driver/reader and Java packages replaced by this card's (rg-update, java-update), the route guidance system (rg
 # needs it), then every package except the optional sl (ui included: its page saves trial starts on the unit). Steps already done answer *_ALREADY_* and are skipped, so the
 # same button brings any earlier pmcp install to this card's set. The map (2) and Android Auto (3) are not touched.
+FEATURES_NOTE = "" if not UNSUPPORTED else 'echo "Not yet supported on this unit (%s), skipped: %s."\n' % (
+    FW["id"], ", ".join(t for n, t in FEATURE_NAMES if n in UNSUPPORTED) or ", ".join(UNSUPPORTED))
 FEATURES = ["features-reset"] + (["rg-update"] if "rg" in FW["packages"] else []) + ["java-update"] \
     + (["rg-system-on"] if "rg" in FW["packages"] else []) + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
 
@@ -551,7 +553,7 @@ def menu_script(args, label):
     if args is RGLAST:
         return RGLAST_SCRIPT
     if args is FEATURES:
-        return FEATURES_SCRIPT % dict(label=label, actions=" ".join(a if "_" in a else a + "_" for a in args))
+        return FEATURES_SCRIPT % dict(label=label, actions=" ".join(a if "_" in a else a + "_" for a in args), note=FEATURES_NOTE)
     return MENU_SCRIPT % dict(label=label, args=args)
 
 
@@ -563,18 +565,13 @@ def esd_block(version, top, feat, cp, aa):
     out = ['', '#' * 91, '#', '# Main -> M.I.B. -> pmcp: CarPlay and Android Auto map on the AID (%s %s / %s), added on the SD card only' % (FW["car"], FW["id"], FW["cluster"]),
            '#', '#' * 91, 'screen pmcp_stream_map_aid =>M.I.B.<=', '']
     out += kv(version) + kv("Every button checks all files first and changes nothing on a mismatch. Photograph each result.")
-    out += kv("2, 3 and 4 also replace versions this card does not support. Then restart (hold the volume knob ~10 s)." if HAS_AA else
-              "2 and 4 also replace versions this card does not support. Then restart (hold the volume knob ~10 s).")
-    out += kv("9. Advanced: pmcp_advanced (below): single features, map layouts, Android Auto details, logs." if HAS_AA else
-              "9. Advanced: pmcp_advanced (below): single features, map layouts, logs.")
-    if not HAS_AA:
-        out += kv("3. Android Auto: not available for this unit (%s)." % FW["id"])
+    out += kv("2, 3 and 4 also replace versions this card does not support. Then restart (hold the volume knob ~10 s).")
+    out += kv("9. Advanced: pmcp_advanced (below): single features, map layouts, Android Auto details, logs.")
     for n, _, l in top:
         out += sc(n, l)
     out += ['screen pmcp_advanced pmcp_stream_map_aid', '']
     out += kv("1. features_advanced: diagnostics, logs, speed limit, single packages.")
-    out += kv("2. carplay_advanced: map layouts.  3. aa_advanced: Android Auto details and logs." if HAS_AA else
-              "2. carplay_advanced: map layouts.")
+    out += kv("2. carplay_advanced: map layouts.  3. aa_advanced: Android Auto details and logs.")
     out += ['screen features_advanced pmcp_advanced', '']
     out += kv("The first start after a change is a trial: if everything works, press 5. Confirm in that start.")
     out += kv("Without Confirm the next start is the factory one (then: 6. Try again).")
@@ -584,12 +581,11 @@ def esd_block(version, top, feat, cp, aa):
     out += ['screen carplay_advanced pmcp_advanced', '']
     for n, _, l in cp:
         out += sc(n, l)
-    if HAS_AA:
-        out += ['screen aa_advanced pmcp_advanced', '']
-        out += kv("Android Auto 0.1: main menu 3, connect the phone, then 5. Confirm in that start.")
-        out += kv("VW arrows from Google Maps: rg (main menu 4). Lost picture: AA status, then AA save log.")
-        for n, _, l in aa:
-            out += sc(n, l)
+    out += ['screen aa_advanced pmcp_advanced', '']
+    out += kv("Android Auto 0.1: main menu 3, connect the phone, then 5. Confirm in that start.")
+    out += kv("VW arrows from Google Maps: rg (main menu 4). Lost picture: AA status, then AA save log.")
+    for n, _, l in aa:
+        out += sc(n, l)
     return "\r\n".join(out) + "\r\n"
 
 
@@ -715,7 +711,9 @@ def main():
         tbx_values = {"@@TBX_LSD_SHA@@": tb["lsd_sh"][0], "@@TBX_LSD_SIZE@@": str(tb["lsd_sh"][1]),
                       "@@TBX_JAR_SHA@@": tb["jar"][1], "@@TBX_JAR_SIZE@@": str(tb["jar"][2]),
                       "@@TBX_JAR_PATH@@": tb["jar"][0], "@@TBX_JAR_NAME@@": tb["jar"][0].rsplit("/", 1)[-1]}
-    for k, v in {**tbx_values,
+    # @@UNSUP_PKGS@@ only lives in the UNSUP block, which render_template keeps only for a profile with unsupported packages
+    unsup_values = {"@@UNSUP_PKGS@@": " ".join(UNSUPPORTED)} if UNSUPPORTED else {}
+    for k, v in {**tbx_values, **unsup_values,
         "@@PMCP_VERSION@@": PMCP_VERSION, "@@MANIFEST@@": manifest,
         "@@SELFTEST_SHA@@": sha(selftest), "@@SELFTEST_SIZE@@": str(len(selftest)),
         "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_OLD@@": "\n".join(old), "@@AA_OLD@@": "\n".join(aa_old),

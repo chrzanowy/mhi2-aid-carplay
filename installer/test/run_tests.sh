@@ -65,6 +65,7 @@ RG_DRV_SHA=$(sed -n 's/^RG_DRIVER \([0-9a-f]*\) .*/\1/p' "$SDB/pmcp/pmcp.sh"); R
 HAS_NP=no; HAS_UI=no; HAS_AA=no
 case " $(pf packages | tr '\n' ' ')" in *" np "*) HAS_NP=yes ;; esac
 case " $(pf packages | tr '\n' ' ')" in *" ui "*) HAS_UI=yes ;; esac
+UNSUP_PKGS=""; [ $HAS_NP = yes ] || UNSUP_PKGS="np"; [ $HAS_UI = yes ] || UNSUP_PKGS="$UNSUP_PKGS ui"
 case " $(pf packages | tr '\n' ' ')" in *" aa "*) HAS_AA=yes ;; esac
 # the whole MU1161 feature set (np, ui, Android Auto): scenarios written for it run only then; a smaller profile has its own
 FULLSET=no; [ $HAS_NP = yes ] && [ $HAS_UI = yes ] && [ $HAS_AA = yes ] && FULLSET=yes
@@ -624,15 +625,15 @@ PY
         && ok "main install button 2 is map-square-fps40" || bad "main install button"
     [ ! -e "$SDB/pmcp/menu/install-map-square-fps40.sh" ] && ok "no second install button for the main layout" || bad "install-map-square-fps40 button left"
     main=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    [ "$main" = "menu/verify.sh menu/map-install.sh $([ $HAS_AA = yes ] && echo 'menu/aa-install.sh ')menu/features-on.sh menu/confirm.sh menu/retry.sh menu/status.sh menu/restore.sh " ] \
+    [ "$main" = "menu/verify.sh menu/map-install.sh menu/aa-install.sh menu/features-on.sh menu/confirm.sh menu/retry.sh menu/status.sh menu/restore.sh " ] \
         && ok "main screen: 1 check, 2 CarPlay, 3 Android Auto, 4 features, 5 confirm, 6 try again, 7 status, 8 remove" || bad "main screen: $main"
     labels=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | awk '/^script/{s=1;next} s&&/^    label/{print substr($0,14,1);s=0}' | tr -d '\n')
-    [ "$labels" = "$([ $HAS_AA = yes ] && echo 12345678 || echo 1245678)" ] && ok "main screen buttons numbered 1-8 (3 is Android Auto: only with the aa package)" || bad "main numbering: $labels"
+    [ "$labels" = "12345678" ] && ok "main screen buttons numbered 1-8 (the same menu on every profile)" || bad "main numbering: $labels"
     scr=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,$p' | grep '^screen' | tr '\n' '|')
-    [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen features_advanced pmcp_advanced|screen carplay_advanced pmcp_advanced|$([ $HAS_AA = yes ] && echo 'screen aa_advanced pmcp_advanced|')" ] \
+    [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen features_advanced pmcp_advanced|screen carplay_advanced pmcp_advanced|screen aa_advanced pmcp_advanced|" ] \
         && ok "screens: pmcp_stream_map_aid > pmcp_advanced > features / carplay / aa_advanced" || bad "screens: $scr"
     feat=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen carplay_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/log-clear.sh menu/speedlimit-status.sh menu/rg-system-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh $([ $HAS_UI = yes ] && echo 'menu/java-on-ui.sh ')"*"menu/java-off-sl.sh $([ $HAS_UI = yes ] && echo 'menu/java-off-ui.sh ')") ok "features_advanced: diagnostics, CarPlay log, speed-limit status only (mode on the page), RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
+    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/log-clear.sh menu/speedlimit-status.sh menu/rg-system-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh ") ok "features_advanced: diagnostics, CarPlay log, speed-limit status only (mode on the page), RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
     for _m in speedlimit-on speedlimit-cpi speedlimit-off; do
         [ ! -e "$SDB/pmcp/menu/$_m.sh" ] && ! grep -q "menu/$_m.sh" "$SDB/esd/Launcher-sda0.esd" && ok "no GEM button $_m (mode set on the page)" \
             || bad "GEM speed-limit mode button $_m still there"
@@ -651,14 +652,12 @@ PY
         *) bad "version $v" ;; esac
     aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen aa_advanced/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
     if [ $HAS_AA = no ]; then
-        # no Android Auto package: no AA screen, no AA button, no AA payload, and the main text says it
-        [ -z "$aa" ] && ! ls "$SDB"/pmcp/menu/ | grep -q '^aa-' && ! grep -q 'aa_advanced\|menu/aa-' "$SDB/esd/Launcher-sda0.esd" \
-            && ok "menu: no Android Auto screen or button" || bad "Android Auto in the menu of a profile without it: $aa"
-        grep -q "3. Android Auto: not available for this unit ($PMCP_PROFILE)" <(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd") && ok "menu says Android Auto is not available" || bad "menu: no note about Android Auto"
+        # no Android Auto package yet: the same AA screen and buttons as every card (they say "not yet supported"), no AA payload
+        [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh " ] \
+            && ok "aa_advanced: the same buttons as on every release card" || bad "aa_advanced: $aa"
         grep -q '^AA_\|^AAX_' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && bad "AA payload keys in a profile without aa" || ok "manifest: no Android Auto files"
         [ ! -e "$SDB/pmcp/payload/aa" ] && ok "payload: no aa/ directory" || bad "payload/aa exists"
-        if [ $HAS_NP = no ]; then [ ! -e "$SDB/pmcp/menu/java-on-np.sh" ] && ok "menu: no np button" || bad "np button"; fi
-        if [ $HAS_UI = no ]; then [ ! -e "$SDB/pmcp/menu/java-on-ui.sh" ] && ok "menu: no ui button" || bad "ui button"; fi
+        grep -q "Not yet supported on this unit ($PMCP_PROFILE), skipped: " "$SDB/pmcp/menu/features-on.sh" && ok "4 names what is not yet supported" || bad "features-on: no note"
     else
     case "$v" in
     *-exp-*)
@@ -951,14 +950,19 @@ PY
     fi
 
     if [ $HAS_AA = no ]; then
-    echo "[A1] no Android Auto for this profile: every AA action says so and changes nothing"
+    echo "[A1] no Android Auto for this profile yet: every AA action says so and changes nothing"
     for st in factory installed; do
         fresh_unit
         [ $st = installed ] && { run map-install map-clean; rc_is 0; run java-on nai; rc_is 0; }
         before=$(snapshot "$W/unit")
         for act in aa-on aa-on-exp aa-install aa-confirm aa-retry aa-status aa-log-save aa-remove "aa-output direct" "aa-output ring" "aa-capture 60" "aa-capture off" "aa-bogus"; do
-            run $act; rc_is 1; expect_out "PMCP_FAIL=ANDROID_AUTO_NOT_AVAILABLE_FOR_${PMCP_PROFILE}_NOTHING_CHANGED" "$st: $act refused"
-            expect_out "Android Auto is not available for this unit" "$st: $act says why"
+            run $act; rc_is 1; expect_out "PMCP_FAIL=ANDROID_AUTO_NOT_YET_SUPPORTED_ON_${PMCP_PROFILE}_NOTHING_CHANGED" "$st: $act refused"
+            expect_out "Android Auto is not yet supported on this unit" "$st: $act says why"
+        done
+        for p in $UNSUP_PKGS; do
+            for act in java-on java-off; do
+                run $act $p; rc_is 1; expect_out "PMCP_FAIL=PACKAGE_${p}_NOT_YET_SUPPORTED_ON_${PMCP_PROFILE}_NOTHING_CHANGED" "$st: $act $p refused"
+            done
         done
         [ "$before" = "$(snapshot "$W/unit")" ] && ok "$st: nothing changed by any AA action" || bad "$st: an AA action changed the unit"
         run aa-log-clear; rc_is 0; expect_out "PMCP_AA_LOG_CLEAR_OK" "$st: aa-log-clear (it also clears the CarPlay logs) still works"
@@ -983,7 +987,7 @@ PY
             fresh_unit; before=$(snapshot "$W/unit"); MYSZ=$JXE_SIZE
             for act in verify "install map-clean" "map-install map-square-fps40" "restore" "status" "java-on nai" "features-reset" "rg-system-on" "aa-on"; do
                 PMCP_TEST_ROOT="$W/unit" $SH "$ocard/pmcp/pmcp.sh" $act > "$W/out" 2>&1; echo $? > "$W/rc"
-                rc_is 1; expect_out "PMCP_FAIL=NOT_${other}_LSD_JXE_SIZE_$MYSZ\|PMCP_FAIL=ANDROID_AUTO_NOT_AVAILABLE" "$other card on this unit: $act stops"
+                rc_is 1; expect_out "PMCP_FAIL=NOT_${other}_LSD_JXE_SIZE_$MYSZ\|PMCP_FAIL=ANDROID_AUTO_NOT_YET_SUPPORTED" "$other card on this unit: $act stops"
             done
             [ "$before" = "$(snapshot "$W/unit")" ] && ok "$other card on this unit: nothing changed" || bad "the $other card changed this unit"
         else

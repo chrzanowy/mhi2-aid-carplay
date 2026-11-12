@@ -48,7 +48,7 @@ This must be a SEPARATE card: not the pmcp card (card 1), not the rescue card (c
 """
 
 
-# A profile without Android Auto (MU1418 beta): no aa_advanced screen, only the CarPlay log; delete is in features_advanced
+# A profile without Android Auto yet (MU1418 beta): its AA buttons say "not yet supported", so only the CarPlay log
 README_NOAA = """CARD 3 - LOGS: copy the saved CarPlay logs to this card (VW MHI2 %(id)s, M.I.B. 3.6.0)
 ==========================================================================================
 
@@ -65,7 +65,7 @@ mode (SWDL), as when M.I.B. was installed: the unit re-installs M.I.B. 3.6.0 on 
 
 When the normal screen is back: remove the card. PMCP_LOGS/PMCP_LOGS_RESULT.txt ends with "RESULT=OK".
 After the copies are checked on a computer: GEM -> pmcp_stream_map_aid -> pmcp_advanced -> features_advanced, "Delete
-saved logs (after the log card copied them)".
+saved logs, CarPlay and AA (after the log card copied them)".
 
 After each use M.I.B. disarms the card (Swdlautorun.txt -> _Swdlautorun.txt). To use it again, rename
 _Swdlautorun.txt back to Swdlautorun.txt on a computer.

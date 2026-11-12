@@ -624,7 +624,7 @@ if has_pkg aa; then
     STEP3='  3. Optional, Android phone: "'"$(menu_label aa-install)"'".'
     AA_NOTE=" (with Android Auto: connect the phone first)"
 else
-    STEP3="  3. Android Auto: not available for this unit ($PROFILE)."
+    STEP3='  3. "'"$(menu_label aa-install)"'": not yet supported on this unit ('"$PROFILE"'), it changes nothing. Skip it.'
     AA_NOTE=""
 fi
 cat > "$NEXT" << EOF
