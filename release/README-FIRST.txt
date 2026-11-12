@@ -119,9 +119,8 @@ PART 2 - IN THE CAR
        Android Auto; a version this card does not support is removed first and replaced).
     4. "4. Install additional features: ..."  ->  PMCP_FEATURES_ON_OK
        (it replaces the earlier route guidance files and packages, also an experimental rg-aa)
-       From v1.5.x and v1.6.0, 3 brings Android Auto 1.1 and 4 the new route guidance, song titles
-       and settings page, so steps 5 and 6
-       are needed. Only if 2, 3 and 4
+       From v1.5.x and v1.6.0, 3 brings Android Auto 1.1 and 4 the new route guidance and song
+       titles (from v1.5.x also the settings page), so steps 5 and 6 are needed. Only if 2, 3 and 4
        all say "already installed" / "everything was already on, nothing changed" (an update
        to a card with the same features), nothing changed - no restart and no 5 needed.
     5. Only if 3 or 4 installed something: restart, this start is a TRIAL. Check the arrows, lanes, street name (and Android Auto,

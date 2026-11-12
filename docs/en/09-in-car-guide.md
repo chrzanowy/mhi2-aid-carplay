@@ -142,8 +142,8 @@ Restart once more. From now on the set loads at every start. **"7. Status (read-
 
 ## Updating from an earlier version
 
-The same steps for v1.6.0, v1.5.x, v1.4.x and v1.0-v1.3. From v1.5.x and v1.6.0, 3 brings Android Auto 1.1 and 4 adds
-or updates the settings page (`ui`), the route guidance and the song titles, so the restart and 5
+The same steps for v1.6.0, v1.5.x, v1.4.x and v1.0-v1.3. From v1.5.x and v1.6.0, 3 brings Android Auto 1.1 and 4 updates
+the route guidance and the song titles (and adds or updates the settings page, `ui`, from v1.5.x), so the restart and 5
 (or "Save: everything works" on the page) are needed. Only when 2, 3 and 4 all answer "already installed" /
 "everything was already on, nothing changed" (a card with the same features) are no restart and no 5 needed.
 

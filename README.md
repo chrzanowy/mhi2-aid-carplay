@@ -29,10 +29,10 @@ This repository holds only what is specific to this head unit. It builds on the 
 | Reroute keeps distance, bar, street and arrival with the VW "calculating route" symbol; Apple Maps with a Polish phone keeps its arrows and lanes (tomasz-twardzicki MU1367 v1.4.5/v1.4.6) | new, not yet tried in the car ([details](rg/README.md#reroute-placeholder-arrow-u-turn-side-apple-maps-names-v161-mu1367-v145v146)) |
 | Guidance feed survives a stuck iAP2 driver read (the reader restarts its worker instead of ending) | in the car since 2026-11-03; recovery tested on the host |
 | Map zoom with the steering-wheel arrows | works |
-| CarPlay track title and artist on the AID | works |
+| Track title and artist on the AID (CarPlay; Android Auto since v1.7.0) | works |
 | Day/night switching of the cluster map | works |
 | Speed limit from the phone (`showSpeedLimit=yes`) | shows nothing on this unit |
-| Android Auto 1.0 (stable since v1.6.0; 0.1 open alpha in v1.5.x): Google Maps picture on the AID through pmcp's own MOST writer, VW arrows from Google Maps | works, with one known issue: [Android Auto](#android-auto-on-the-aid-android-auto-10) |
+| Android Auto 1.1 (since v1.7.0; 1.0 in v1.6.0, 0.1 open alpha in v1.5.x): Google Maps picture on the AID through pmcp's own MOST writer, VW arrows from Google Maps; road name, lanes and destination while the AID does not show the Android Auto map | works, with one known issue: [Android Auto](#android-auto-on-the-aid-android-auto-11) |
 | Settings page on the unit (v1.5.1, package `ui`): App-Connect > Settings > AID navigation configuration; "Save: everything works" confirms a trial start without the SD card | new in v1.5.1, [details](ui/README.md) |
 | Optional (v1.4.1, package `sl`; mode buttons fixed in v1.4.2 by amjad-alarori, mode set on the settings page since v1.5.1): the car's own VW map speed limit in front of the street name, or a trial in CurrentPositionInfo | 50 → 70 km/h confirmed on an e-Golf (AID 795A); not yet tried on AID 791. [Details](docs/en/16-native-speed-limits.md) |
 

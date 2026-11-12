@@ -123,9 +123,8 @@ CZĘŚĆ 2 - W AUCIE
        eksperymentalnej; wersję, której ta karta nie obsługuje, najpierw usuwa i zastępuje).
     4. "4. Install additional features: ..."  ->  PMCP_FEATURES_ON_OK
        (zastępuje wcześniejsze pliki prowadzenia i paczki, także eksperymentalne rg-aa)
-       Z v1.5.x i v1.6.0 przycisk 3 daje Android Auto 1.1, a 4 nowe prowadzenie, tytuły utworów
-       i stronę ustawień, więc kroki 5 i 6
-       są potrzebne. Tylko
+       Z v1.5.x i v1.6.0 przycisk 3 daje Android Auto 1.1, a 4 nowe prowadzenie i tytuły utworów
+       (z v1.5.x także stronę ustawień), więc kroki 5 i 6 są potrzebne. Tylko
        gdy wszystkie trzy (2, 3 i 4) piszą "already installed" / "everything was already on, nothing
        changed" (karta z tymi samymi funkcjami), nic się nie zmieniło - bez restartu i bez 5.
     5. Tylko jeśli 3 albo 4 coś zainstalowały: restart, ten start jest PRÓBNY. Sprawdź strzałki, pasy, nazwę ulicy (i Android Auto,

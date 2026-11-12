@@ -139,8 +139,8 @@ zestaw i `This boot: set=... use=yes`.
 
 ## Aktualizacja z wcześniejszej wersji
 
-Te same kroki dla v1.6.0, v1.5.x, v1.4.x i v1.0-v1.3. Z v1.5.x i v1.6.0 przycisk 3 daje Android Auto 1.1, a 4 dodaje
-albo aktualizuje stronę ustawień (`ui`), prowadzenie i tytuły utworów, więc restart i 5
+Te same kroki dla v1.6.0, v1.5.x, v1.4.x i v1.0-v1.3. Z v1.5.x i v1.6.0 przycisk 3 daje Android Auto 1.1, a 4 aktualizuje
+prowadzenie i tytuły utworów (a z v1.5.x dodaje albo aktualizuje stronę ustawień, `ui`), więc restart i 5
 (albo „Save: everything works” na stronie) są potrzebne. Tylko gdy wszystkie trzy (2, 3 i 4) odpowiadają „already
 installed” / „everything was already on, nothing changed” (karta z tymi samymi funkcjami), nie trzeba ani restartu,
 ani 5.

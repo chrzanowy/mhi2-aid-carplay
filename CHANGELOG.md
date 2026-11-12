@@ -37,7 +37,7 @@ this release ships the same files):
 
 CarPlay route guidance fixes from tomasz-twardzicki's MU1367 v1.4.5 and v1.4.6 (package `rg`, `rg/lanes/v146.py`,
 build mode `lanes-uturn-asf-m-aa-r`). In the car since 2026-11-12 with experimental card 9c0c4493 (the same
-`pmcp-guidance7.jar`) with no problem found; not every fix met its situation on that drive.
+`pmcp-guidance7.jar`): no problem found, though not every fix came up on that drive.
 
 - **Reroute.** When the phone recalculates the route (route states 1, 5, 0, 3, 1, then a start step at 0 m), the AID
   shows the VW "calculating route" symbol and keeps the distance, the distance bar, the street and the arrival data until

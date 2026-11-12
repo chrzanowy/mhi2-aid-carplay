@@ -2,7 +2,8 @@
 
 [English version: README.md](README.md)
 
-Stan: **działa w aucie (MU1161 + AID 791, październik 2026).** JAR: `build/np-mu1161-v2/pmcp-np.jar` (17,928 B, `6b638868…dc23`;
+Stan: **działa w aucie (MU1161 + AID 791, październik 2026).** JAR: `build/np-mu1161-aa11/pmcp-np.jar` (25 007 B, `1f3b0dc0…`, instalowany jako `pmcp-np2.jar`, od v1.7.0 także tytuł z Android Auto;
+przed v1.7.0: `build/np-mu1161-v2/pmcp-np.jar`, 17 928 B, `6b638868…dc23`;
 v2 2026-10-22: wszystkie 4 wywołania helpera osłonięte `buildtools/Guard.java`, kontrola API J9 `RefCheck`;
 v1 `1af4d5e8…761b`).
 

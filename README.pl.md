@@ -29,10 +29,10 @@ W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy proj
 | Przeliczanie trasy zachowuje dystans, pasek, ulicę i przyjazd z symbolem VW „wyznaczanie trasy”; Mapy Apple na telefonie po polsku nie gubią strzałek i pasów (tomasz-twardzicki MU1367 v1.4.5/v1.4.6) | nowe, jeszcze nie sprawdzone w aucie ([szczegóły](rg/README.pl.md#przeliczanie-trasy-strzałka-zastępcza-strona-zawracania-nazwy-map-apple-v161-mu1367-v145v146)) |
 | Prowadzenie przetrwa zawieszony odczyt sterownika iAP2 (czytnik restartuje swój proces roboczy zamiast się kończyć) | w aucie od 2026-11-03; odzyskiwanie sprawdzone na komputerze |
 | Przybliżanie mapy strzałkami na kierownicy | działa |
-| Tytuł i wykonawca utworu z CarPlay na AID | działa |
+| Tytuł i wykonawca utworu na AID (CarPlay; Android Auto od v1.7.0) | działa |
 | Przełączanie dzień/noc mapy na liczniku | działa |
 | Ograniczenie prędkości z telefonu (`showSpeedLimit=yes`) | na tym radiu nic nie pokazuje |
-| Android Auto 1.0 (stabilne od v1.6.0; w v1.5.x otwarta alfa 0.1): obraz Google Maps na AID przez własny zapis MOST pmcp, strzałki VW z Google Maps | działa, z jednym znanym problemem: [Android Auto](#android-auto-na-aid-android-auto-10) |
+| Android Auto 1.1 (od v1.7.0; 1.0 w v1.6.0, w v1.5.x otwarta alfa 0.1): obraz Google Maps na AID przez własny zapis MOST pmcp, strzałki VW z Google Maps; nazwa drogi, pasy i cel, gdy AID nie pokazuje mapy Android Auto | działa, z jednym znanym problemem: [Android Auto](#android-auto-na-aid-android-auto-11) |
 | Strona ustawień w radiu (v1.5.1, paczka `ui`): App-Connect → Settings → AID navigation configuration; „Save: everything works” zatwierdza start próbny bez karty SD | nowe w v1.5.1, [opis po angielsku](ui/README.md) |
 | Opcjonalnie (v1.4.1, paczka `sl`; przyciski trybu poprawione w v1.4.2 od amjad-alarori, od v1.5.1 tryb ustawiany na stronie ustawień): limit z map samego auta VW przed nazwą ulicy albo próbnie w CurrentPositionInfo | 50 → 70 km/h potwierdzone w e-Golfie (AID 795A); na AID 791 jeszcze nie sprawdzone. [Opis po angielsku](docs/en/16-native-speed-limits.md) |
 
