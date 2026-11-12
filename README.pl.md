@@ -192,11 +192,12 @@ Po polsku w [`docs/pl/`](docs/pl/), po angielsku w [`docs/en/`](docs/en/):
 
 Katalogi składników mają `README.md` po angielsku i `README.pl.md` po polsku.
 
-## Android Auto na AID (Android Auto 1.0)
+## Android Auto na AID (Android Auto 1.1)
 
 Ta sama karta daje też Android Auto na AID: obraz Google Maps z telefonu z Androidem, przez własną drogę MOST radia (bez
-dodatkowego adaptera), oraz natywne strzałki VW z Google Maps. Android Auto 1.0 (v1.6.0) to pierwsza wersja stabilna:
-pmcp sam zapisuje obraz na AID (direct); w v1.5.x była otwarta alfa 0.1 przez bridge CarPlay.
+dodatkowego adaptera), oraz natywne strzałki VW z Google Maps. Android Auto 1.0 (v1.6.0) było pierwszą wersją stabilną:
+pmcp sam zapisuje obraz na AID (direct); w v1.5.x była otwarta alfa 0.1 przez bridge CarPlay. Android Auto 1.1 (v1.7.0)
+dodaje resztę prowadzenia VW i tytuł utworu.
 
 ![Android Auto w aucie: Google Maps z telefonu z Androidem na AID, skręt w lewo za 400 m](docs/img/aa-cluster.jpg)
 
@@ -205,7 +206,20 @@ pmcp sam zapisuje obraz na AID (direct); w v1.5.x była otwarta alfa 0.1 przez b
 Co działa (sprawdzone w aucie, Samsung Galaxy A16 z Androidem 16):
 - obraz Google Maps na AID, także po przełączeniu z CarPlay na Android Auto bez restartu;
 - strzałki VW z dystansem z manewrów Google Maps, pokazywane przez ten sam pakiet prowadzenia `rg` co dla CarPlay;
+- od 1.1: nazwa drogi, pasy ruchu, dystans i czas do celu z Google Maps, jak przy CarPlay, ale tylko wtedy, gdy AID nie
+  pokazuje mapy Android Auto. Google Maps rysuje je we własnym obrazie, więc przy mapie na AID nasze są ukryte; w
+  pozostałych widokach AID (komputer pokładowy, zużycie, media) są obok strzałki VW. Zmiana widoku przełącza je w ćwierć
+  sekundy;
+- od 1.1: tytuł utworu, wykonawca i album z telefonu na AID (pakiet `np`, jak przy CarPlay);
 - przez kilka jazd żadna klatka nie zginęła i nie było błędu MOST; obraz idzie za telefonem z ok. 0,1 s zapasu dekodera.
+
+| ![Android Auto, AID bez mapy: nazwa drogi, cztery pasy, strzałka prosto za 20 m, 7 min i 2,6 km do celu](docs/img/aa-2026-11/IMG_1389.jpg) | ![Ta sama chwila z mapą Android Auto na AID: pasy, drogę i przyjazd rysuje Google Maps, nasze są ukryte](docs/img/aa-2026-11/IMG_1390.jpg) |
+|---|---|
+| *Android Auto 1.1, AID bez mapy: strzałka VW, nazwa drogi, pasy, czas i dystans do celu.* | *Kilka sekund później z mapą Android Auto na AID: zostaje tylko strzałka VW i jej dystans.* |
+
+![Tytuł utworu i wykonawca z Android Auto na AID](docs/img/aa-2026-11/IMG_1385.jpg)
+
+*Utwór z Android Auto na AID (1.1), czas i dystans do celu w lewym zegarze.*
 
 Wyjście: „AA output: pmcp MOST writer (default, from the next connection)” albo „AA output: CarPlay bridge (fallback,
 from the next connection)” w `aa_advanced` (także na stronie ustawień). Działa od następnego podłączenia telefonu, bez
@@ -215,7 +229,10 @@ Znany problem i ograniczenia:
 - po wyjściu z Android Auto na ekranie głównym i powrocie telefon może zwolnić obraz na AID, a rzadko go zatrzymać (AID
   pokazuje ekran ładowania): podłącz telefon ponownie;
 - strumień rusza około 5 s po podłączeniu telefonu;
-- brak strzałki VW na pierwszym kroku trasy; dystans i czas do celu zostają w obrazie Google Maps.
+- brak strzałki VW na pierwszym kroku trasy;
+- nazwa drogi to to, co Google Maps wysyła jako drogę: na niektórych krokach jest to kierunek („w kierunku: …”) albo
+  sama instrukcja, w języku telefonu. Pokazujemy ją tak, jak przychodzi;
+- czas do celu jest zaokrąglany w górę do pełnej minuty (jak przy CarPlay), więc bywa o minutę dłuższy niż w Google Maps.
 
 Instalacja (potrzebna mapa CarPlay z „2.”; dla strzałek także „4. Install additional features”):
 1. GEM → `pmcp_stream_map_aid` → **„3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)”**. Aktualizuje

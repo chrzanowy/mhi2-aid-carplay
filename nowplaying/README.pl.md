@@ -6,7 +6,7 @@ Stan: **działa w aucie (MU1161 + AID 791, październik 2026).** JAR: `build/np-
 v2 2026-10-22: wszystkie 4 wywołania helpera osłonięte `buildtools/Guard.java`, kontrola API J9 `RefCheck`;
 v1 `1af4d5e8…761b`).
 
-**Gałąź experimental (AA 1.1, audyt A171):** także tytuł, wykonawca i album z Android Auto (typ połączenia 3). JAR
+**Od v1.7.0 (Android Auto 1.1, audyt A171):** także tytuł, wykonawca i album z Android Auto (typ połączenia 3). JAR
 `build/np-mu1161-aa11/pmcp-np.jar` (25 007 B, `1f3b0dc0…e8e`), na karcie jako `pmcp-np2.jar` (nowa nazwa pliku, więc
 karta znająca tylko `pmcp-np.jar` 6b638868 nadal rozpozna zestaw jednostki). Fabryczny `AndroidAutoTarget` subskrybuje
 `DSIAndroidAuto2` na atrybuty `{1,6,2}`, bez 3 (`ATTR_NOWPLAYINGDATA`), a `setStationInfoForMirrorLink` wysyła tylko

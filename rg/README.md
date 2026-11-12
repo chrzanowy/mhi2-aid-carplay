@@ -17,7 +17,7 @@ Android Auto phone is connected (connection type 3) it reads the AA hook's mailb
 route is held 10 s instead of 180 s (the hook repeats the route every 2.5 s while Google Maps navigates); with CarPlay
 or no phone it behaves exactly like the v1.4.3 `rg` (the same test suites with the same results, plus `TestAa`).
 The v1.3 packages `rg` (no lanes) and `rglu` are gone; `java-update` (main menu 4) replaces them, v1.4.x's `rg`, the
-experimental cards' `rg-aa` and `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma` by this `rg` (`pmcp-guidance5.jar`; v1.5.0-v1.6.0: `pmcp-guidance4.jar`).
+experimental cards' `rg-aa` and `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma` by this `rg` (`pmcp-guidance7.jar`; v1.5.0-v1.6.0: `pmcp-guidance4.jar`).
 
 What it gives on the AID:
 - arrows and distance to the manoeuvre in the "arrows" view and on the HUD (also at the start of a route and at roundabout
@@ -137,7 +137,7 @@ Java of v1.4.6-e `d680311`) as counted edits on our sources. His `GuidanceEviden
 `TestSourceName`, `TestUturnSide`, `TestPlaceholder`, `TestQuietQnx`) are copied unchanged into `rg/lanes/v146/` and
 pinned. Not vehicle-tested upstream (his notes: "no vehicle result") nor here yet.
 
-**Experimental branch, AA 1.1 (audit A171):** in mode `lanes-uturn-asf-m-aa-r` the build also runs `rg/lanes/aa11.py`
+**Since v1.7.0, Android Auto 1.1 (audit A171):** in mode `lanes-uturn-asf-m-aa-r` the build also runs `rg/lanes/aa11.py`
 (after `v146.py`). The AA hook now sends Google Maps' road name, lanes and destination distance / time; LiveBridge
 publishes them with Android Auto only while `com.pmcp.kv.KombiView.mapShown()` is 0, i.e. the AID does not show the AA
 map (datapool 1110045, which followed every view switch on the 2026-11-11 drive; an unknown view hides them). Hidden:

@@ -2,8 +2,9 @@
 
 [Polska wersja](../pl/13-instrukcja-android-auto.md) · Background: [aa/README.md](../../aa/README.md)
 
-Android Auto 1.0 (since v1.6.0; 0.1 open alpha in v1.5.x): the Google Maps picture from an Android phone on the AID, and
-the VW arrows from Google Maps. The picture goes through pmcp's own MOST writer; "AA output: CarPlay bridge (fallback,
+Android Auto 1.1 (since v1.7.0; 1.0 in v1.6.0, 0.1 open alpha in v1.5.x): the Google Maps picture from an Android phone
+on the AID, the VW arrows from Google Maps and, since 1.1, the road name, lanes, distance and time to the destination
+(only while the AID does not show the Android Auto map) and the song title. The picture goes through pmcp's own MOST writer; "AA output: CarPlay bridge (fallback,
 from the next connection)" in `aa_advanced` switches to the CarPlay bridge (no restart, no 5). It is installed with its own button on the main screen (GEM: `pmcp_stream_map_aid`), **"3. Install
 Android Auto: Google Maps on the AID + VW arrows (needs 2)"**, separately from the CarPlay features: "4. Install
 additional features" neither installs nor removes it. The details (AA confirm, logs, removal) are on the screen
@@ -16,8 +17,8 @@ and came back: plug the phone in again (known issue).
 - The CarPlay map is installed (main screen **"2. Install CarPlay: the map on the AID (also repairs or updates it)"**).
   Android Auto uses the CarPlay map's video path.
 - For the VW arrows from Google Maps: main screen **"4. Install additional features: route guidance, zoom, day/night,
-  song title, settings page (needs 2)"**. Its route guidance package `rg` shows the arrows for CarPlay and for Android Auto. Without it
-  you get the picture only. 3 and 4 can be pressed one after the other: one restart, then one "5. Confirm" in that
+  song title, settings page (needs 2)"**. Its route guidance package `rg` shows the arrows, road name, lanes and
+  destination for CarPlay and for Android Auto, and `np` the song title. Without it you get the picture only. 3 and 4 can be pressed one after the other: one restart, then one "5. Confirm" in that
   start confirms both trials.
 
 ## Android Auto on
@@ -48,7 +49,13 @@ and came back: plug the phone in again (known issue).
 - Now and then the picture starts dark (or the AID shows its loading screen) until the phone sends its next key frame.
   Plugging the phone in again helps.
 - No VW arrow at the very first step of a route ("depart").
-- Destination distance and arrival time are shown in the Google Maps picture, not on the VW bar.
+- Road name, lanes, distance and time to the destination (1.1) show only while the AID does not show the Android Auto
+  map (trip computer, consumption, media views); with the map on the AID, Google Maps draws them in its picture and
+  ours are hidden. The VW arrow and its distance show in every view.
+- The road name is what Google Maps sends as the road. At some steps it is the direction ("towards …") or the
+  instruction itself, in the phone's language; it is shown as sent.
+- The time to the destination is rounded up to the next minute (as for CarPlay): it can be one minute more than in
+  Google Maps.
 - The VW arrow and bar end about 10 s after Google Maps stops sending navigation (for example after Maps closed without
   ending the route); CarPlay keeps a quiet route for 180 s.
 - Card 2 (rescue) and the Java packages share one switch-off marker (`DISABLED`). "4. Install additional features"

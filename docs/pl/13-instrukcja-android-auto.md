@@ -2,8 +2,9 @@
 
 [English version](../en/13-android-auto-guide.md) · Tło: [aa/README.pl.md](../../aa/README.pl.md)
 
-Android Auto 1.0 (od v1.6.0; w v1.5.x otwarta alfa 0.1): obraz Google Maps z telefonu z Androidem na AID i strzałki VW
-z Google Maps. Obraz idzie przez własny zapis MOST pmcp; „AA output: CarPlay bridge (fallback, from the next connection)”
+Android Auto 1.1 (od v1.7.0; 1.0 w v1.6.0, w v1.5.x otwarta alfa 0.1): obraz Google Maps z telefonu z Androidem na AID,
+strzałki VW z Google Maps, a od 1.1 także nazwa drogi, pasy, dystans i czas do celu (tylko gdy AID nie pokazuje mapy
+Android Auto) i tytuł utworu. Obraz idzie przez własny zapis MOST pmcp; „AA output: CarPlay bridge (fallback, from the next connection)”
 w `aa_advanced` przełącza na bridge CarPlay (bez restartu, bez 5). Gdy po wyjściu z Android Auto na ekranie głównym
 i powrocie AID pokazuje ekran ładowania: podłącz telefon ponownie (znany problem).
 Instaluje się własnym przyciskiem na ekranie głównym (GEM: `pmcp_stream_map_aid`), **„3. Install Android Auto: Google
@@ -17,8 +18,8 @@ instaluje wersję stabilną.
 - Mapa CarPlay zainstalowana (ekran główny **„2. Install CarPlay: the map on the AID (also repairs or updates it)”**).
   Android Auto korzysta z drogi obrazu mapy CarPlay.
 - Strzałki VW z Google Maps: na ekranie głównym **„4. Install additional features: route guidance, zoom, day/night, song
-  title (needs 2)”**. Pakiet prowadzenia `rg` pokazuje strzałki i dla CarPlay, i dla Android Auto. Bez niego jest sam
-  obraz. 3 i 4 można nacisnąć jedno po drugim: jeden restart, potem jedno „5. Confirm” w tym starcie potwierdza obie
+  title, settings page (needs 2)”**. Pakiet prowadzenia `rg` pokazuje strzałki, nazwę drogi, pasy i cel i dla CarPlay,
+  i dla Android Auto, a `np` tytuł utworu. Bez niego jest sam obraz. 3 i 4 można nacisnąć jedno po drugim: jeden restart, potem jedno „5. Confirm” w tym starcie potwierdza obie
   próby.
 
 ## Włączenie Android Auto
@@ -48,7 +49,12 @@ instaluje wersję stabilną.
 - Czasem obraz startuje ciemny (albo AID pokazuje ekran ładowania), aż telefon wyśle następną klatkę kluczową. Pomaga
   ponowne podłączenie telefonu.
 - Brak strzałki VW na pierwszym kroku trasy („wyjazd”).
-- Dystans i czas do celu są w obrazie Google Maps, nie na pasku VW.
+- Nazwa drogi, pasy, dystans i czas do celu (1.1) są tylko wtedy, gdy AID nie pokazuje mapy Android Auto (widoki komputera
+  pokładowego, zużycia, mediów); z mapą na AID rysuje je Google Maps we własnym obrazie, a nasze są ukryte. Strzałka VW
+  i jej dystans są w każdym widoku.
+- Nazwa drogi to to, co Google Maps wysyła jako drogę. Na niektórych krokach jest to kierunek („w kierunku: …”) albo sama
+  instrukcja, w języku telefonu; pokazujemy ją tak, jak przychodzi.
+- Czas do celu jest zaokrąglany w górę do pełnej minuty (jak przy CarPlay): bywa o minutę dłuższy niż w Google Maps.
 - Strzałka i pasek VW gasną około 10 s po tym, jak Google Maps przestaje wysyłać nawigację (np. Maps zamknięte bez
   zakończenia trasy); CarPlay trzyma cichą trasę 180 s.
 - Karta 2 (ratunkowa) i pakiety Java mają jeden wspólny znacznik wyłączenia (`DISABLED`). „4. Install additional

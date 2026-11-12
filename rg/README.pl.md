@@ -10,7 +10,7 @@ manewrów iAP2 wg luka-dev; tablica manewrów dla strzałek zastępczych: harman
 `d20527f` (MU1367 v1.4.4), `MU1367-v1.4.5` / `MU1367-v1.4.6` (`6610cbb`, `d680311`).
 
 Od v1.4 jest **jedna** paczka Java prowadzenia, `rg`, budowana przez `rg/build.sh <lsd.jar> <katalog> lanes-uturn-asf-m` (od v1.5.0 `lanes-uturn-asf-m-aa`, od v1.6.1
-`lanes-uturn-asf-m-aa-r`; plik od v1.6.1 `pmcp-guidance5.jar`).
+`lanes-uturn-asf-m-aa-r`; plik od v1.7.0 `pmcp-guidance7.jar`).
 Zawiera wszystko, co niżej: port MU1427, jego pasy, nasze pasy do zawracania, jego pasek odległości / nazwę ulicy /
 odzyskiwanie strumienia i strzałki zastępcze. Paczek `rg` (bez pasów) i `rglu` z v1.3 już nie ma; `java-update` (przycisk 4)
 zastępuje je, a także eksperymentalne `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma`, tą paczką `rg`.
@@ -134,7 +134,7 @@ tomasz-twardzicki jako liczone zmiany na naszych źródłach. Jego `GuidanceEvid
 `TestSourceName`, `TestUturnSide`, `TestPlaceholder`, `TestQuietQnx`) są skopiowane bez zmian do `rg/lanes/v146/`
 i przypięte hashem. Ani u niego („no vehicle result”), ani u nas jeszcze nie sprawdzone w aucie.
 
-**Gałąź experimental, AA 1.1 (audyt A171):** w trybie `lanes-uturn-asf-m-aa-r` budowanie uruchamia też
+**Od v1.7.0, Android Auto 1.1 (audyt A171):** w trybie `lanes-uturn-asf-m-aa-r` budowanie uruchamia też
 `rg/lanes/aa11.py` (po `v146.py`). Hook AA wysyła teraz nazwę drogi, pasy oraz dystans i czas do celu z Google Maps;
 LiveBridge publikuje je przy Android Auto tylko wtedy, gdy `com.pmcp.kv.KombiView.mapShown()` = 0, czyli AID nie
 pokazuje mapy AA (datapool 1110045, który w jeździe 2026-11-11 śledził każde przełączenie widoku; nieznany widok też

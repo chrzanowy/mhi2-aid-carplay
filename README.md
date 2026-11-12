@@ -211,11 +211,12 @@ English in [`docs/en/`](docs/en/), Polish in [`docs/pl/`](docs/pl/):
 
 The component directories have an English `README.md` and a Polish `README.pl.md`.
 
-## Android Auto on the AID (Android Auto 1.0)
+## Android Auto on the AID (Android Auto 1.1)
 
 The same card also brings Android Auto to the AID: the Google Maps picture from an Android phone, over the head unit's
-own MOST path (no extra adapter), and the native VW arrows from Google Maps. Android Auto 1.0 (v1.6.0) is the first
+own MOST path (no extra adapter), and the native VW arrows from Google Maps. Android Auto 1.0 (v1.6.0) was the first
 stable version: pmcp writes the picture to the AID itself (direct); v1.5.x had the 0.1 open alpha over the CarPlay bridge.
+Android Auto 1.1 (v1.7.0) adds the rest of the VW guidance and the song title.
 
 ![Android Auto in the car: Google Maps from an Android phone on the AID, a left turn in 400 m](docs/img/aa-cluster.jpg)
 
@@ -224,7 +225,20 @@ stable version: pmcp writes the picture to the AID itself (direct); v1.5.x had t
 What works (tested in the car, Samsung Galaxy A16 with Android 16):
 - the Google Maps picture on the AID, also when switching from CarPlay to Android Auto without a restart;
 - VW arrows with distance from Google Maps manoeuvres, shown by the same route guidance package `rg` as for CarPlay;
+- since 1.1: the road name, the lanes, the distance and the time to the destination from Google Maps, as with CarPlay,
+  but only while the AID does not show the Android Auto map. Google Maps draws them in its own picture, so with the map
+  on the AID ours stay hidden; in the AID's other views (trip computer, consumption, media) they show next to the VW
+  arrow. Switching the view switches them within a quarter of a second;
+- since 1.1: the song title, artist and album from the phone on the AID (package `np`, as with CarPlay);
 - no frame lost and no MOST error over several drives; the picture follows the phone with about 0.1 s of decoder lead.
+
+| ![Android Auto, AID trip view: road name, four lanes, a straight arrow at 20 m, 7 min and 2.6 km to the destination](docs/img/aa-2026-11/IMG_1389.jpg) | ![The same moment with the Android Auto map on the AID: Google Maps draws the lanes, road and arrival itself, ours are hidden](docs/img/aa-2026-11/IMG_1390.jpg) |
+|---|---|
+| *Android Auto 1.1, AID without the map: VW arrow, road name, lanes, time and distance to the destination.* | *Seconds later with the Android Auto map on the AID: only the VW arrow and its distance stay.* |
+
+![Android Auto song title and artist on the AID](docs/img/aa-2026-11/IMG_1385.jpg)
+
+*The song from Android Auto on the AID (1.1), with the time and distance to the destination in the left dial.*
 
 Output: "AA output: pmcp MOST writer (default, from the next connection)" or "AA output: CarPlay bridge (fallback, from
 the next connection)" in `aa_advanced` (also on the settings page). It applies at the next phone connection, with no
@@ -234,7 +248,11 @@ Known issue and limits:
 - after leaving Android Auto on the main screen and coming back, the phone may slow the AID picture down and, rarely,
   stop it (the AID shows its loading screen): plug the phone in again;
 - the stream starts about 5 s after the phone connects;
-- no VW arrow at the very first step of a route; destination distance and arrival time stay in the Google Maps picture.
+- no VW arrow at the very first step of a route;
+- the road name is what Google Maps sends as the road: at some steps that is its direction text ("towards …") or the
+  instruction itself, in the phone's language. It is shown as sent;
+- the time to the destination is rounded up to the next minute (as for CarPlay), so it can be one minute more than
+  Google Maps shows.
 
 Install (needs the CarPlay map from "2."; for the arrows also "4. Install additional features"):
 1. GEM → `pmcp_stream_map_aid` → **"3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)"**. It also

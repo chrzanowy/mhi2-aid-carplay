@@ -12,9 +12,9 @@ Provenance:
 
 | File | Built by | SHA-256 | Size |
 |---|---|---|---|
-| `libgal_hook.so` | `aa/hook/build.sh <out> gamma` (MacsInSpace mib-cluster-map gal hook at the pinned commit + pmcp patches, GPL-3.0; experimental A166: + raw navigation dump; A171 (AA 1.1): + road name, lanes and destination into the rg mailbox; AA 1.0 of v1.6.0 was `bdd76a85…`, 132823 B; A166 card b542b2d4 `0340ccca…`, 136636 B) | `cbf2e388ab053c0468daab6a6d3e3e2bb27875cfb16c2e260147b37282baa3af` | 141023 |
+| `libgal_hook.so` | `aa/hook/build.sh <out> gamma` (MacsInSpace mib-cluster-map gal hook at the pinned commit + pmcp patches, GPL-3.0; A166: + raw navigation dump; A171 (AA 1.1): + road name, lanes and destination into the rg mailbox; AA 1.0 of v1.6.0 was `bdd76a85…`, 132823 B; A166 card b542b2d4 `0340ccca…`, 136636 B) | `cbf2e388ab053c0468daab6a6d3e3e2bb27875cfb16c2e260147b37282baa3af` | 141023 |
 | `libdmdt_flush.so` | `aa/hook/build.sh` (MacsInSpace `dmdt_flush`) | `4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f` | 5328 |
-| `aa-most-feeder` | `aa/feeder/build.sh <out>` (experimental A166: feeder v15 = v14 + MOST reclaim after boot; v14 `0003c60c…` 56900 B = Android Auto 1.0 of v1.6.0; v10 c5f8b0ef was the 0.1 alpha of v1.5.x) | `395d99b756789e39b119eded68f90d4eceee269138d7f950447aa928ea464592` | 58656 |
+| `aa-most-feeder` | `aa/feeder/build.sh <out>` (A166, v1.7.0: feeder v15 = v14 + MOST reclaim after boot; v14 `0003c60c…` 56900 B = Android Auto 1.0 of v1.6.0; v10 c5f8b0ef was the 0.1 alpha of v1.5.x) | `395d99b756789e39b119eded68f90d4eceee269138d7f950447aa928ea464592` | 58656 |
 
 The settings files `aa/unit/gal-hook-gamma.conf`, `aa/unit/feeder-gamma.conf` and `aa/unit/gal.wrapper.sh` still say
 "experimental" in their comments. That wording is historical: the files are pinned by hash, and the AA set id on the

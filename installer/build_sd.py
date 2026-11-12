@@ -86,16 +86,17 @@ PAYLOAD = {
     # v2 (2026-10-22, review 2): every hook call guarded, RefCheck against the unit's java.* classes
     "JAR_nai": (PROJ / "build/nai-mu1161-v2/NavActiveIgnore.jar",
             "dbd031ecb28a2ec91c4704e133f4e2126cf1fe11498f673bc2e07fc0b1aaa7ab", 13285, "jars/NavActiveIgnore.jar"),
-    # nowplaying/build.sh; experimental AA 1.1 (A171): + Android Auto title (AndroidAutoTarget hook). Own file name
-    # pmcp-np2.jar: v1.x's pmcp-np.jar keeps its one content (6b638868, JAVA_OLD)
+    # nowplaying/build.sh; since v1.7.0 (AA 1.1, A171): + Android Auto title (AndroidAutoTarget hook). Own file name
+    # pmcp-np2.jar: v1.x's pmcp-np.jar keeps its one content (6b638868, JAVA_OLD). The same file as experimental card
+    # 9c0c4493 (tested in the car 2026-11-12, A174)
     "JAR_np": (PROJ / "build/np-mu1161-aa11/pmcp-np.jar",
                "1f3b0dc0a0e27f349f051bc40ad92e38cd2da5a320050e6f57a73de15a6eea8e", 25007, "jars/pmcp-np2.jar"),
     # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa-r (RC's rg 70f714fb = v1.6.0's rg 4e32e7f7 plus rg/lanes/v146.py,
-    # tomasz-twardzicki MU1367 v1.4.5/v1.4.6) + A166 (experimental): com.pmcp.kv.KombiView, which view the AID shows
-    # (/ramdisk/pmcp-kombi-view.log). Own file name pmcp-guidance6.jar: RC's pmcp-guidance5.jar keeps one content only, so a
-    # release after this card still knows the unit's rg (agreed with the CP session, A166).
-    # AA 1.1 (A171, experimental): + rg/lanes/aa11.py (AA road name, lanes, destination only while the AID does not show
-    # the AA map; KombiView.mapShown() = 1110045). Own file name pmcp-guidance7.jar (pmcp-guidance6.jar = card b542b2d4).
+    # tomasz-twardzicki MU1367 v1.4.5/v1.4.6) + com.pmcp.kv.KombiView (A166: which view the AID shows,
+    # /ramdisk/pmcp-kombi-view.log) + rg/lanes/aa11.py (AA 1.1, A171: AA road name, lanes, destination only while the AID
+    # does not show the AA map; KombiView.mapShown() = datapool 1110045). Own file name pmcp-guidance7.jar: pmcp-guidance5.jar
+    # (RC test cards) and pmcp-guidance6.jar (experimental card b542b2d4) are in JAVA_OLD. The same file as experimental card
+    # 9c0c4493 (tested in the car 2026-11-12, A174).
     "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11/pmcp-rg.jar",
                "308714b29b1e7350f98771e78e34abd776cdb710123b2e9beb5c135bd3a8c04b", 64481, "jars/pmcp-guidance7.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
@@ -128,12 +129,13 @@ PAYLOAD = {
 # needs no QNX toolchain: hook g2 (A-AA24), libdmdt_flush.so (unchanged since AA 1), feeder v10 (A-AA33).
 PAYLOAD.update({
     "AA_WRAPPER": (PROJ / "aa/unit/gal.wrapper.sh", "57b63037a7d82d45f47773ec76e99ad659490f6d29d540f20de90930f0d65137", 3259, "aa/gal.wrapper.sh"),
-    # A166 (experimental): hook g2 + raw dump of the navigation messages (/ramdisk/pmcp-aa-rg-raw.txt)
-    # A171 (experimental AA 1.1): + road name, lanes and destination into the rg mailbox
+    # v1.7.0: hook g2 + raw dump of the navigation messages (/ramdisk/pmcp-aa-rg-raw.txt, A166) + road name, lanes and
+    # destination into the rg mailbox (AA 1.1, A171); the same file as experimental card 9c0c4493 (car 2026-11-12, A174)
     "AA_HOOK": (PROJ / "aa/prebuilt/libgal_hook.so", "cbf2e388ab053c0468daab6a6d3e3e2bb27875cfb16c2e260147b37282baa3af", 141023, "aa/libgal_hook.so"),
     "AA_DMDT_FLUSH": (PROJ / "aa/prebuilt/libdmdt_flush.so", "4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f", 5328, "aa/libdmdt_flush.so"),
     # AA 1.0 (A153): feeder v14 = v13 (pmcp's own MOST writer, direct) + only direct|ring taken from PMCP_AA_OUTPUT
-    # A166 (experimental): feeder v15 = v14 + MOST taken back when the factory encoder grabs isoTX2 early after boot
+    # v1.7.0: feeder v15 = v14 + MOST taken back when the factory encoder grabs isoTX2 early after boot (A166; in the car
+    # with cards b542b2d4 and 9c0c4493)
     "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "395d99b756789e39b119eded68f90d4eceee269138d7f950447aa928ea464592", 58656, "aa/aa-most-feeder"),
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", 1566, "aa/feeder.conf"),
@@ -313,7 +315,7 @@ JAVA_OLD = [
     # v1.5.0, v1.5.1 and v1.6.0 rg (rg/build.sh lanes-uturn-asf-m-aa, before rg/lanes/v146.py): this card's rg is
     # pmcp-guidance5.jar, so java-update (main menu 4) replaces it in place and keeps sl, ui and the speed-limit mode
     ("rg", "4e32e7f7e2af8613b264998911a278b50d4ebf0a4b5d0c6245089e782d6236ee", "c14f3a68ffff673697d13985749a85adbdb1e2b4", 53514, "pmcp-guidance4.jar", "rg"),
-    # experimental A166: RC's rg (v1.6.0 rg + v146) in pmcp-guidance5.jar; this card's rg (+ KombiView) is pmcp-guidance6.jar
+    # RC test cards (v1.6.0 rg + v146) in pmcp-guidance5.jar; this card's rg (+ KombiView, AA 1.1 gate) is pmcp-guidance7.jar
     ("rg", "70f714fbaf3efb85bf3235f72971f638c822a117838589bfdf46281037c38fa4", "8f212f550a6e7c30c66e008e5d0bea197b0c2dfa", 55780, "pmcp-guidance5.jar", "rg"),
     # experimental card b542b2d4 (A166): rg + KombiView; this card's rg (+ AA 1.1 gate) is pmcp-guidance7.jar
     ("rg", "637dc949c4eabb1eab487f1dcbe0cb566600c07f7e17c4ef671b0a053214de18", "1409b1b4c10430690256f08812da8e0f38c3f4c9", 64300, "pmcp-guidance6.jar", "rg"),

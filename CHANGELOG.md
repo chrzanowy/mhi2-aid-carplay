@@ -5,7 +5,34 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased
 
-CarPlay route guidance fixes from tomasz-twardzicki's MU1367 v1.4.5 and v1.4.6 (package `rg`, `rg/lanes/v146.py`,
+**Android Auto 1.1** (tested in the car on 2026-11-12 with experimental card 9c0c4493, Samsung Galaxy A16, Android 16;
+this release ships the same files):
+
+- **Road name, lanes, distance and time to the destination** from Google Maps on the cluster, as with CarPlay, but only
+  while the AID does not show the Android Auto map: Google Maps draws them in its own picture, so with the map on the
+  AID ours stay hidden and the AID shows them in its other views (trip computer, consumption, media) next to the VW
+  arrow. The VW arrow and its distance stay in every view, as in 1.0. The AID's view comes from the HMI's own "cockpit
+  map visible" signal (datapool 1110045), which followed every view switch in the car; a switch re-sends the values
+  within 250 ms.
+  - AA hook (`aa/hook/pmcp_rg.c`): the road name (`road_info`), the lanes and the destination's distance / time from
+    Google Maps' navigation messages go into the rg mailbox as the iAP2 keys CarPlay uses (field numbers from kkrvch's
+    mib-std2-kombibridge, confirmed by the raw dump). A road name that is not valid UTF-8 is sent empty. The road name
+    is shown as Google Maps sends it (at some steps its direction text or the instruction, in the phone's language).
+  - rg (`rg/lanes/aa11.py`, `pmcp-guidance7.jar`): the gate, with `com.pmcp.kv.KombiView` reading the AID's view.
+- **Song title, artist and album** on the AID for Android Auto too (`pmcp-np2.jar`): the stock Android Auto target never
+  subscribes to the phone's now-playing data; a fourth hook adds our own listener, as for CarPlay.
+- **Feeder v15:** if the factory video encoder takes the AID video channel in the first 3 minutes after the radio
+  starts, the feeder takes it back (at most 3 times) and sends the last key frame again, instead of leaving the AID
+  without the map until the phone is reconnected. Reported on MU1367 by tomasz-twardzicki (v1.5.1-e).
+- **Diagnostics:** the AA hook writes the raw navigation messages to `/ramdisk/pmcp-aa-rg-raw.txt` (rotated; it holds
+  road names and the destination address, in RAM only until "AA save log"), rg writes which view the AID shows to `/ramdisk/pmcp-kombi-view.log`; "AA save log" copies both.
+- **Update:** main menu 4 replaces `rg` (`pmcp-guidance4.jar`/`5`/`6` → `pmcp-guidance7.jar`) and `np` (`pmcp-np.jar` →
+  `pmcp-np2.jar`) in place with one trial start and one confirmation; `sl`, `ui` and the speed-limit mode stay. Main menu
+  3 brings Android Auto 1.0 (v1.6.0) and the experimental sets in place to 1.1 and keeps the chosen AA output. A unit
+  with experimental card 9c0c4493 already has this release's files: 3 and 4 change nothing. Host tests [46], new [51]
+  (experimental card b542b2d4) and [52] (9c0c4493).
+
+CarPlay CarPlay route guidance fixes from tomasz-twardzicki's MU1367 v1.4.5 and v1.4.6 (package `rg`, `rg/lanes/v146.py`,
 build mode `lanes-uturn-asf-m-aa-r`). Host tests only: neither he nor we have tried them in a car yet.
 
 - **Reroute.** When the phone recalculates the route (route states 1, 5, 0, 3, 1, then a start step at 0 m), the AID
@@ -28,7 +55,7 @@ build mode `lanes-uturn-asf-m-aa-r`). Host tests only: neither he nor we have tr
 - **CarPlay log** (GEM "CP save log") also saves the first 200 lines of the supervisor's copy of the last exited map
   bridge and supervisor run (`/ramdisk/carplaymaps-diagnostics/last-bridge.log`, `last-supervisor.log`), to see whether
   the map drop about 46 s after start is the bridge's "MOST write failed: Not enough memory" that Tomasz found on MU1367.
-- **Update:** main menu 4 replaces `rg` in place (`pmcp-guidance4.jar` → `pmcp-guidance5.jar`) with one trial start and
+- **Update:** main menu 4 replaces `rg` in place (`pmcp-guidance4.jar` → `pmcp-guidance7.jar`, see Android Auto 1.1) with one trial start and
   one confirmation; `sl`, `ui`, the speed-limit mode and Android Auto stay. Host tests: [48] v1.5.1, [49] v1.5.0 and new [50] v1.6.0
   units.
 - **Fix (since v1.6.0): "AA status" on the unit printed "tr: cannot execute"** and an empty "AA switches" line: the
@@ -45,27 +72,6 @@ build mode `lanes-uturn-asf-m-aa-r`). Host tests only: neither he nor we have tr
 - **tomasz-twardzicki** (MHI2-Carplay-Maps, GPL-3.0): reroute handling and placeholder arrow (MU1367 v1.4.5,
   `6610cbb`), U-turn side and Apple Maps names with their evidence fields (MU1367 v1.4.6, `d680311`), and the tests
   `TestReroute`, `TestSourceName`, `TestUturnSide`, `TestPlaceholder`, `TestQuietQnx`.
-
-## Experimental branch only (not in the next release)
-
-- Android Auto feeder v15: if the factory video encoder takes the AID video channel in the first 3 minutes after the
-  radio starts, the feeder takes it back (at most 3 times) and sends the last key frame again, instead of leaving the
-  AID without the map until the phone is reconnected. Reported on MU1367 by tomasz-twardzicki (v1.5.1-e).
-- Diagnostics for the next Android Auto features (road name, lanes, distance and arrival time only while the AID does
-  not show the map): the AA hook writes the raw navigation messages to `/ramdisk/pmcp-aa-rg-raw.txt`, rg writes which
-  view the AID shows to `/ramdisk/pmcp-kombi-view.log`; "AA save log" copies both.
-- **Android Auto 1.1 (experimental):** Google Maps' road name, lanes, distance to the destination and time to the
-  destination on the cluster, as with CarPlay, but only while the AID does not show the Android Auto map: Google Maps
-  draws them in its own picture, so with the map on the AID they stay hidden and the AID shows them only in its
-  arrow / trip views. The AID's view comes from the HMI's own "cockpit map visible" signal (datapool 1110045), which
-  followed every view switch on a test drive; the cluster's stream data rate did not. The arrow and the distance to the
-  next turn stay in every view, as in 1.0.
-  - AA hook (`aa/hook/pmcp_rg.c`): the road name (`road_info`), the lanes and the destination's distance / time from
-    Google Maps' navigation messages go into the rg mailbox as the iAP2 keys CarPlay uses (field numbers from
-    kkrvch's mib-std2-kombibridge, confirmed by the raw dump). A road name that is not valid UTF-8 is sent empty.
-  - rg (`rg/lanes/aa11.py`, `pmcp-guidance7.jar`): the gate; a view change re-sends the four values within 250 ms.
-  - Song title on the cluster for Android Auto too (`pmcp-np2.jar`): the stock Android Auto target never subscribes
-    to the phone's now-playing data; a fourth hook adds our own listener, as for CarPlay.
 
 ## v1.6.0 (2026-11-11)
 
