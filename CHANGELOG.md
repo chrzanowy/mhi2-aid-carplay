@@ -3,6 +3,23 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
+## v1.7.1 (2026-11-13)
+
+Installer version `pmcp-0.7.1-mu1161-791-<build id>`. **Nothing changes in the car:** the cards put the same files on
+the unit as v1.7.0 (byte-identical apart from the build id), so updating from v1.7.0 is optional and 2, 3 and 4 answer
+"already installed" / "nothing changed". Tested in the car on 2026-11-13 with an experimental card of this installer.
+
+- **Firmware profiles:** the facts about the unit firmware (train, MU, pinned stock files, `lsd.jxe` / `lsd.jar` hashes,
+  packages, files of earlier cards) moved from the code into `profiles/MU1161/` (`profile.json`, `history.json`), read and
+  strictly validated by `scripts/profile.py`. This prepares ports to other firmware (the MU1418 beta is built on it).
+- `install.sh` identifies the profile from the backup's `version.txt` (train and MU must match exactly one profile),
+  stops on a backup with several `version.txt` files, and has `--check-backup` (identify and check only).
+- `build_sd.py` takes `PMCP_PROFILE` (default `MU1161`); every package `build.sh` takes the profile id as its first
+  argument; `rg/build.sh` and the driver gate patch take their pins from the profile.
+- Tests: profile section (validation, detection, refused mutations), `installer/test/compare_cards.py` (cards of a
+  refactor must be byte-identical apart from the build id), update test from the v1.7.0 card and the experimental
+  cards f0b878e0 and 3403e8c5 ([55]: 2, 3 and 4 change no file; the experimental Wi-Fi buttons are not on this card).
+
 ## v1.7.0 (2026-11-12)
 
 Installer version `pmcp-0.7.0-mu1161-791-<build id>`. v1.6.0 stays available as the previous stable release

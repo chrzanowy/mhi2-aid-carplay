@@ -117,6 +117,8 @@ changed" (a card with the same features), nothing changed: no restart and no 5 n
 (`rglu`, `rg`, the experimental `rg-aa` → this card's `rg`) by this card's. Button 3 updates an earlier experimental
 card's Android Auto that it knows in place and replaces Android Auto it does not support by this card's. Make a new
 card 2 as well when coming from v1.0-v1.3: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
+**From v1.7.0:** v1.7.1 puts the same files on the unit, so 2, 3 and 4 answer "already installed" / "nothing changed":
+no restart and no 5. Updating is optional; v1.7.1 changes only the installer on your computer (firmware profiles).
 **From v1.6.0:** 2 ("already installed"), 3 if you use Android Auto (Android Auto 1.1 in place, the chosen output stays),
 4 (route guidance and song titles in place, `sl`, `ui` and the speed-limit mode stay); then restart, connect the phone
 and 5 (or "Save" on the settings page) in that start.

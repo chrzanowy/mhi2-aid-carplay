@@ -118,6 +118,8 @@ czytnik i paczki Java (`rglu`, `rg`, eksperymentalne `rg-aa` → `rg` z tej kart
 aktualizuje na miejscu znane mu Android Auto z wcześniejszej karty eksperymentalnej, a Android Auto, którego nie
 obsługuje, zastępuje zestawem z tej karty. Przy przejściu z v1.0–v1.3 zrób też nową kartę 2: karty ratunkowe sprzed
 v1.4 nie przywracają sterownika iAP2 z v1.4.
+**Z v1.7.0:** v1.7.1 wgrywa do radia te same pliki, więc 2, 3 i 4 odpowiadają „already installed” / „nothing changed”:
+bez restartu i bez 5. Aktualizacja jest opcjonalna; v1.7.1 zmienia tylko instalator na komputerze (profile firmware).
 **Z v1.6.0:** 2 („already installed”), 3, jeśli używasz Android Auto (Android Auto 1.1 na miejscu, wybrane wyjście zostaje),
 4 (prowadzenie i tytuły utworów na miejscu, `sl`, `ui` i tryb ograniczeń prędkości zostają); potem restart, telefon
 i 5 (albo „Save” na stronie ustawień) w tym starcie.

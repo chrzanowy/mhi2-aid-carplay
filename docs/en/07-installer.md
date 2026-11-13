@@ -2,9 +2,16 @@
 
 Status: **tested in the car (October 2026; v1.4 route guidance November 2026).** Code: [`installer/`](../../installer/).
 The SD build is made by `installer/build_sd.py` (the output directory holds `BUILD-MANIFEST.txt` with the hash of every file;
-the version shown in GEM is `pmcp-0.7.0-mu1161-791-<build id>`, where the id is the first 8 hex digits of the SHA-256 of the
+the version shown in GEM is `pmcp-0.7.1-mu1161-791-<build id>`, where the id is the first 8 hex digits of the SHA-256 of the
 manifest and the `pmcp.sh` template). The install card is assembled by `installer/build_card_install.py`, the rescue card by
 `installer/build_rescue.py`.
+
+**Firmware profiles (since v1.7.1).** Everything the installer knows about the unit firmware is data in
+`profiles/<ID>/`: `profile.json` (train, MU, the pinned stock files, the `lsd.jxe`/`lsd.jar` hashes, the packages)
+and `history.json` (files of earlier cards that this installer still replaces). `install.sh` picks the profile from
+the backup's `version.txt` (train and MU must match exactly one profile; today only `MU1161`) and stops otherwise;
+`./install.sh --check-backup` only identifies the profile and checks the backup. `build_sd.py` takes it from
+`PMCP_PROFILE` (default `MU1161`). The MU1161 cards are byte-identical to v1.7.0 apart from the build id.
 
 ## Packages (built together, installed in batches from M.I.B. buttons)
 

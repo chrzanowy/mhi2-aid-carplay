@@ -108,7 +108,9 @@ PART 2 - IN THE CAR
   To remove everything: "8. Remove everything (back to factory files)", then restart.
   "7. Status (read-only)" shows what is installed.
 
-  UPDATING from an earlier version (v1.0 - v1.6.0):
+  UPDATING from an earlier version (v1.0 - v1.7.0):
+    From v1.7.0: v1.7.1 has the same files on the unit (only the installer on your computer
+    changed). Steps 1-4 all say "already installed" / "nothing changed": no restart, no 5.
     1. Make CARD 1 from this package. In the car: "1. Check card and unit (read-only)".
        Expected: PMCP_VERIFY_OK state=JAVA. "7. Status (read-only)" may show
        "Route guidance system: old" and "packages of an earlier card: rglu" - that is expected.

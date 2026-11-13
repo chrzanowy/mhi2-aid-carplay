@@ -37,11 +37,11 @@ PROFILE_ID = os.environ.get("PMCP_PROFILE", "MU1161")
 FW = fwprofile.load(PROFILE_ID)               # facts about this unit firmware (exits on a malformed profile)
 HIST = fwprofile.load_history(PROFILE_ID)     # earlier cards of this profile (hashes only)
 # release v1.7.0: Android Auto 1.1 (road, lanes, destination, song title), CarPlay rg fixes
-PMCP_BASE_VERSION = "pmcp-0.7.0-" + FW["version_tag"]
+PMCP_BASE_VERSION = "pmcp-0.7.1-" + FW["version_tag"]
 # Experimental card from the same tree (PMCP_BUILD_EXPERIMENTAL=1): "-exp-" in the version, plus the diagnostics buttons
 # (AA record, AA output switches are in every card since AA 1.0). Same payload otherwise, so it never forces another set.
 if os.environ.get("PMCP_BUILD_EXPERIMENTAL") == "1":
-    PMCP_BASE_VERSION = "pmcp-0.7.0-exp-" + FW["version_tag"]
+    PMCP_BASE_VERSION = "pmcp-0.7.1-exp-" + FW["version_tag"]
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)

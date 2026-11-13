@@ -2,8 +2,15 @@
 
 Stan: **przetestowany w aucie (październik 2026; prowadzenie v1.4 listopad 2026).** Kod: [`installer/`](../../installer/).
 Build SD tworzy `installer/build_sd.py` (w katalogu wyjściowym `BUILD-MANIFEST.txt` z hashami wszystkich plików, wersja
-w GEM `pmcp-0.7.0-mu1161-791-<id buildu>`, gdzie ID to pierwsze 8 znaków SHA-256 manifestu i szablonu `pmcp.sh`).
+w GEM `pmcp-0.7.1-mu1161-791-<id buildu>`, gdzie ID to pierwsze 8 znaków SHA-256 manifestu i szablonu `pmcp.sh`).
 Kartę instalacyjną składa `installer/build_card_install.py`, kartę ratunkową `installer/build_rescue.py`.
+
+**Profile firmware (od v1.7.1).** Wszystko, co instalator wie o firmware radia, to dane w `profiles/<ID>/`:
+`profile.json` (train, MU, przypięte pliki fabryczne, hashe `lsd.jxe`/`lsd.jar`, paczki) i `history.json` (pliki
+wcześniejszych kart, które ten instalator nadal zastępuje). `install.sh` wybiera profil z `version.txt` backupu
+(train i MU muszą pasować do dokładnie jednego profilu; dziś tylko `MU1161`), inaczej się zatrzymuje;
+`./install.sh --check-backup` tylko rozpoznaje profil i sprawdza backup. `build_sd.py` bierze go z `PMCP_PROFILE`
+(domyślnie `MU1161`). Karty MU1161 są bajt w bajt takie jak w v1.7.0, poza identyfikatorem buildu.
 
 ## Paczki (budowane razem, wgrywane partiami przyciskami M.I.B.)
 

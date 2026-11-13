@@ -539,8 +539,8 @@ PY
         [ -f "$SDB/pmcp/menu/${ref##*/}" ] || bad "menu points to missing ${ref##*/}"
     done
     v=$(sed -n 's/^PMCP_VERSION="\(.*\)"$/\1/p' "$SDB/pmcp/pmcp.sh")
-    case "$v" in pmcp-0.7.0-$VTAG-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;;
-        pmcp-0.7.0-exp-$VTAG-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "experimental version carries a build id: $v" ;;
+    case "$v" in pmcp-0.7.1-$VTAG-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;;
+        pmcp-0.7.1-exp-$VTAG-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "experimental version carries a build id: $v" ;;
         *) bad "version $v" ;; esac
     aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen aa_advanced/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
     case "$v" in
@@ -1786,6 +1786,31 @@ PEOF
         [ "$(cat "$W/unit/mnt/persist/pmcp/native-speedlimit-mode" 2>/dev/null)" = turnto ] && ok "9c0c4493: speed-limit mode kept" || bad "9c0c4493: speed-limit mode lost"
         restore_exact "9c0c4493: restore gives the exact factory tree"
     fi
+
+    # v1.7.1 ships the payload of v1.7.0: the v1.7.0 release card, experimental card f0b878e0 (profiles layout, A179) and
+    # the Wi-Fi experimental card 3403e8c5 (A-WL12, in the car before v1.7.1: extra wifi-test / wl-diag buttons on the SD
+    # card, their logs in /mnt/persist/pmcp) leave nothing for 2, 4 and 3 to replace
+    echo "[55] v1.7.0 release card b5f758bf, experimental cards f0b878e0 and 3403e8c5 (same payload as this card) -> nothing to replace, 2, 4 and 3 change no file"
+    V170SD="${PMCP_V170_SD:-$SDB/../release-v1.7.0-b5f758bf/sd}"; F0B8SD="${PMCP_F0B8_SD:-$SDB/../sd-f0b878e0}"
+    W340SD="${PMCP_W340_SD:-$SDB/../sd-3403e8c5}"
+    ls "$SDB/pmcp/menu" | grep -q -e wifi-test -e wl-diag && bad "this card has the experimental Wi-Fi buttons" || ok "this card has no wifi-test / wl-diag buttons"
+    for oc in "$V170SD:b5f758bf" "$F0B8SD:f0b878e0" "$W340SD:3403e8c5"; do
+        od=${oc%%:*}; oid=${oc#*:}
+        card_ok "$od/pmcp/pmcp.sh" "$oid" || continue
+        exp_unit "$od"
+        # the Wi-Fi card's buttons leave their logs behind (pmcp.sh wifi-test / wl-diag)
+        [ "$oid" = 3403e8c5 ] && { echo "=== wifi-test run 1" > "$W/unit/mnt/persist/pmcp/wifi-test.log"; echo 1 > "$W/unit/mnt/persist/pmcp/wifi-test.count"; }
+        run status; expect_out "Unit state: JAVA" "$oid: state JAVA"; expect_out "Android Auto: on" "$oid: its AA set is this card's set"
+        grep -q -e "earlier card" -e "unused JAR" "$W/out" && bad "$oid: an earlier package reported" || ok "$oid: its Java set is this card's set"
+        before=$(snapshot "$W/unit" | grep -v '/ramdisk/' | grep -v '/persist/pmcp/gem.log')
+        run map-install map-square-fps40; rc_is 0; expect_out "already installed" "$oid: 2 says already installed"
+        feat; rc_is 0
+        grep -q -e "PMCP_FEATURES_RESET_OK" -e "PMCP_JAVA_UPDATE_OK" "$W/out" && bad "$oid: 4 replaced or reset the set" || ok "$oid: 4 neither resets nor replaces"
+        run aa-install; rc_is 0
+        [ "$before" = "$(snapshot "$W/unit" | grep -v '/ramdisk/' | grep -v '/persist/pmcp/gem.log')" ] && ok "$oid: 2, 4 and 3 changed no file" || bad "$oid: 2, 4 or 3 changed files"
+        [ "$(cat "$W/unit/mnt/persist/pmcp/native-speedlimit-mode" 2>/dev/null)" = turnto ] && ok "$oid: speed-limit mode kept" || bad "$oid: speed-limit mode lost"
+        restore_exact "$oid: restore gives the exact factory tree"
+    done
 
     [ -s "$W/noexec" ] && { bad "pmcp.sh called a command the unit does not have ($(wc -l < "$W/noexec" | tr -d ' ') runs)"; sort -u "$W/noexec" | head -5 | sed 's/^/       | /'; } \
         || ok "no run of this card's pmcp.sh called a command missing on the unit (printf, tr, cut)"

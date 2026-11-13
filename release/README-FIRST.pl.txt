@@ -112,7 +112,9 @@ CZĘŚĆ 2 - W AUCIE
   Żeby usunąć wszystko: "8. Remove everything (back to factory files)", potem restart.
   "7. Status (read-only)" pokazuje, co jest zainstalowane.
 
-  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.6.0):
+  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.7.0):
+    Z v1.7.0: v1.7.1 ma w radiu te same pliki (zmienił się tylko instalator na komputerze).
+    Kroki 1-4 piszą "already installed" / "nothing changed": bez restartu i bez 5.
     1. Zrób KARTĘ 1 z tej paczki. W aucie: "1. Check card and unit (read-only)".
        Oczekiwane: PMCP_VERIFY_OK state=JAVA. "7. Status (read-only)" może pokazać
        "Route guidance system: old" i "packages of an earlier card: rglu" - tak ma być.
