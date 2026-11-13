@@ -8,7 +8,7 @@
 #   - the CarPlay logs saved by "CP save log" (pmcp.sh cp-log-save): /mnt/app/carplaymaps/logs/cp-log-*.txt;
 #   - pmcp's boot log, GEM button log and markers from /mnt/persist/pmcp (boot.log, gem.log, last-boot, the marker list).
 # Existing files on the card are never overwritten (a number is added). Nothing on the unit is changed or deleted:
-# "Delete saved logs" in GEM does that once the copies are checked on a computer.
+# "9. Delete saved logs" on the GEM main screen does that once the copies are checked on a computer.
 # Lessons of the rescue card apply: M.I.B.'s PATH, no action behind a redirect, the result line last.
 #
 #   pmcp-logs.sh MEDIUM
@@ -70,6 +70,7 @@ for f in "$LOGS"/cp-log-*.txt; do
     CP=$((CP + 1))
     copy_one "$f" "${f##*/}"
 done
+[ -f "$PERSIST/boot.log.1" ] && copy_one "$PERSIST/boot.log.1" pmcp-boot-log-1.txt
 [ -f "$PERSIST/boot.log" ] && copy_one "$PERSIST/boot.log" pmcp-boot-log.txt
 [ -f "$PERSIST/last-boot" ] && copy_one "$PERSIST/last-boot" pmcp-last-boot.txt
 # GEM button log (pmcp.sh: every button's output; the SD card is read-only in GEM), older half first

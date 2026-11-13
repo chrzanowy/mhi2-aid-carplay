@@ -228,9 +228,9 @@ wcześniej potwierdzony, ładuje się od razu; jeśli nie, też jest próbny. Po
 6. Opcjonalnie, tylko tutaj (przycisk 4 jej nie instaluje): **„On sl: native VW map speed limit in the AID road text
    (optional, output off until enabled)”**, zob. [16-native-speed-limits.md](../en/16-native-speed-limits.md).
 
-W `features_advanced` są też przyciski logów do wsparcia: **„CP save log: copy this start's CarPlay log to the unit (for
-the log card)”** i, gdy karta logów (karta 3) już je skopiowała, **„Delete saved logs, CarPlay and AA (after the log card
-copied them)”**.
+W `features_advanced` jest też przycisk logów do wsparcia: **„CP save log: copy this start's CarPlay log to the unit (for
+the log card)”**. Gdy karta logów (karta 3) już je skopiowała, usuń je na głównym ekranie przyciskiem **„9. Delete saved logs:
+CarPlay and Android Auto (after the log card copied them)”**.
 
 Jeśli mapa na AID wraca na kilka sekund do mapy VW około 46 s po starcie, naciśnij „CP save log” chwilę po jej powrocie:
 log zawiera wtedy kopię supervisora z mostu, który się zakończył (`last-bridge.log`). Linia

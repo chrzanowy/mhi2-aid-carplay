@@ -3,6 +3,17 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
+## Unreleased (release-candidate)
+
+- **One button deletes the saved logs:** "9. Delete saved logs: CarPlay and Android Auto (after the log card copied
+  them)" on the GEM main screen (`log-clear`; `aa-log-clear` stays as the older name). It replaces the two delete
+  buttons in `features_advanced` and `aa_advanced`. It deletes the AA and CarPlay logs, the recorded phone video, a
+  half-written AA switch file, `boot.log` and the older half of `gem.log`; the chosen AA output and the install markers
+  stay. "Logs full" messages point to it.
+- **`boot.log` is bounded:** lsd.sh appends a line at every start and never trimmed it, on the small `/mnt/persist`
+  (8 MB, shared with the unit's own settings). Every button now keeps it at ~2 x 16 KB (`boot.log.1` = the older half,
+  like `gem.log`); "CP save log" and the log card copy both halves.
+
 ## v1.7.1 (2026-11-13)
 
 Installer version `pmcp-0.7.1-mu1161-791-<build id>`. **Nothing changes in the car:** the cards put the same files on

@@ -80,8 +80,8 @@ Przy problemie z CarPlay: `features_advanced` → **„CP save log: copy this st
 card)”** → `PMCP_CP_LOG_SAVED file=logs/cp-log-N.txt`.
 
 W domu: karta 3 (logi) w trybie aktualizacji kopiuje logi Android Auto i CarPlay do `PMCP_LOGS/` na tej karcie (radio
-tylko czyta). Potem **„AA delete saved logs, AA and CarPlay (after the log card copied them)”** (`aa_advanced`; to samo
-co „Delete saved logs, CarPlay and AA (after the log card copied them)” w `features_advanced`).
+tylko czyta). Potem, na głównym ekranie, **„9. Delete saved logs: CarPlay and Android Auto (after the log card copied
+them)”**.
 
 ### Karta 3 (logi)
 

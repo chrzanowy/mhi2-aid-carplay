@@ -498,7 +498,7 @@ PY
         fi
         args=$(sed -n 's#^/bin/ksh /net/mmx/fs/sda0/pmcp/pmcp.sh ##p' "$m")
         case "$args" in
-            verify|status|restore|confirm|retry|aa-install|cp-log-save|"map-install map-square-fps40"|java-retry|java-confirm|java-update|aa-remove|aa-on|aa-confirm|aa-retry|aa-status|aa-log-save|aa-log-clear|rg-system-on|rg-system-off|rg-update|speedlimit-status|"speedlimit-mode turnto"|"speedlimit-mode street"|"speedlimit-mode off"|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
+            verify|status|restore|confirm|retry|aa-install|cp-log-save|log-clear|"map-install map-square-fps40"|java-retry|java-confirm|java-update|aa-remove|aa-on|aa-confirm|aa-retry|aa-status|aa-log-save|rg-system-on|rg-system-off|rg-update|speedlimit-status|"speedlimit-mode turnto"|"speedlimit-mode street"|"speedlimit-mode off"|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
             "aa-output direct"|"aa-output ring") ;;
             "aa-capture 60"|"aa-capture off")
                 case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) ;; *) bad "experimental button on a release card: $args" ;; esac ;;
@@ -517,15 +517,15 @@ PY
         && ok "main install button 2 is map-square-fps40" || bad "main install button"
     [ ! -e "$SDB/pmcp/menu/install-map-square-fps40.sh" ] && ok "no second install button for the main layout" || bad "install-map-square-fps40 button left"
     main=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    [ "$main" = "menu/verify.sh menu/map-install.sh menu/aa-install.sh menu/features-on.sh menu/confirm.sh menu/retry.sh menu/status.sh menu/restore.sh " ] \
-        && ok "main screen: 1 check, 2 CarPlay, 3 Android Auto, 4 features, 5 confirm, 6 try again, 7 status, 8 remove" || bad "main screen: $main"
+    [ "$main" = "menu/verify.sh menu/map-install.sh menu/aa-install.sh menu/features-on.sh menu/confirm.sh menu/retry.sh menu/status.sh menu/restore.sh menu/log-clear.sh " ] \
+        && ok "main screen: 1 check, 2 CarPlay, 3 Android Auto, 4 features, 5 confirm, 6 try again, 7 status, 8 remove, 9 delete saved logs" || bad "main screen: $main"
     labels=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | awk '/^script/{s=1;next} s&&/^    label/{print substr($0,14,1);s=0}' | tr -d '\n')
-    [ "$labels" = 12345678 ] && ok "main screen buttons numbered 1-8" || bad "main numbering: $labels"
+    [ "$labels" = 123456789 ] && ok "main screen buttons numbered 1-9" || bad "main numbering: $labels"
     scr=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,$p' | grep '^screen' | tr '\n' '|')
     [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen features_advanced pmcp_advanced|screen carplay_advanced pmcp_advanced|screen aa_advanced pmcp_advanced|" ] \
         && ok "screens: pmcp_stream_map_aid > pmcp_advanced > features / carplay / aa_advanced" || bad "screens: $scr"
     feat=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen carplay_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/log-clear.sh menu/speedlimit-status.sh menu/rg-system-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh ") ok "features_advanced: diagnostics, CarPlay log, speed-limit status only (mode on the page), RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
+    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/speedlimit-status.sh menu/rg-system-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh ") ok "features_advanced: diagnostics, CarPlay log, speed-limit status only (mode on the page), RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
     for _m in speedlimit-on speedlimit-cpi speedlimit-off; do
         [ ! -e "$SDB/pmcp/menu/$_m.sh" ] && ! grep -q "menu/$_m.sh" "$SDB/esd/Launcher-sda0.esd" && ok "no GEM button $_m (mode set on the page)" \
             || bad "GEM speed-limit mode button $_m still there"
@@ -545,13 +545,13 @@ PY
     aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen aa_advanced/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
     case "$v" in
     *-exp-*)
-        [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh menu/aa-capture-60.sh menu/aa-capture-off.sh " ] \
+        [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-remove.sh menu/aa-capture-60.sh menu/aa-capture-off.sh " ] \
             && ok "aa_advanced (experimental card): the release entries, then AA record on/off" || bad "aa_advanced: $aa"
         sed -n '/^screen pmcp_stream_map_aid/,/^screen aa_advanced/p' "$SDB/esd/Launcher-sda0.esd" | grep -qi 'experimental\|rg-aa' && bad "experimental outside aa_advanced" || ok "experimental entries only on aa_advanced"
         grep -qi 'rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says rg-aa" || ok "menu: no rg-aa" ;;
     *)
-        [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-log-clear.sh menu/aa-remove.sh " ] \
-            && ok "aa_advanced (release card): confirm, output direct/bridge, retry, status, log save/clear, remove; no AA install there" || bad "aa_advanced: $aa"
+        [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-remove.sh " ] \
+            && ok "aa_advanced (release card): confirm, output direct/bridge, retry, status, log save, remove (delete logs: main menu 9); no AA install there" || bad "aa_advanced: $aa"
         grep -qi 'experimental\|rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says experimental or rg-aa" || ok "menu: no 'experimental', no rg-aa"
         grep -q '^AAX_' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && bad "release card carries AAX_ keys" || ok "release card: no experimental AA set" ;;
     esac
@@ -1177,13 +1177,17 @@ PEOF
         && ok "log card: five logs copied, identical" || bad "log card copies: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
     tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" | head -1 | grep -q "^RESULT=OK copied=5 aa_logs=5 cp_logs=0$" && ok "log card: RESULT=OK" || bad "log card result: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
     : > "$U/carplaymaps/logs/._aa-log-1.txt"; mkdir -p "$U/carplaymaps/logs/odd"; : > "$U/carplaymaps/logs/odd/x"
-    : > "$U/carplaymaps/logs/aa-log-9.txt.pmcp-new"; echo "boot set=x" >> "$P/boot.log"
+    mkdir -p "$P"; : > "$U/carplaymaps/logs/aa-log-9.txt.pmcp-new"; echo "boot set=x" >> "$P/boot.log"; echo "boot set=old" > "$P/boot.log.1"
     : > "$P/aa-stream.h264"; : > "$P/aa-stream.h264.idx"
-    run aa-log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "logs deleted (also unknown files and a subdirectory)" || bad "logs left"
-    [ ! -e "$P/boot.log" ] && [ ! -e "$P/aa-stream.h264" ] && [ ! -e "$P/aa-stream.h264.idx" ] && ok "boot log and phone video deleted" || bad "left: $(ls "$P")"
-    run aa-log-clear; rc_is 0; expect_out "PMCP_AA_LOG_CLEAR_OK (nothing saved, nothing to delete)" "second press: OK, nothing to delete"
+    axnew=""; [ -e "$P/aa-extra.conf" ] || { axnew=1; echo "PMCP_AA_OUTPUT=direct" > "$P/aa-extra.conf"; }
+    : > "$P/aa-extra.conf.pmcp-new"; ax=$(h "$P/aa-extra.conf")
+    run log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "logs deleted (also unknown files and a subdirectory)" || bad "logs left"
+    [ ! -e "$P/boot.log" ] && [ ! -e "$P/boot.log.1" ] && [ ! -e "$P/aa-stream.h264" ] && [ ! -e "$P/aa-stream.h264.idx" ] && ok "boot log and phone video deleted" || bad "left: $(ls "$P")"
+    [ ! -e "$P/aa-extra.conf.pmcp-new" ] && [ "$(h "$P/aa-extra.conf")" = "$ax" ] && ok "log-clear: half-written AA switch file deleted, the chosen AA output kept" || bad "aa-extra.conf after log-clear"
+    [ -n "$axnew" ] && rm -f "$P/aa-extra.conf"
+    run aa-log-clear; rc_is 0; expect_out "PMCP_LOG_CLEAR_OK (nothing saved, nothing to delete)" "second press (older name aa-log-clear): OK, nothing to delete"
     mv "$U/carplaymaps/PMCP_VERSION" "$W/pv.keep"; mkdir -p "$U/carplaymaps/logs"; echo other > "$U/carplaymaps/logs/other-mod.log"
-    run aa-log-clear; rc_is 1; expect_out "AA_LOG_CLEAR_CARPLAYMAPS_IS_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" "carplaymaps not ours: refused"
+    run log-clear; rc_is 1; expect_out "LOG_CLEAR_CARPLAYMAPS_IS_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" "carplaymaps not ours: refused"
     [ -e "$U/carplaymaps/logs/other-mod.log" ] && ok "another mod's logs/ left alone" || bad "another mod's logs deleted"
     rm -rf "$U/carplaymaps/logs"; mv "$W/pv.keep" "$U/carplaymaps/PMCP_VERSION"
     # A152: the GEM button log on the unit ($PERSIST/gem.log; the SD card is read-only in GEM)
@@ -1194,14 +1198,21 @@ PEOF
     i=0; while [ $i -lt 120 ]; do rung aa-status; i=$((i + 1)); done
     s0=$(ls -ln "$P/gem.log" | awk '{print $5}'); s1=$(ls -ln "$P/gem.log.1" 2>/dev/null | awk '{print $5}')
     [ -n "$s1" ] && [ "$s0" -le 40000 ] && [ "$s1" -le 40000 ] && ok "gem.log bounded: $s0 + $s1 B" || bad "gem.log sizes $s0 / $s1"
-    rung aa-log-clear; rc_is 0; [ ! -e "$P/gem.log.1" ] && [ "$(grep -c '^===' "$P/gem.log")" = 1 ] && grep -q "aa-log-clear" "$P/gem.log" \
-        && ok "aa-log-clear: gem.log starts again with this press" || bad "gem.log after clear: $(head -2 "$P/gem.log")"
+    rung log-clear; rc_is 0; [ ! -e "$P/gem.log.1" ] && [ "$(grep -c '^===' "$P/gem.log")" = 1 ] && grep -q "log-clear" "$P/gem.log" \
+        && ok "log-clear: gem.log starts again with this press" || bad "gem.log after clear: $(head -2 "$P/gem.log")"
+    # boot.log (lsd.sh appends a line each start, never trimmed there): every button bounds it at ~2 x 16 KB
+    _i=0; while [ $_i -lt 300 ]; do echo "boot set=nai-12345678+np-12345678 use=yes jars=/mnt/app/carplaymaps/lsd/jars/pmcp-nai.jar:x"; _i=$((_i+1)); done > "$P/boot.log"
+    echo "boot set=newest" >> "$P/boot.log"; rm -f "$P/boot.log.1"; rung aa-status; rc_is 0
+    [ ! -e "$P/boot.log" ] && tail -1 "$P/boot.log.1" | grep -q "^boot set=newest$" && ok "boot.log over 16 KB moved to boot.log.1" || bad "boot.log rotation: $(ls -ln "$P" | grep boot)"
+    echo "boot set=after" > "$P/boot.log"; rung aa-status; rc_is 0; [ -s "$P/boot.log" ] && [ -s "$P/boot.log.1" ] && ok "small boot.log kept" || bad "small boot.log moved"
     echo "older" > "$P/gem.log.1"; rm -rf "$W/med3"; logcard
+    cmp -s "$P/boot.log.1" "$W/med3/PMCP_LOGS/pmcp-boot-log-1.txt" && cmp -s "$P/boot.log" "$W/med3/PMCP_LOGS/pmcp-boot-log.txt" \
+        && ok "log card: boot.log and boot.log.1 copied" || bad "log card boot.log: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
     cmp -s "$P/gem.log" "$W/med3/PMCP_LOGS/pmcp-gem-log.txt" && cmp -s "$P/gem.log.1" "$W/med3/PMCP_LOGS/pmcp-gem-log-1.txt" \
         && ok "log card: gem.log and gem.log.1 copied" || bad "log card gem.log: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
     rm -rf "$W/u2"; mkdir -p "$W/u2"; PMCP_TEST_GEMLOG= PMCP_TEST_ROOT="$W/u2" $SH "$W/sd/pmcp.sh" status > /dev/null 2>&1
     [ ! -e "$W/u2/mnt/persist/pmcp" ] && ok "gem.log: no persist dir made on an untouched unit" || bad "persist made by status"
-    rm -rf "$W/u2"; rm -f "$P"/gem.log*
+    rm -rf "$W/u2"; rm -f "$P"/gem.log* "$P"/boot.log*
     rm -rf "$W/med3"; logcard
     grep -q "^RESULT=NO_LOGS" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card without logs: RESULT=NO_LOGS" || bad "empty log card result"
     navlog 1 1; run aa-log-save; rc_is 0
@@ -1420,7 +1431,7 @@ PEOF
     rm -rf "$W/med3"; logcard
     [ "$(ls "$W/med3/PMCP_LOGS" | grep -c '^cp-log-[1-5].txt$')" = 5 ] && cmp -s "$L2" "$W/med3/PMCP_LOGS/cp-log-2.txt" && ok "log card: CarPlay logs copied" || bad "log card: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
     grep -q "^RESULT=OK copied=5 aa_logs=0 cp_logs=5$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: RESULT=OK with cp_logs=5" || bad "log card result"
-    run aa-log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "Delete saved logs removes the CarPlay logs" || bad "cp logs left"
+    run log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "main menu 9 removes the CarPlay logs" || bad "cp logs left"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
     echo "[37] main menu 3 and 4 with unsupported Android Auto AND unsupported Java files at once (no dead end)"
     fresh_unit; factory=$(snapshot "$W/unit")

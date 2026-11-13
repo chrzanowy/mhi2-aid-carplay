@@ -178,25 +178,27 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
      first, then 5 again”);
    - „6. Try again: the next start is a new trial” → `retry` (obie próby, która nie jest potwierdzona);
    - „7. Status (read-only)”, „8. Remove everything (back to factory files)” → `restore`;
-   - podekran `pmcp_advanced` („9. Advanced” na ekranie) z trzema podekranami:
+   - „9. Delete saved logs: CarPlay and Android Auto (after the log card copied them)” (`log-clear`), jedyny przycisk
+     kasowania: logi AA i CarPlay, nagrane wideo z telefonu, niedokończony plik przełącznika AA, `boot.log` i `boot.log.1`,
+     starsza połowa `gem.log`; wybrane wyjście AA i wszystkie znaczniki instalacji zostają;
+   - podekran `pmcp_advanced` („Advanced” na ekranie, pod 9) z trzema podekranami:
      `features_advanced`: „0. Diagnostics (read-only, photograph the screen)” (działa nawet wtedy, gdy `pmcp.sh`
      zatrzyma się na self teście), „Start timeline: …”, „RG last maneuver: …” (co wysłał iPhone i jaką strzałkę VW daje
      ścisłe mapowanie; gdzie pokazuje main 0, paczka `rg` może jeszcze pokazać strzałkę zastępczą), „Navigation
      diagnostics: …”, „CP save log: copy this start's CarPlay log to the unit (for the log card)” (`cp-log-save`),
-     „Delete saved logs, CarPlay and AA (after the log card copied them)”, cztery przyciski „Speed limit …”, „Route
+     cztery przyciski „Speed limit …”, „Route
      guidance system on (iAP2 driver, iap2.cfg, reader)”, „Route guidance system off (factory iAP2 driver and
      iap2.cfg)”, „Route guidance system update (driver and reader of this card, RG stays on)” (`rg-update`), „Java
      update: packages of an earlier card -> this card's (rglu -> rg)” (`java-update`) oraz „On …” / „Off …” dla każdej
      paczki (nai, np, rg, zoom, dn i opcjonalnej `sl`, którą instaluje tylko ten ekran);
      `carplay_advanced`: „Install map layout: <wariant>” i „Switch map layout to: <wariant>” (`switch`);
      `aa_advanced`: „AA Confirm: AA works (only in the start of the AA trial; 5 does the same)”, „AA Try again: the next
-     AA connection is a new trial”, „AA status and stream analysis (read-only)”, „AA save log: …”, „AA delete saved logs,
-     AA and CarPlay …”, „AA remove (factory Android Auto back)”. Karty eksperymentalne (nie wydania) dodają swoje
+     AA connection is a new trial”, „AA status and stream analysis (read-only)”, „AA save log: …”, „AA remove (factory Android Auto back)”. Karty eksperymentalne (nie wydania) dodają swoje
      eksperymentalne oprogramowanie Android Auto tylko na tym ekranie.
    Żadna akcja nie wymaga pliku odblokowania (do v1.1.0 akcje Java i systemu prowadzenia wymagały `pmcp/ODBLOKUJ_ETAP_B`).
 3. Wynik jest na ekranie GEM. Karta SD jest w GEM tylko do odczytu (nawet `mount -uw` się nie udaje), więc logu nie da się
    zapisać na kartę. Wynik każdego przycisku trafia więc do radia: `/mnt/persist/pmcp/gem.log` (najwyżej ~2 x 32 KB,
-   starsza połowa w `gem.log.1`; tylko gdy pmcp już utworzył `/mnt/persist/pmcp`), kopiuje go karta logów, „AA delete saved
+   starsza połowa w `gem.log.1`; tylko gdy pmcp już utworzył `/mnt/persist/pmcp`), kopiuje go karta logów, „9. Delete saved
    logs” go czyści, „Remove everything” usuwa. Przyciski tylko do odczytu nie zmieniają niczego zainstalowanego; ich wynik
    też jest dopisywany do gem.log. Gdy nie da się zapisać nigdzie: `PMCP_WARN=NO_LOG_WRITABLE`, akcja działa dalej. **Rób zdjęcia ekranu.** Jeśli karta jest zapisywalna, log trafia też do `/pmcp/log/pmcp-<akcja>-<pid>.log`.
 

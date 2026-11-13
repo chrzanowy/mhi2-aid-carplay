@@ -229,9 +229,9 @@ makes a new set → restart → trial start → test → "5. Confirm". "Off ..."
 6. Optional, only here (button 4 does not install it): **"On sl: native VW map speed limit in the AID road text (optional,
    output off until enabled)"**, see [16-native-speed-limits.md](16-native-speed-limits.md).
 
-`features_advanced` also has the log buttons for support: **"CP save log: copy this start's CarPlay log to the unit (for
-the log card)"** and, after the log card (card 3) copied them, **"Delete saved logs, CarPlay and AA (after the log card
-copied them)"**.
+`features_advanced` also has the log button for support: **"CP save log: copy this start's CarPlay log to the unit (for
+the log card)"**. After the log card (card 3) copied the logs, delete them on the main screen with **"9. Delete saved logs:
+CarPlay and Android Auto (after the log card copied them)"**.
 
 If the AID map drops back to the VW map for a few seconds about 46 s after a start, press "CP save log" shortly after
 it came back: the log then holds the supervisor's copy of the bridge that ended (`last-bridge.log`). A line

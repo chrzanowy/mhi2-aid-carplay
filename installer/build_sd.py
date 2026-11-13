@@ -402,13 +402,14 @@ def menu_entries():
            ("confirm", "confirm", "5. Confirm: everything works (in the first start after 3 or 4)"),
            ("retry", "retry", "6. Try again: the next start is a new trial"),
            ("status", "status", "7. Status (read-only)"),
-           ("restore", "restore", "8. Remove everything (back to factory files)")]
+           ("restore", "restore", "8. Remove everything (back to factory files)"),
+           # the one button that deletes what pmcp saved for the log card, CarPlay and Android Auto alike (user, 2026-11-13)
+           ("log-clear", "log-clear", "9. Delete saved logs: CarPlay and Android Auto (after the log card copied them)")]
     feat = [("diag", None, "0. Diagnostics (read-only, photograph the screen)"),
             ("timeline", TIMELINE, "Start timeline: seconds from unit start to CarPlay, MOST, navigation (read-only)"),
             ("rglast", RGLAST, "RG last maneuver: what the iPhone sent and which VW arrow it gives (read-only)"),
             ("navdiag", NAVDIAG, "Navigation diagnostics: why the VW navigation does not start (read-only)"),
             ("cp-log-save", "cp-log-save", "CP save log: copy this start's CarPlay log to the unit (for the log card)"),
-            ("log-clear", "aa-log-clear", "Delete saved logs, CarPlay and AA (after the log card copied them)"),
             # package sl (On sl, then 5. Confirm), then one of these; the mode is kept across starts
             # the speed-limit mode is set on the unit: App-Connect > Settings > AID navigation configuration (package ui); pmcp.sh
             # speedlimit-mode stays for the tests and the command line
@@ -433,7 +434,6 @@ AA_MENU = [("aa-confirm", "aa-confirm", "AA Confirm: AA works (only in the start
            ("aa-retry", "aa-retry", "AA Try again: the next AA connection is a new trial"),
            ("aa-status", "aa-status", "AA status and stream analysis (read-only)"),
            ("aa-log-save", "aa-log-save", "AA save log: copy this start's AA log to the unit (for the log card)"),
-           ("aa-log-clear", "aa-log-clear", "AA delete saved logs, AA and CarPlay (after the log card copied them)"),
            ("aa-remove", "aa-remove", "AA remove (factory Android Auto back)")]
 # experimental builds only: their extra Android Auto software (empty on release cards)
 AA_EXP_MENU = [] if "-exp-" not in PMCP_BASE_VERSION else [
@@ -471,7 +471,7 @@ def esd_block(version, top, feat, cp, aa):
            '#', '#' * 91, 'screen pmcp_stream_map_aid =>M.I.B.<=', '']
     out += kv(version) + kv("Every button checks all files first and changes nothing on a mismatch. Photograph each result.")
     out += kv("2, 3 and 4 also replace versions this card does not support. Then restart (hold the volume knob ~10 s).")
-    out += kv("9. Advanced: pmcp_advanced (below): single features, map layouts, Android Auto details, logs.")
+    out += kv("Advanced: pmcp_advanced (below 9): single features, map layouts, Android Auto details, saving logs.")
     for n, _, l in top:
         out += sc(n, l)
     out += ['screen pmcp_advanced pmcp_stream_map_aid', '']

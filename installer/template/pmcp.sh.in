@@ -25,7 +25,8 @@
 #   pmcp.sh aa-retry            the next AA connection is a new trial
 #   pmcp.sh aa-status           read-only: AA state, the last session's stream analysis, the manoeuvres for rg
 #   pmcp.sh aa-log-save         copy this start's AA log from /ramdisk to carplaymaps/logs (for the log card)
-#   pmcp.sh aa-log-clear        delete the saved AA and CarPlay logs, the recorded phone video and the boot log
+#   pmcp.sh log-clear           main menu 9: delete the saved CarPlay and AA logs, the recorded phone video, the boot log
+#                               and the older half of the GEM log (aa-log-clear: the same, older name)
 #   pmcp.sh aa-output direct|ring  AA 1.0: the AA picture through pmcp's own MOST writer (direct, the set's default) or
 #                               the CarPlay bridge (ring, fallback); from the next AA connection, no trial (user
 #                               decision A153; the on-unit settings page writes the same line of aa-extra.conf)
@@ -148,7 +149,7 @@ LOG="$LOGDIR/pmcp-$ACTION-$$.log"
 
 # A152: the SD log never works in GEM (read-only card), so every button's output also goes to the unit:
 # $PERSIST/gem.log, at most ~2 x 32 KB (gem.log.1 = the older half). Only once pmcp made $PERSIST (a fresh unit stays
-# untouched); restore removes $PERSIST and with it this log; the log card copies it, aa-log-clear deletes it.
+# untouched); restore removes $PERSIST and with it this log; the log card copies it, log-clear (main menu 9) empties it.
 GEMLOG="${PMCP_TEST_GEMLOG:-$PERSIST/gem.log}"
 if [ -d "${GEMLOG%/*}" ]; then
     _g_l=`ls -ln "$GEMLOG" 2>/dev/null` && set -- $_g_l
@@ -158,6 +159,12 @@ if [ -d "${GEMLOG%/*}" ]; then
 else
     GEMLOG=""
 fi
+# boot.log: lsd.sh appends one line each start and never trims it, on the small /mnt/persist (8 MB, shared with the
+# unit's own settings); bounded here at ~2 x 16 KB (boot.log.1 = the older half), like gem.log
+set --
+_b_l=`ls -ln "$PERSIST/boot.log" 2>/dev/null` && set -- $_b_l
+case "${5:-0}" in *[!0-9]*) ;; *) if [ "${5:-0}" -gt 16384 ]; then   # bounded even when the move fails
+    mv -f "$PERSIST/boot.log" "$PERSIST/boot.log.1" 2>/dev/null || rm -f "$PERSIST/boot.log" 2>/dev/null; fi ;; esac
 set --
 [ -n "$LOG" ] || [ -n "$GEMLOG" ] || echo "PMCP_WARN=NO_LOG_WRITABLE (photograph the screen)"
 
@@ -988,7 +995,7 @@ do_aa_log_save() {
     _l_n=1
     while [ -e "$ROOT/logs/aa-log-$_l_n.txt" ]; do
         _l_n=$((_l_n + 1))
-        [ $_l_n -le $AA_LOG_MAX ] || fail "AA_LOGS_FULL_${AA_LOG_MAX}_USE_THE_LOG_CARD_THEN_AA_DELETE_LOGS"
+        [ $_l_n -le $AA_LOG_MAX ] || fail "AA_LOGS_FULL_${AA_LOG_MAX}_USE_THE_LOG_CARD_THEN_MAIN_MENU_9_DELETE_SAVED_LOGS"
     done
     remount_rw
     mkdir -p "$ROOT/logs" || fail "AA_LOG_DIR_FAILED"
@@ -1017,36 +1024,37 @@ do_aa_log_save() {
     flush
     aa_nav_counts
     say "PMCP_AA_LOG_SAVED file=logs/aa-log-$_l_n.txt bytes=$_l_have nav_0x8006=$_c_6 nav_0x8007=$_c_7"
-    say "To the computer: log card (card 3) in update mode. Up to $AA_LOG_MAX logs are kept; AA delete logs empties them."
+    say "To the computer: log card (card 3) in update mode. Up to $AA_LOG_MAX logs are kept; main menu 9 deletes them."
 }
 
 # Everything pmcp saves for the log card: the whole logs/ directory (AA and CarPlay logs, temp files, anything else in
-# it), the recorded phone video, the GEM button log (gem.log emptied: this press is its first entry) and pmcp's boot log (lsd.sh appends a line each start, so it is never needed back).
+# it), the recorded phone video, a half-written AA switch file (aa-extra.conf.pmcp-new; aa-extra.conf itself is the chosen
+# AA output and stays, as do the trial and state markers), the GEM button log (gem.log emptied: this press is its first entry) and pmcp's boot log (lsd.sh appends a line each start, so it is never needed back).
 # Nothing to delete is not an error (A152: a second press showed a FAIL).
-do_aa_log_clear() {
+do_log_clear() {
     selftest
     firmware_identity
     detect_state
     # carplaymaps/logs only when carplaymaps is ours (review A153: never another mod's directory)
     if [ -e "$ROOT/logs" ] && ! pmcp_root; then
-        fail "AA_LOG_CLEAR_CARPLAYMAPS_IS_NOT_A_PMCP_INSTALL_NOTHING_CHANGED"
+        fail "LOG_CLEAR_CARPLAYMAPS_IS_NOT_A_PMCP_INSTALL_NOTHING_CHANGED"
     fi
     _c_any=""
-    for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/boot.log" "$PERSIST/gem.log.1"; do [ -e "$_c_f" ] && _c_any=1; done
+    for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/boot.log" "$PERSIST/boot.log.1" "$PERSIST/gem.log.1"; do [ -e "$_c_f" ] && _c_any=1; done
     if [ -z "$_c_any" ]; then
         aa_gemlog_restart
-        say "PMCP_AA_LOG_CLEAR_OK (nothing saved, nothing to delete)"
+        say "PMCP_LOG_CLEAR_OK (nothing saved, nothing to delete)"
         return 0
     fi
     remount_rw
     rm -rf "${ROOT:?}/logs" 2>/dev/null
-    rm -f "$PERSIST"/aa-stream.h264* "$PERSIST/boot.log" "$PERSIST/gem.log.1" 2>/dev/null
-    for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/boot.log" "$PERSIST/gem.log.1"; do
-        [ -e "$_c_f" ] && fail "AA_LOG_CLEAR_FAILED_${_c_f##*/}"
+    rm -f "$PERSIST"/aa-stream.h264* "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/boot.log" "$PERSIST/boot.log.1" "$PERSIST/gem.log.1" 2>/dev/null
+    for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/boot.log" "$PERSIST/boot.log.1" "$PERSIST/gem.log.1"; do
+        [ -e "$_c_f" ] && fail "LOG_CLEAR_FAILED_${_c_f##*/}"
     done
     aa_gemlog_restart   # only after the deletes: a failure above keeps the button history that explains it
     flush
-    say "PMCP_AA_LOG_CLEAR_OK"
+    say "PMCP_LOG_CLEAR_OK"
 }
 
 # gem.log starts again with this press (its header written again). Redirects on echo only: a failed redirect on the
@@ -1516,7 +1524,7 @@ do_cp_log_save() {
     _l_n=1
     while [ -e "$ROOT/logs/cp-log-$_l_n.txt" ]; do
         _l_n=$((_l_n + 1))
-        [ $_l_n -le $CP_LOG_MAX ] || fail "CP_LOGS_FULL_${CP_LOG_MAX}_USE_THE_LOG_CARD_THEN_DELETE_SAVED_LOGS"
+        [ $_l_n -le $CP_LOG_MAX ] || fail "CP_LOGS_FULL_${CP_LOG_MAX}_USE_THE_LOG_CARD_THEN_MAIN_MENU_9_DELETE_SAVED_LOGS"
     done
     remount_rw
     mkdir -p "$ROOT/logs" || fail "CP_LOG_DIR_FAILED"
@@ -1530,6 +1538,7 @@ do_cp_log_save() {
            echo "--- HMI_BOOT: `cat "$ROOT/HMI_BOOT" 2>/dev/null`"
            echo "--- markers: `ls "$PERSIST" 2>/dev/null`"
            echo "--- last-boot: `cat "$PERSIST/last-boot" 2>/dev/null`"
+           echo "--- boot.log.1 (older)"; cat "$PERSIST/boot.log.1" 2>/dev/null
            echo "--- boot.log"; cat "$PERSIST/boot.log" 2>/dev/null
            echo "--- carplay-cluster-supervisor.log"; cat "$RAMDISK/carplay-cluster-supervisor.log" 2>/dev/null
            # the supervisor's copy of the last exited bridge / supervisor run (e.g. "MOST write failed: ..." at boot)
@@ -1551,7 +1560,7 @@ do_cp_log_save() {
     flush
     _l_sup=no; [ -s "$RAMDISK/carplay-cluster-supervisor.log" ] && _l_sup=yes
     say "PMCP_CP_LOG_SAVED file=logs/cp-log-$_l_n.txt bytes=$_l_have supervisor_log=$_l_sup"
-    say "To the computer: log card (card 3) in update mode. Up to $CP_LOG_MAX CarPlay logs are kept."
+    say "To the computer: log card (card 3) in update mode. Up to $CP_LOG_MAX CarPlay logs are kept; main menu 9 deletes them."
 }
 
 # stage_set_files "names" -> stages HMI_BOOT.pmcp-new in ROOT (ids from the manifest), checks it reads back
@@ -2039,7 +2048,7 @@ case "$ACTION" in
     aa-retry)      do_aa_retry ;;
     aa-status)     do_aa_status ;;
     aa-log-save)   do_aa_log_save ;;
-    aa-log-clear)  do_aa_log_clear ;;
+    log-clear|aa-log-clear) do_log_clear ;;
     aa-on-exp)     do_aa_install gammax ;;
     aa-output)     do_aa_output ;;
     aa-capture)    do_aa_capture ;;

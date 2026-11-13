@@ -181,25 +181,26 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
      again");
    - "6. Try again: the next start is a new trial" → `retry` (both trials, whichever is not confirmed);
    - "7. Status (read-only)", "8. Remove everything (back to factory files)" → `restore`;
-   - sub-screen `pmcp_advanced` ("9. Advanced" on the screen) with three sub-screens:
+   - "9. Delete saved logs: CarPlay and Android Auto (after the log card copied them)" (`log-clear`), the only delete
+     button: the AA and CarPlay logs, the recorded phone video, a half-written AA switch file, `boot.log` and
+     `boot.log.1`, the older half of `gem.log`; the chosen AA output and every install marker stay;
+   - sub-screen `pmcp_advanced` ("Advanced" on the screen, below 9) with three sub-screens:
      `features_advanced`: "0. Diagnostics (read-only, photograph the screen)" (works even when `pmcp.sh` stops at its
      self test), "Start timeline: …", "RG last maneuver: …" (what the iPhone sent and which VW arrow the strict mapping
      gives; where it shows main 0 the `rg` package may still show a fallback arrow), "Navigation diagnostics: …", "CP save
-     log: copy this start's CarPlay log to the unit (for the log card)" (`cp-log-save`), "Delete saved logs, CarPlay and AA
-     (after the log card copied them)", the four "Speed limit …" buttons, "Route guidance system on (iAP2 driver,
+     log: copy this start's CarPlay log to the unit (for the log card)" (`cp-log-save`), the four "Speed limit …" buttons, "Route guidance system on (iAP2 driver,
      iap2.cfg, reader)", "Route guidance system off (factory iAP2 driver and iap2.cfg)", "Route guidance system update
      (driver and reader of this card, RG stays on)" (`rg-update`), "Java update: packages of an earlier card -> this
      card's (rglu -> rg)" (`java-update`), and "On …" / "Off …" for each package (nai, np, rg, zoom, dn, and the optional
      `sl`, which only this screen installs);
      `carplay_advanced`: "Install map layout: <variant>" and "Switch map layout to: <variant>" (`switch`);
      `aa_advanced`: "AA Confirm: AA works (only in the start of the AA trial; 5 does the same)", "AA Try again: the next
-     AA connection is a new trial", "AA status and stream analysis (read-only)", "AA save log: …", "AA delete saved logs,
-     AA and CarPlay …", "AA remove (factory Android Auto back)". Experimental cards (not releases) add their experimental
+     AA connection is a new trial", "AA status and stream analysis (read-only)", "AA save log: …", "AA remove (factory Android Auto back)". Experimental cards (not releases) add their experimental
      Android Auto software only on this screen.
    No action needs an unlock file (until v1.1.0 the Java and route guidance actions needed `pmcp/ODBLOKUJ_ETAP_B`).
 3. The result is on the GEM screen. The SD card is read-only in GEM (even `mount -uw` fails), so the log cannot be written to the
    card. Every button's output therefore goes to the unit: `/mnt/persist/pmcp/gem.log` (at most ~2 x 32 KB, the older half in
-   `gem.log.1`; only once pmcp has made `/mnt/persist/pmcp`); the log card copies it, "AA delete saved logs" empties it,
+   `gem.log.1`; only once pmcp has made `/mnt/persist/pmcp`); the log card copies it, "9. Delete saved logs" empties it,
    "Remove everything" removes it. Read-only buttons change nothing installed; their output is appended to gem.log too. When
    nothing is writable: `PMCP_WARN=NO_LOG_WRITABLE`, the action carries on.
    **Photograph the screen.** If the card is writable, the log also goes to `/pmcp/log/pmcp-<action>-<pid>.log`.
