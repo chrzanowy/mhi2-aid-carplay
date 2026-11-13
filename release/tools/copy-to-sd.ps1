@@ -77,11 +77,13 @@ try {
     Say "    2 = make CARD 2, RESCUE  (make this one first; only for emergencies, it starts by itself)"
     Say "    1 = make CARD 1, INSTALL (used from the green menu in the car)"
     Say "    3 = re-arm CARD 2 after it was used (shows the result of its last run)"
+    if (Test-Path -LiteralPath (Join-Path $Here 'card3-logs')) { Say "    4 = make CARD 3, LOGS    (copies saved logs from the unit to the card; it starts by itself)" }
     $choice = Ask "Type 1, 2 or 3 and press Enter"
     if ($choice -eq '3') { RearmFlow }
     switch ($choice) {
         '1' { $Src = Join-Path $Here 'card1-install'; $Man = 'PMCP_CARD_MANIFEST.txt'; $Name = 'CARD 1 (INSTALL)'; $Label = 'INSTALL' }
         '2' { $Src = Join-Path $Here 'card2-rescue'; $Man = 'PMCP_RESCUE_MANIFEST.txt'; $Name = 'CARD 2 (RESCUE)'; $Label = 'RESCUE - DO NOT INSERT' }
+        '4' { $Src = Join-Path $Here 'card3-logs'; $Man = 'PMCP_LOGS_MANIFEST.txt'; $Name = 'CARD 3 (LOGS)'; $Label = 'LOGS - INSERT ONLY TO COPY LOGS' }
         default { Fail "Please type 1, 2 or 3." "Start the helper again." }
     }
     if (-not (Test-Path -LiteralPath (Join-Path $Src $Man))) {

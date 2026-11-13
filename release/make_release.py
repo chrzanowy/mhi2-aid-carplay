@@ -61,16 +61,27 @@ def main():
     if (build / "card1-install/Swdlautorun.txt").exists() or (build / "card1-install/pmcp/ODBLOKUJ_ETAP_B").exists():
         sys.exit("card 1 must not be armed or unlocked")
     files = {}   # path in zip -> (bytes, executable)
-    for name, manifest in CARDS.items():
+    cards = dict(CARDS)
+    # a beta profile (not MU1161): its own README-FIRST (BETA.md in plain text) and the log card, which the tester needs
+    beta = "-mu1161-" not in version
+    if beta:
+        if not (build / "card3-logs/PMCP_LOGS_MANIFEST.txt").exists() or not (build / "card3-logs/Swdlautorun.txt").exists():
+            sys.exit("beta package: build/card3-logs (armed log card of this profile) is missing")
+        cards["card3-logs"] = "PMCP_LOGS_MANIFEST.txt"
+    for name, manifest in cards.items():
         n = check_card(build / name, manifest)
         print("%s: %d files ok" % (name, n))
         for p in (build / name).rglob("*"):
             if p.is_file():
                 files["%s/%s" % (name, p.relative_to(build / name).as_posix())] = (p.read_bytes(), False)
-    readme = (HERE / "README-FIRST.txt").read_text().replace("@@VERSION@@", version)
+    readme = (HERE / ("README-FIRST-BETA.txt" if beta else "README-FIRST.txt")).read_text().replace("@@VERSION@@", version)
     files["README-FIRST.txt"] = (readme.replace("\n", "\r\n").encode("ascii"), False)   # opens in Notepad too
-    readme_pl = (HERE / "README-FIRST.pl.txt").read_text(encoding="utf-8").replace("@@VERSION@@", version)
-    files["README-FIRST.pl.txt"] = (readme_pl.replace("\n", "\r\n").encode("utf-8"), False)   # Polish letters: UTF-8
+    if beta:
+        files["docs/BETA.md"] = ((PROJ / "BETA.md").read_bytes(), False)
+        files["docs/BETA-CHANGELOG.md"] = ((PROJ / "BETA-CHANGELOG.md").read_bytes(), False)
+    else:
+        readme_pl = (HERE / "README-FIRST.pl.txt").read_text(encoding="utf-8").replace("@@VERSION@@", version)
+        files["README-FIRST.pl.txt"] = (readme_pl.replace("\n", "\r\n").encode("utf-8"), False)   # Polish letters: UTF-8
     files["Copy-to-SD-Windows.bat"] = ((HERE / "Copy-to-SD-Windows.bat").read_bytes(), False)
     files["Copy-to-SD-macOS.command"] = ((HERE / "Copy-to-SD-macOS.command").read_bytes(), True)
     files["tools/copy-to-sd.ps1"] = ((HERE / "tools/copy-to-sd.ps1").read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"), False)
