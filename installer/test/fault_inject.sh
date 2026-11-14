@@ -8,6 +8,7 @@
 #   - state is STOCK/VIDEO/JAVA/PARTIAL (never UNKNOWN), and restore (or nothing, for STOCK) gives the factory tree.
 #   fault_inject.sh SD_BUILD_DIR SHELL
 #   PMCP_FAULT_SCOPE=speedlimit runs native-limit actions with one retained companion package.
+#   PMCP_FAULT_SCOPE=bridge (experimental cards with pmcp-most): only the MOST bridge switch chain.
 #   PMCP_PROFILE=MU1161 (default): firmware profile (profiles/<ID>/) whose backup folder and lsd.jxe size the unit copy uses.
 #   PMCP_FAULT_QUICK=1: own chain only, no replay cross-check (daily); PMCP_FAULT_JOBS=N parallel workers (default 6).
 set -u
@@ -135,6 +136,15 @@ case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) XAA+=("map-install map-s
 grep -q '^AAX_FEEDER ' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && \
     XAA+=("map-install map-square-fps40" "aa-install" "aa-on-exp" "aa-output direct" "aa-install" "aa-on-exp" "aa-remove" "aa-on-exp" "restore")
 OWN+=("${XAA[@]}")
+# experimental cards: the MOST bridge switch (bridge mathsls|pmcp-most); the supervisor's path must always hold one of the
+# two verified bridges and dio_manager one of the two verified wrappers
+MAN=$(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh")
+msha() { echo "$MAN" | sed -n "s/^$1 \([0-9a-f]*\) .*/\1/p"; }
+BR_M=$(msha BRIDGE); BR_P=$(msha PMCP_MOST); WR_M=$(msha WRAPPER); WR_P=$(msha PMCP_MOST_WRAPPER)
+XBR=()
+[ -n "$BR_P" ] && XBR=("map-install map-square-fps40" "aa-install" "bridge pmcp-most" "bridge mathsls" "bridge pmcp-most" \
+    "java-on nai" "bridge mathsls" "bridge pmcp-most" "restore")
+OWN+=("${XBR[@]}")
 # earlier versions made from this card (A188): java-update and 4 over an earlier np and a renamed rg, 3 over an earlier
 # AA set (fx:aa-unknown is "old" now: our wrapper, the factory gal copy, a well-formed AA_BOOT)
 OLDV=("install map-square-fps40" "rg-system-on" "java-on nai" "java-on np" "java-on rg" "java-on sl" "speedlimit-mode turnto" \
@@ -142,6 +152,10 @@ OLDV=("install map-square-fps40" "rg-system-on" "java-on nai" "java-on np" "java
 CHAIN=("${OWN[@]}" "${OLDV[@]}")
 # quick mode (daily work): the card's own actions only; the full run (earlier cards, replay cross-check) before RC
 [ "${PMCP_FAULT_QUICK:-0}" = 1 ] && CHAIN=("${OWN[@]}")
+if [ "${PMCP_FAULT_SCOPE:-all}" = bridge ]; then
+    [ -n "$BR_P" ] || { echo "PMCP_FAULT_SCOPE=bridge: this card has no pmcp-most"; exit 99; }
+    CHAIN=("${XBR[@]}")
+fi
 if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
     # turnto needs rg in the set (rg writes TurnToInfo since v1.4); street (CurrentPositionInfo trial) does not
     CHAIN=("install map-clean" "rg-system-on" "java-on rg" "java-on sl" "speedlimit-mode turnto" "speedlimit-mode street" \
@@ -237,6 +251,26 @@ one_target() {
                 if grep -q "PMCP_FAIL" "$W/out" && ! grep -q "PMCP_FAIL=.*_ALREADY_" "$W/out"; then
                     bad "[$target] kill@$n ($killed): pressing it again did not finish: $(grep PMCP_FAIL "$W/out")"
                 fi
+                rm -rf "$W/unit"; mv "$W/unit.k" "$W/unit" ;;
+        esac
+        case "$target" in
+            "bridge "*)
+                # the supervisor's path holds a complete verified bridge and dio_manager a verified executable wrapper,
+                # whatever the moment of the power loss; the same button pressed again finishes the switch
+                _ab=$(shasum -a 256 < "$U/carplaymaps/altscreen-most-bridge" 2>/dev/null | cut -d' ' -f1)
+                { [ "$_ab" = "$BR_M" ] || [ "$_ab" = "$BR_P" ]; } && [ -x "$U/carplaymaps/altscreen-most-bridge" ] \
+                    || bad "[$target] kill@$n ($killed): bridge at the supervisor's path missing or of another hash (${_ab:-none})"
+                _dw=$(shasum -a 256 < "$U/eso/bin/apps/dio_manager" | cut -d' ' -f1)
+                { [ "$_dw" = "$WR_M" ] || [ "$_dw" = "$WR_P" ]; } && [ -x "$U/eso/bin/apps/dio_manager" ] \
+                    || bad "[$target] kill@$n ($killed): dio_manager is not one of the two wrappers ($_dw)"
+                rm -rf "$W/rerun"; cp -Rp "$W/unit" "$W/rerun"; mv "$W/unit" "$W/unit.k"; mv "$W/rerun" "$W/unit"
+                run $target; _again=$(grep "PMCP_BRIDGE_OK\|PMCP_FAIL" "$W/out")
+                _ab=$(shasum -a 256 < "$U/carplaymaps/altscreen-most-bridge" | cut -d' ' -f1)
+                case "$target" in *pmcp-most) _want=$BR_P ;; *) _want=$BR_M ;; esac
+                run status
+                case "$_again" in PMCP_BRIDGE_OK*) ;; *) _ab="not finished: $_again" ;; esac
+                [ "$_ab" = "$_want" ] && ! grep -q interrupted "$W/out" \
+                    || bad "[$target] kill@$n ($killed): pressing it again did not finish ($_ab)"
                 rm -rf "$W/unit"; mv "$W/unit.k" "$W/unit" ;;
         esac
         # Android Auto must never be left dead: gal is the factory file, or a wrapper with a verified factory copy

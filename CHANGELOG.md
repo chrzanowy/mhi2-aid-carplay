@@ -3,6 +3,17 @@
 All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro MHI2 **MU1161**, train
 `MHI2_ER_VWG13_P4512`, AID part 791. Installer versions are `pmcp-<x.y.z>-mu1161-791-<build id>`.
 
+## Unreleased (experimental)
+
+- **Own MOST bridge, switchable (experimental cards only):** the pmcp-most build of the CarPlay MOST bridge (`bridge/`)
+  ships next to mathsls's bridge. GEM `aa_advanced`: "Bridge: use pmcp-most (experimental, new MOST bridge; from the
+  next phone connection)" and "Bridge: use mathsls (default MOST bridge; from the next phone connection)"; no card
+  confirm, the mathsls supervisor starts the chosen binary at the next phone connection. With pmcp-most the dio_manager
+  wrapper also writes the MOST contract owner (`src=wired kind=proxy`) and `wired.session` (from the next unit start).
+  "7. Status" shows the active bridge and its sha8; "CP save log" adds the bridge log and the contract files. Default and
+  "8. Remove everything" unchanged. Release cards: no change (same `pmcp.sh` and build id).
+  Details: docs/en/07-installer.md, "Experimental: own MOST bridge".
+
 ## Unreleased (release-candidate)
 
 - **Earlier versions recognised by name, no lists (A188):** `pmcp.sh` recognises an earlier version of each of its

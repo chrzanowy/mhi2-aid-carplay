@@ -238,6 +238,37 @@ Karta ratunkowa jest na awarię po potwierdzeniu; wcześniejszy test jest opcjon
 
 Szczegółowy przewodnik po kolejnych krokach w aucie: [09-tutorial-w-aucie.md](09-tutorial-w-aucie.md).
 
+## Eksperymentalnie: własny most MOST (pmcp-most)
+
+Tylko karty eksperymentalne (`PMCP_BUILD_EXPERIMENTAL=1`); karta wydania nie ma nic z tego (bez przycisku, payloadu
+i kodu: jej `pmcp.sh` i id buildu są takie same jak bez tej zmiany). Tło: `bridge/README.md`.
+
+- Payload: `PMCP_MOST` = nasz build mostu (`bridge/build.sh`, pin w `build_sd.py` `PMCP_MOST_PIN`) i
+  `PMCP_MOST_WRAPPER` = `installer/pmcp-most/dio_manager.wrapper.sh`, czyli `dio_manager.wrapper.sh` mathsls bez zmian
+  plus jeden blok przed `exec`: zapisuje właściciela kontraktu MOST `v=1 src=wired pid=<swój pid> gen=<poprzedni+1, bez
+  0> since_ms=0 kind=proxy` i `wired.session` (`v=1 state=start gen=<ten sam> pid=<ten sam> ts_ms=0 reason=start`) do
+  `/ramdisk/most-src/` (tmp + rename). `exec` zachowuje pid, więc właściciel żyje tyle co dio_manager. Powłoka radia nie
+  ma zegara w milisekundach, więc czasy to 0 (reguła 10 s z kontraktu wtedy nie obowiązuje).
+- GEM `aa_advanced`: „Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)” i
+  „Bridge: use mathsls (default MOST bridge; from the next phone connection)” (`pmcp.sh bridge pmcp-most|mathsls`).
+  Bez triala i bez Confirm. Supervisor mathsls uruchamia `/mnt/app/carplaymaps/altscreen-most-bridge` (stała ścieżka,
+  bez argumentów) przy każdym starcie strumienia mapy; przycisk wstawia tam wybraną, sprawdzoną binarkę jednym rename,
+  więc działa od następnego podłączenia telefonu. pmcp-most dostaje też swój wrapper (od następnego startu radia).
+  mathsls przywraca wrapper mathsls: domyślny stan to dokładnie zestaw plików karty wydania.
+- Na radiu zostaje `carplaymaps/bridge/` (oba mosty i wrapper pmcp-most, sprawdzone; źródło każdego przełączenia).
+  Wybór: znacznik `/mnt/persist/pmcp/most-bridge` (`pmcp-most`; brak = mathsls). „7. Status” pokazuje aktywny most
+  z sha8, wrapper, wybór i status mostu z tego startu (`/ramdisk/most-src/consumer`).
+- „CP save log” dokłada `/ramdisk/pmcp-most/bridge.log.1`, `bridge.log` oraz `most-src/owner`, `wired.session`
+  i `consumer`. Te pliki są w `/ramdisk`, więc „9. Delete saved logs” nie ma nic nowego do usuwania.
+- „8. Remove everything” usuwa wszystko (carplaymaps, znacznik); drzewo jest znowu fabryczne. „2. Install CarPlay”
+  zostawia wybrany most. Karta wydania widzi wrapper pmcp-most jako pomieszane pliki mapy (jej 2 usuwa wtedy wszystko
+  i instaluje od nowa): przed powrotem do karty wydania naciśnij „Bridge: use mathsls”.
+- Utrata zasilania w trakcie przełączania: na ścieżce supervisora zawsze jest jeden z dwóch sprawdzonych mostów,
+  a dio_manager to jeden z dwóch sprawdzonych wrapperów (`fault_inject.sh`, `PMCP_FAULT_SCOPE=bridge`); ten sam przycisk
+  naciśnięty jeszcze raz kończy przełączenie.
+- Testy: `run_tests.sh` sekcja [57] (karta wydania: nic z tego; karta eksperymentalna: przełączenie w obie strony,
+  linie wrappera, log CP, dokładny powrót do fabryki).
+
 ## Testy na hoście
 
 `installer/test/run_tests.sh SD_BUILD mksh ksh` (z `PMCP_RESCUE_SD=<karta ratunkowa>`): drzewo jednostki z backupu (prawdziwe

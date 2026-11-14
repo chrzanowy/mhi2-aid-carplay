@@ -240,6 +240,36 @@ The rescue card is for emergencies after Confirm; testing it first is optional.
 
 Step-by-step guide for the car: [09-in-car-guide.md](09-in-car-guide.md).
 
+## Experimental: own MOST bridge (pmcp-most)
+
+Experimental cards only (`PMCP_BUILD_EXPERIMENTAL=1`); a release card has none of this (no button, no payload, no code:
+its `pmcp.sh` and build id are the same as without it). Background: `bridge/README.md`.
+
+- Payload: `PMCP_MOST` = our build of the bridge (`bridge/build.sh`, pinned in `build_sd.py` `PMCP_MOST_PIN`) and
+  `PMCP_MOST_WRAPPER` = `installer/pmcp-most/dio_manager.wrapper.sh`, mathsls's `dio_manager.wrapper.sh` unchanged plus
+  one block before the `exec`: it writes the MOST contract owner `v=1 src=wired pid=<its pid> gen=<previous+1, 0
+  skipped> since_ms=0 kind=proxy` and `wired.session` (`v=1 state=start gen=<same> pid=<same> ts_ms=0 reason=start`)
+  to `/ramdisk/most-src/` (tmp + rename). The `exec` keeps the pid, so the owner lives as long as dio_manager. The
+  unit shell has no millisecond clock, so the times are 0 (the contract's 10 s age rule then does not apply).
+- GEM `aa_advanced`: "Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)" and
+  "Bridge: use mathsls (default MOST bridge; from the next phone connection)" (`pmcp.sh bridge pmcp-most|mathsls`).
+  No trial, no Confirm. The mathsls supervisor starts `/mnt/app/carplaymaps/altscreen-most-bridge` (fixed path, no
+  arguments) at each start of the map stream; the button puts the chosen verified binary there with one rename, so it
+  runs from the next phone connection. pmcp-most also gets its wrapper (from the next unit start). mathsls puts the
+  mathsls wrapper back: the default is exactly the release card's file set.
+- Kept on the unit: `carplaymaps/bridge/` (both bridges and the pmcp-most wrapper, verified; the source of every switch).
+  Choice: marker `/mnt/persist/pmcp/most-bridge` (`pmcp-most`; none = mathsls). "7. Status" shows the active bridge
+  with its sha8, the wrapper, the choice and this start's bridge status (`/ramdisk/most-src/consumer`).
+- "CP save log" adds `/ramdisk/pmcp-most/bridge.log.1`, `bridge.log`, and `most-src/owner`, `wired.session` and
+  `consumer`. These files are in `/ramdisk`, so "9. Delete saved logs" has nothing new to delete.
+- "8. Remove everything" removes it all (carplaymaps, the marker); the tree is the factory one again. "2. Install
+  CarPlay" keeps the chosen bridge. A release card sees the pmcp-most wrapper as mixed map files (its 2 then removes
+  everything and installs again): press "Bridge: use mathsls" before going back to a release card.
+- Power loss during a switch: the supervisor's path always holds one of the two verified bridges, dio_manager one of
+  the two verified wrappers (`fault_inject.sh`, `PMCP_FAULT_SCOPE=bridge`); the same button again finishes it.
+- Tests: `run_tests.sh` section [57] (release card: none of it; experimental card: switch both ways, wrapper lines,
+  CarPlay log, restore exact).
+
 ## Host tests
 
 `installer/test/run_tests.sh SD_BUILD mksh ksh` (with `PMCP_RESCUE_SD=<rescue card>`): the unit's file tree from the backup (real

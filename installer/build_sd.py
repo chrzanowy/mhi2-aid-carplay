@@ -42,6 +42,7 @@ PMCP_BASE_VERSION = "pmcp-0.7.1-" + FW["version_tag"]
 # (AA record, AA output switches are in every card since AA 1.0). Same payload otherwise, so it never forces another set.
 if os.environ.get("PMCP_BUILD_EXPERIMENTAL") == "1":
     PMCP_BASE_VERSION = "pmcp-0.7.1-exp-" + FW["version_tag"]
+IS_EXP = "-exp-" in PMCP_BASE_VERSION
 PMCP_VERSION = None   # PMCP_BASE_VERSION + "-" + first 8 hex of payload manifest, pmcp.sh and menu (set in main): one id per build
 
 # M.I.B. backup of the unit (folder named after the unit; every file read from it is pinned by sha256 below)
@@ -164,6 +165,18 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", 1566, "aa/feeder.conf"),
 })
+# pmcp-most (bridge/, docs 23-wlasny-most.md): our build of the MOST bridge, experimental cards only, next to mathsls's
+# BRIDGE (pmcp.sh bridge mathsls|pmcp-most, GEM aa_advanced; default mathsls). The ONE line to change after a rebuild:
+# bridge/build.sh OUTDIR prints the size and sha256; OUTDIR = <this project>/build/pmcp-most-<first 8 of the sha256>.
+PMCP_MOST_PIN = ("build/pmcp-most-d818be15/altscreen-most-bridge", "d818be15b896d3c0841bd7ce7c413202f48b62b854059797e81901e3bc8b49ed", 34972)
+if IS_EXP and PROFILE_ID == "MU1161":
+    PAYLOAD_BY_PROFILE["MU1161"].update({
+        "PMCP_MOST": (PROJ / PMCP_MOST_PIN[0], PMCP_MOST_PIN[1], PMCP_MOST_PIN[2], "pmcp-most/altscreen-most-bridge"),
+        # mathsls's WRAPPER + the contract owner block (src=wired kind=proxy, wired.session): live with pmcp-most only
+        "PMCP_MOST_WRAPPER": (PROJ / "installer/pmcp-most/dio_manager.wrapper.sh",
+                              "52031e8435dfed0329cb8d6fd83b6de184b0bee07529fa370c321c3e2d7d4859", 4301,
+                              "pmcp-most/dio_manager.wrapper.sh"),
+    })
 # Experimental AA set (AAX_FEEDER: an experimental feeder next to the stable one, pmcp.sh aa-on-exp, set id
 # gamma-<hook>-<that feeder>-<hook settings>): none since AA 1.0, whose stable set has the v13/v14 feeder. pmcp.sh keeps
 # the mechanism for the next experimental feeder: add the key here again (experimental builds only, own feeder file).
@@ -188,10 +201,10 @@ if FW["lsd_sh_states"] != ["stock"]:
 def render_template(tpl):
     """The profile-dependent parts of template/pmcp.sh.in. Lines "#@@NAME_BEGIN" ... "#@@NAME_END" are dropped with their
     content unless the profile has the feature (AA / NOAA: with / without the Android Auto package; UNSUP: some package of
-    the profile is missing), and the marker lines themselves are always dropped. For a profile with every package the result
+    the profile is missing; EXP: experimental builds only), and the marker lines themselves are always dropped. For a profile with every package the result
     is the text the template had without these blocks."""
     import re
-    on = {"AA": HAS_AA, "NOAA": not HAS_AA, "UNSUP": bool(UNSUPPORTED)}
+    on = {"AA": HAS_AA, "NOAA": not HAS_AA, "UNSUP": bool(UNSUPPORTED), "EXP": IS_EXP}
     out, skip = [], 0
     for line in tpl.split("\n"):
         m = re.match(r"^#@@([A-Z]+)_(BEGIN|END)$", line)
@@ -297,6 +310,22 @@ fi
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def template_for_id(tpl):
+    """The template text that goes into the build id: on a release build without the EXP blocks (markers included), so
+    experimental-only code never changes a release card's id or bytes."""
+    if IS_EXP:
+        return tpl
+    out, skip = [], False
+    for line in tpl.split("\n"):
+        if line == "#@@EXP_BEGIN":
+            skip = True
+        elif line == "#@@EXP_END":
+            skip = False
+        elif not skip:
+            out.append(line)
+    return "\n".join(out)
 
 
 def read_pinned(path, want_sha, want_size, label=""):
@@ -529,9 +558,13 @@ AA_MENU = [("aa-confirm", "aa-confirm", "AA Confirm: AA works (only in the start
            ("aa-log-save", "aa-log-save", "AA save log: copy this start's AA log to the unit (for the log card)"),
            ("aa-remove", "aa-remove", "AA remove (factory Android Auto back)")]
 # experimental builds only: their extra Android Auto software (empty on release cards)
-AA_EXP_MENU = [] if "-exp-" not in PMCP_BASE_VERSION else [
+AA_EXP_MENU = [] if not IS_EXP else [
     ("aa-capture-60", "aa-capture 60", "AA record: first 60 s of the phone video at each connection (for the log card)"),
-    ("aa-capture-off", "aa-capture off", "AA record: off")]
+    ("aa-capture-off", "aa-capture off", "AA record: off")] + ([
+    # the MOST bridge the CarPlay supervisor starts (also the AA output "CarPlay bridge"); no card confirm, no trial
+    ("bridge-pmcp-most", "bridge pmcp-most", "Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)"),
+    ("bridge-mathsls", "bridge mathsls", "Bridge: use mathsls (default MOST bridge; from the next phone connection)")]
+    if "PMCP_MOST" in PAYLOAD else [])
 
 
 # main menu 4, in order: unsupported route guidance / Java files back to factory (features-reset), an earlier card's
@@ -676,7 +709,8 @@ def main():
     menu_text = esd_block("@@VERSION@@", *menus) + "".join(n + "\n" + menu_script(a, l) for scr in menus for n, a, l in scr)
     global PMCP_VERSION
     PMCP_VERSION = PMCP_BASE_VERSION + "-" + sha((manifest + "\n" + "\n".join(known) + "\n" + renamed + "\n"
-                                                   + (HERE / "template/pmcp.sh.in").read_text() + menu_text).encode())[:8]
+                                                  + template_for_id((HERE / "template/pmcp.sh.in").read_text())
+                                                  + menu_text).encode())[:8]
     tpl = render_template((HERE / "template/pmcp.sh.in").read_text())
     # @@UNSUP_PKGS@@ only lives in the UNSUP block, which render_template keeps only for a profile with unsupported packages
     unsup_values = {"@@UNSUP_PKGS@@": " ".join(UNSUPPORTED)} if UNSUPPORTED else {}
