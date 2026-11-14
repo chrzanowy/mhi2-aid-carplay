@@ -1010,7 +1010,7 @@ do_aa_log_save() {
            done
            echo "--- pmcp-gal-hook.log"; cat "$RAMDISK/pmcp-gal-hook.log"
            # A166: route guidance from AA, the raw navigation messages and which view the AID showed
-           for _l_x in pmcp-aa-rg.txt pmcp-aa-rg-raw.txt.1 pmcp-aa-rg-raw.txt pmcp-kombi-view.log.1 pmcp-kombi-view.log; do
+           for _l_x in pmcp-aa-rg.txt pmcp-aa-rg-raw.txt.1 pmcp-aa-rg-raw.txt pmcp-kombi-view.log.1 pmcp-kombi-view.log pmcp-aa-np.log.1 pmcp-aa-np.log; do
                [ -s "$RAMDISK/$_l_x" ] || continue
                echo "--- $_l_x"; cat "$RAMDISK/$_l_x" 2>/dev/null
            done

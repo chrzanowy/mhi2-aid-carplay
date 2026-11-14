@@ -102,6 +102,7 @@ public final class NowPlaying {
                 attachedAa = dsi;
             }
             dsi.setNotification(new int[] {ATTR_NOWPLAYINGDATA}, AA_LISTENER);
+            NpLog.log("attach_aa", -1, -1, -1);
         } catch (Throwable t) {
             // no track info, stock "Android Auto"
         }
@@ -160,6 +161,8 @@ public final class NowPlaying {
             aaArtist = ar;
             aaAlbum = al;
         }
+        // review A176: valid flag, title length, changed (never the text) - does the DSI end a session with valid != 1?
+        NpLog.log("aa_track valid/title_len/changed", valid, t.length(), changed ? 1 : 0);
         if (changed) {
             refresh();
         }
@@ -196,6 +199,9 @@ public final class NowPlaying {
                     al = album;
                 }
             }
+            if (connectionType == CONNECTION_ANDROIDAUTO) {
+                logAaFill(t.length() != 0 && st != null ? 1 : 0);
+            }
             if ((connectionType != CONNECTION_CARPLAY && connectionType != CONNECTION_ANDROIDAUTO) || t.length() == 0 || st == null) {
                 return false;
             }
@@ -212,6 +218,19 @@ public final class NowPlaying {
         } catch (Throwable x) {
             return false;
         }
+    }
+
+    private static int lastAaFill = -1;
+
+    /** One line when the AA cluster text switches between our title (1) and the stock "Android Auto" (0). */
+    private static void logAaFill(int filled) {
+        synchronized (LOCK) {
+            if (filled == lastAaFill) {
+                return;
+            }
+            lastAaFill = filled;
+        }
+        NpLog.log("aa_fill title_shown", filled, -1, -1);
     }
 
     /** Trim and cap the length; BAP strings are bounded and the cluster line is short. */

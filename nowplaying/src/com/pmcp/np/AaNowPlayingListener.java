@@ -11,7 +11,7 @@ import org.dsi.ifc.global.ResourceLocator;
 /**
  * Our own DSIAndroidAuto2 listener (AA 1.1, A171), registered for ATTR_NOWPLAYINGDATA only, as NowPlayingListener is
  * for CarPlay: the DSI proxy keeps a notification mask per listener, so the stock Android Auto target receives what it
- * did before. Only updateNowPlayingData does anything.
+ * did before. Only updateNowPlayingData does anything; a few other callbacks write one diagnostic line (NpLog).
  */
 final class AaNowPlayingListener implements DSIAndroidAuto2Listener {
     public void updateNowPlayingData(TrackData trackdata, int valid) {
@@ -22,8 +22,9 @@ final class AaNowPlayingListener implements DSIAndroidAuto2Listener {
         }
     }
 
-    public void videoFocusRequestNotification(int a, int b) { }
-    public void videoAvailable(boolean a, int b) { }
+    // review A176: do these reach a listener registered for attribute 3 only? Logged, nothing else (AA save log).
+    public void videoFocusRequestNotification(int a, int b) { NpLog.log("in_video_focus_request", a, b, -1); }
+    public void videoAvailable(boolean a, int b) { NpLog.log("in_video_available", a ? 1 : 0, b, -1); }
     public void audioFocusRequestNotification(int a, int b) { }
     public void audioAvailable(int a, boolean b, int c) { }
     public void voiceSessionNotification(int a, int b) { }
@@ -31,7 +32,7 @@ final class AaNowPlayingListener implements DSIAndroidAuto2Listener {
     public void navFocusRequestNotification(int a, int b) { }
     public void updateCallState(CallState[] c, int v) { }
     public void updateTelephonyState(TelephonyState t, int v) { }
-    public void updatePlaybackState(PlaybackInfo p, int v) { }
+    public void updatePlaybackState(PlaybackInfo p, int v) { NpLog.log("playback_state valid", v, -1, -1); }
     public void updatePlayposition(int p, int v) { }
     public void updateCoverArtUrl(ResourceLocator r, int v) { }
     public void updateNavigationNextTurnEvent(String road, int side, int event, int angle, int number, int v) { }

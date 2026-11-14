@@ -27,7 +27,7 @@ public class PatchNp {
         patchHsmTarget();
         patchCurrentStationInfo();
         patchAndroidAutoTarget();
-        for (String h : new String[] {NP, NP + "$1", "com/pmcp/np/NowPlayingListener", "com/pmcp/np/AaNowPlayingListener"}) downgradeHelper(h);
+        for (String h : new String[] {NP, NP + "$1", "com/pmcp/np/NowPlayingListener", "com/pmcp/np/AaNowPlayingListener", "com/pmcp/np/NpLog"}) downgradeHelper(h);
         System.out.println("OK");
     }
 

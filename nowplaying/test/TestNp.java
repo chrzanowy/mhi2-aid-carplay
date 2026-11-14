@@ -55,6 +55,9 @@ public class TestNp {
         check(!NowPlaying.fill(2, new CurrentStationInfo_Status()), "null track -> stock");
 
         // Android Auto (AA 1.1, A171): its own strings, connection type 3 only
+        java.io.File npLog = java.io.File.createTempFile("pmcp-aa-np", ".log");
+        npLog.delete();
+        NpLog.logPath = npLog.getPath();
         CurrentStationInfo_Status st3 = new CurrentStationInfo_Status();
         NowPlaying.onTrack(new TrackData("CP song", 0, "CP album", "CP artist", "", ""), 1);
         NowPlaying.onAaTrack(new org.dsi.ifc.androidauto2.TrackData("AA song ", 0, "AA album", "AA artist", "", ""), 0);
@@ -71,6 +74,20 @@ public class TestNp {
         check(!NowPlaying.fill(3, new CurrentStationInfo_Status()), "AA null track -> stock");
         NowPlaying.attachAa(null);
         check(true, "attachAa(null) is silent");
+        // review A176: the AA event log (lengths and flags only, never the text)
+        AaNowPlayingListener l = new AaNowPlayingListener();
+        l.videoAvailable(false, 3);
+        l.updatePlaybackState(null, 0);
+        String log = new String(java.nio.file.Files.readAllBytes(npLog.toPath()));
+        check(log.contains("aa_track valid/title_len/changed 0 0 0\n") && log.contains("aa_track valid/title_len/changed 1 7 1\n")
+            && log.contains("aa_track valid/title_len/changed 1 0 1\n"), "AA log: valid flag, title length, changed");
+        check(log.contains("aa_fill title_shown 0\n") && log.contains("aa_fill title_shown 1\n"), "AA log: cluster text switches logged");
+        check(log.contains("in_video_available 0 3\n") && log.contains("playback_state valid 0\n"), "AA log: DSI callbacks logged");
+        check(!log.contains("AA song") && !log.contains("AA artist") && !log.contains("AA album"), "AA log: no track text");
+        NpLog.logPath = "/nonexistent-dir/x.log";
+        NpLog.log("unwritable", 1, -1, -1);
+        check(true, "AA log: unwritable path is silent");
+        npLog.delete();
 
         // refresh without a BAP APIFactory must not throw
         NowPlaying.refresh();
