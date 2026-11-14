@@ -66,6 +66,9 @@ JAVA_PACKAGES_ALL = [("nai", "nai: AID map stays while the iPhone navigates (Nav
                       ("ui", "ui: AID navigation configuration in App-Connect settings, saves trial starts without the card")]
 # only what the profile supports reaches the card, the GEM menu and the settings page
 JAVA_PACKAGES = [x for x in JAVA_PACKAGES_ALL if x[0] in FW["packages"]]
+# The GEM menu is the same for every profile: a package or Android Auto that the profile does not have keeps its button,
+# which says "not yet supported" and changes nothing (pmcp.sh blocks NOAA / UNSUP). Empty for a profile with every package.
+UNSUPPORTED = [n for n, _ in JAVA_PACKAGES_ALL if n not in FW["packages"]]
 # rg = everything for route guidance in one package: Tomasz's port + his lanes, our VW U-turn lanes, his MU1367
 # v1.4.3 distance bar / street name / feed recovery, the maneuver fallbacks, the quiet-route hold (v1.4.3) and, since
 # v1.5.0, the VW arrows from Android Auto (rg/build.sh lanes-uturn-asf-m-aa: lanes-uturn-asf-m + rg/lanes/aa.py; with
@@ -180,9 +183,43 @@ JAVA_OLD = [tuple(e[k] for k in fwprofile.JAVA_OLD_KEYS) for e in HIST["java_old
 if PROFILE_ID not in PAYLOAD_BY_PROFILE:
     sys.exit("no PAYLOAD pins for profile %s in build_sd.py (PAYLOAD_BY_PROFILE)" % PROFILE_ID)
 PAYLOAD = {k: v for k, v in PAYLOAD_BY_PROFILE[PROFILE_ID].items()
-           if not (k.startswith("JAR_") and k[4:] not in FW["packages"])}
+           if not (k.startswith("JAR_") and k[4:] not in FW["packages"])
+           and not (k.startswith("AA_") and "aa" not in FW["packages"])
+           and not (k.startswith("RG_") and "rg" not in FW["packages"])}
+HAS_AA = "aa" in FW["packages"]
 if FW["lsd_sh_states"] != ["stock"]:
     sys.exit("profile %s: lsd_sh_states %r is not supported by this installer yet" % (PROFILE_ID, FW["lsd_sh_states"]))
+
+def render_template(tpl):
+    """The profile-dependent parts of template/pmcp.sh.in. Lines "#@@NAME_BEGIN" ... "#@@NAME_END" are dropped with their
+    content unless the profile has the feature (AA / NOAA: with / without the Android Auto package; UNSUP: some package of
+    the profile is missing), and the marker lines themselves are always dropped. For a profile with every package the result
+    is the text the template had without these blocks."""
+    import re
+    on = {"AA": HAS_AA, "NOAA": not HAS_AA, "UNSUP": bool(UNSUPPORTED)}
+    out, skip = [], 0
+    for line in tpl.split("\n"):
+        m = re.match(r"^#@@([A-Z]+)_(BEGIN|END)$", line)
+        if not m:
+            if not skip:
+                out.append(line)
+            continue
+        if m.group(1) not in on:
+            sys.exit("template: unknown block %s" % m.group(1))
+        if m.group(2) == "BEGIN":
+            if skip or "open" in on:
+                sys.exit("template: nested block")
+            skip = 0 if on[m.group(1)] else 1
+            on["open"] = m.group(1)
+        else:
+            if on.pop("open", None) != m.group(1):
+                sys.exit("template: block %s closed wrongly" % m.group(1))
+            skip = 0
+    if "open" in on:
+        sys.exit("template: block %s not closed" % on["open"])
+    return "\n".join(out)
+
+
 for name in VARIANTS:
     PAYLOAD["CORE_" + name] = (TUNING / name / "core.so", None, 75099, "core/%s/core.so" % name)
 
@@ -355,7 +392,7 @@ if [ -f /net/rcc/dev/shmem/backup.mib ] || [ -f /net/rcc/dev/shmem/reboot.mib ] 
 fi
 trap '' 2
 echo "pmcp: %(label)s"
-echo "Do not press Back and do not remove the SD card until PMCP_FEATURES_ON_OK or PMCP_FAIL is shown."
+%(note)secho "Do not press Back and do not remove the SD card until PMCP_FEATURES_ON_OK or PMCP_FAIL is shown."
 PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh
 NEW=0
 for A in %(actions)s; do
@@ -418,8 +455,10 @@ def menu_entries():
             ("rg-system-off", "rg-system-off", "Route guidance system off (factory iAP2 driver and iap2.cfg)"),
             ("rg-update", "rg-update", "Route guidance system update (driver and reader of this card, RG stays on)"),
             ("java-update", "java-update", "Java update: packages of an earlier card -> this card's (rglu -> rg)")]
-    feat += [("java-on-" + n, "java-on " + n, "On " + label) for n, label in JAVA_PACKAGES] + \
-            [("java-off-" + n, "java-off " + n, "Off " + label) for n, label in JAVA_PACKAGES]
+    feat = [e for e in feat if not ((e[0].startswith("rg-") and "rg" not in FW["packages"])
+                                    or (e[0] == "speedlimit-status" and "sl" not in FW["packages"]))]
+    feat += [("java-on-" + n, "java-on " + n, "On " + label) for n, label in JAVA_PACKAGES_ALL] + \
+            [("java-off-" + n, "java-off " + n, "Off " + label) for n, label in JAVA_PACKAGES_ALL]
     cp = [("install-" + v, "install " + v, "Install map layout: " + v) for v in VARIANTS if v != START_VARIANT] + \
          [("switch-" + v, "switch " + v, "Switch map layout to: " + v) for v in VARIANTS]
     return top, feat, cp, AA_MENU + AA_EXP_MENU
@@ -445,7 +484,11 @@ AA_EXP_MENU = [] if "-exp-" not in PMCP_BASE_VERSION else [
 # RG driver/reader and Java packages replaced by this card's (rg-update, java-update), the route guidance system (rg
 # needs it), then every package except the optional sl (ui included: its page saves trial starts on the unit). Steps already done answer *_ALREADY_* and are skipped, so the
 # same button brings any earlier pmcp install to this card's set. The map (2) and Android Auto (3) are not touched.
-FEATURES = ["features-reset", "rg-update", "java-update", "rg-system-on"] + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
+FEATURE_NAMES = [("rg", "route guidance"), ("zoom", "zoom"), ("dn", "day/night"), ("np", "song title"), ("ui", "settings page")]
+FEATURES_NOTE = "" if not UNSUPPORTED else 'echo "Not yet supported on this unit (%s), skipped: %s."\n' % (
+    FW["id"], ", ".join(t for n, t in FEATURE_NAMES if n in UNSUPPORTED) or ", ".join(UNSUPPORTED))
+FEATURES = ["features-reset"] + (["rg-update"] if "rg" in FW["packages"] else []) + ["java-update"] \
+    + (["rg-system-on"] if "rg" in FW["packages"] else []) + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
 
 
 def menu_script(args, label):
@@ -458,7 +501,7 @@ def menu_script(args, label):
     if args is RGLAST:
         return RGLAST_SCRIPT
     if args is FEATURES:
-        return FEATURES_SCRIPT % dict(label=label, actions=" ".join(a if "_" in a else a + "_" for a in args))
+        return FEATURES_SCRIPT % dict(label=label, actions=" ".join(a if "_" in a else a + "_" for a in args), note=FEATURES_NOTE)
     return MENU_SCRIPT % dict(label=label, args=args)
 
 
@@ -567,7 +610,7 @@ def main():
         pairs[h] = h1
         old.append("%s %s %d %s %s" % (name, h, size, jar, succ))
     aa_old = []
-    cur_aa = [PAYLOAD[k][1:3] for k in ("AA_HOOK", "AA_FEEDER", "AA_HOOK_CONF", "AA_MODE")]
+    cur_aa = [PAYLOAD[k][1:3] for k in ("AA_HOOK", "AA_FEEDER", "AA_HOOK_CONF", "AA_MODE")] if HAS_AA else []
     for mode, files in AA_OLD:
         hs = []
         for h, h1, size in files:
@@ -600,8 +643,10 @@ def main():
     PMCP_VERSION = PMCP_BASE_VERSION + "-" + sha((manifest + "\n" + "\n".join(known) + "\n" + "\n".join(old) + "\n"
                                                    + "\n".join(aa_old) + "\n"
                                                    + (HERE / "template/pmcp.sh.in").read_text() + menu_text).encode())[:8]
-    tpl = (HERE / "template/pmcp.sh.in").read_text()
-    for k, v in {
+    tpl = render_template((HERE / "template/pmcp.sh.in").read_text())
+    # @@UNSUP_PKGS@@ only lives in the UNSUP block, which render_template keeps only for a profile with unsupported packages
+    unsup_values = {"@@UNSUP_PKGS@@": " ".join(UNSUPPORTED)} if UNSUPPORTED else {}
+    for k, v in {**unsup_values,
         "@@PMCP_VERSION@@": PMCP_VERSION, "@@MANIFEST@@": manifest,
         "@@SELFTEST_SHA@@": sha(selftest), "@@SELFTEST_SIZE@@": str(len(selftest)),
         "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_OLD@@": "\n".join(old), "@@AA_OLD@@": "\n".join(aa_old),

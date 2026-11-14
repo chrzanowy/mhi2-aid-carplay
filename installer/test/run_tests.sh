@@ -35,6 +35,10 @@ T=$(cd "$(dirname "$0")" && pwd)   # installer/test (no_printf.inc)
 PROJ=$(cd "$T/../.." && pwd)       # this project (any folder name)
 export PMCP_PROFILE="${PMCP_PROFILE:-MU1161}"
 pf() { python3 -I "$PROJ/scripts/profile.py" get "$PMCP_PROFILE" "$1"; }   # a profile value (lists: one item per line)
+# packages of the Java set that this profile does not have (their buttons stay and say "not yet supported"); none on MU1161
+HAS_NP=no; case " $(pf packages | tr '\n' ' ')" in *" np "*) HAS_NP=yes ;; esac
+UNSUP_PKGS=""
+for _p in nai np rg zoom dn sl ui; do case " $(pf packages | tr '\n' ' ')" in *" $_p "*) ;; *) UNSUP_PKGS="$UNSUP_PKGS $_p" ;; esac; done
 BKROOT="${PMCP_BACKUP:-$REPO/backup/$(pf backup_dir)}"
 BK="$BKROOT/$(pf appimg)"
 BKSYS="$BKROOT/$(pf system)"
@@ -507,9 +511,13 @@ PY
         set -- $args
         case "$1" in
             install|switch) grep -q "^CORE_$2 " <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") || bad "variant $2 of $(basename "$m") not in manifest" ;;
-            java-on|java-off) grep -q "^JAR_$2 " <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") || bad "package $2 of $(basename "$m") not in manifest" ;;
+            # a package the profile does not have yet keeps its button (it answers "not yet supported")
+            java-on|java-off) case " $UNSUP_PKGS " in *" $2 "*) ;; *)
+                grep -q "^JAR_$2 " <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") || bad "package $2 of $(basename "$m") not in manifest" ;; esac ;;
         esac
     done
+    # build-time template blocks (NOAA / UNSUP) are fully resolved: no marker or placeholder left in pmcp.sh
+    ! grep -q '#@@\|UNSUP_PKGS\|NOT_YET_SUPPORTED' "$SDB/pmcp/pmcp.sh" || [ -n "$UNSUP_PKGS" ] && ok "pmcp.sh: no template block marker left" || bad "pmcp.sh: template block marker or unsupported-package text in a full-set profile"
     nmenu=$(ls "$SDB"/pmcp/menu/*.sh | wc -l | tr -d ' ')
     nref=$(grep -c '/net/mmx/fs/sda0/pmcp/menu/' "$SDB/esd/Launcher-sda0.esd")
     [ "$nmenu" -gt 20 ] && [ "$nmenu" = "$nref" ] && ok "menu scripts: $nmenu, menu entries: $nref" || bad "menu scripts $nmenu vs entries $nref"
@@ -948,7 +956,8 @@ PEOF
     run java-retry; rc_is 0; run java-confirm; rc_is 1; expect_out "SET_ALREADY_CONFIRMED" "confirm runs past a stale lock (set confirmed already)"
     expect_out_not() { grep -q "$1" "$W/out" && bad "$2" || ok "$2"; }
     expect_out_not "SPEEDLIMIT_LOCK_BUSY" "java-confirm does not wait for the lock"
-    run java-on np; rc_is 1; expect_out "SPEEDLIMIT_LOCK_BUSY" "package change waits for the lock"
+    LOCKPKG=np; [ $HAS_NP = yes ] || LOCKPKG=dn
+    run java-on $LOCKPKG; rc_is 1; expect_out "SPEEDLIMIT_LOCK_BUSY" "package change waits for the lock"
     run restore; rc_is 0; expect_out "PMCP_RESTORE_OK" "restore runs past a stale lock"
     [ ! -e "$SLP" ] && ok "full restore clears the mode" || bad "full restore left the mode"
     rm -rf "$SLL"

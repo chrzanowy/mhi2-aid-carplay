@@ -8,6 +8,10 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 - **"CP save log" includes the AID view log:** the saved CarPlay log now also carries `pmcp-kombi-view.log(.1)` (which view
   the AID showed and when), as the Android Auto log already did. No new file: the log card and "9. Delete saved logs" are
   unchanged.
+- **Same GEM menu on every firmware profile (generic, no effect on MU1161):** `build_sd.py` keeps the buttons of
+  packages a profile does not have; they answer "not yet supported ... Nothing was changed" (`#@@NOAA_` / `#@@UNSUP_`
+  template blocks, resolved at build time; the MU1161 card has none of it). `make_release.py` gets a beta-package path
+  for a non-MU1161 profile (adds the log card; needs the beta docs).
 - **Copy helpers offer card 3 when the package has it:** option 4 (macOS `.command`, Windows `copy-to-sd.ps1`) makes the
   log card from a `card3-logs` folder; shown only if the folder is there.
 - **One button deletes the saved logs:** "9. Delete saved logs: CarPlay and Android Auto (after the log card copied
