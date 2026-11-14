@@ -19,7 +19,8 @@ the file formats.
 - **Authors:** the original CarPlay Maps VC altscreen bridge is by **omonob**. The reclaim, the 2048-packet limit and
   the AA flag are by **Tomasz Twardzicki**. mathsls is credited for the ring/TS format (format only, no code).
 - **Licence:** upstream is GNU GPL v3. The patched upstream files carry `SPDX-License-Identifier: GPL-3.0-only`, because
-  upstream grants no "or later". Our new files (`src/pmcp_most.h`, `test/`, `build.sh`) are GPL-3.0-or-later.
+  upstream grants no "or later". Our new files (`src/pmcp_most.h`, `src/pmcp_gate.c`, `test/`, `build.sh`) are
+  GPL-3.0-or-later.
 - `upstream/` holds the verbatim files plus `PROVENANCE.json`: repository, commit, source path, sha256 and size of each
   file, and the licence.
   - Never edit `upstream/`.
@@ -30,18 +31,18 @@ the file formats.
 | Path | What |
 |---|---|
 | `upstream/` | verbatim import + `LICENSE` + `PROVENANCE.json` |
-| `src/` | working copy: upstream files plus changes marked `pmcp:` (copy-with-markers, no patch series) and the new `pmcp_most.h` |
+| `src/` | working copy: upstream files plus changes marked `pmcp:` (copy-with-markers, no patch series), the new `pmcp_most.h` and `pmcp_gate.c` (consumer gate, verbatim functions of the contract kit) |
 | `build.sh` | QNX build (docker `qnx65-armv7-toolchain:8.5`, no network) |
 | `test/` | host build + tests (`run_tests.sh`, `harness.py`, `producer.c`, `shim/`, `fake_dmdt.sh`) |
-| `contract/` | contract kit (separate work, not part of this stage) |
+| `contract/` | contract kit; the bridge uses its header `pmcp_most_producer.h` and a verbatim copy of its gate functions |
 
 ### Patch discipline
 
 - Only `src/altscreen_most_bridge.c` and `src/cpmap_resources.h` differ from upstream. The other four headers are
   byte-identical copies.
 - Every changed hunk contains a `pmcp` marker. The test `provenance` enforces this.
-- Review the changes with `diff -u upstream/altscreen_most_bridge.c src/altscreen_most_bridge.c` (about 76 added lines,
-  4 removed: the old body of `queue_discard_all`, see item 5) and `diff -u upstream/cpmap_resources.h src/cpmap_resources.h`.
+- Review the changes with `diff -u upstream/altscreen_most_bridge.c src/altscreen_most_bridge.c` and
+  `diff -u upstream/cpmap_resources.h src/cpmap_resources.h`.
 
 ## Differences from upstream
 
@@ -90,8 +91,40 @@ the file formats.
    - the intro code (not used: the wrapper unsets `CARPLAY_CLUSTER_INTRO`);
    - argv, the binary name, signals and exit codes.
 
-`TODO(stage 1b)` markers show where the contract v1.1 consumer gate goes (from `contract/`): a change of the owner's
-`gen` bumps the ring generation and drops frames until a new avcC. It is not implemented in stage 1.
+7. **Consumer gate, contract v1.1 (stage 1b)** (`pmcp_owner_poll`, `pmcp_gate_filter`, `pmcp_gate_tick` in
+   `pmcp_most.h`; the gate itself is `src/pmcp_gate.c`).
+   - `owner` is read every 20 ms from the reader loop (`v=1`, `src`, `gen`, `pid`, `kind`; missing kind = `in`). The
+     writer thread is never involved.
+   - The first owner seen in a run only records gen/pid/kind. A later different `gen` is a **cut**: the ring generation
+     is bumped by the bridge (no foreign-generation handling follows), reading restarts at `cut_seq + 1`, queued whole
+     AUs are discarded, the wait-for-keyframe state is entered, and the log gets `owner-cut` and `gate-closed`.
+   - `cut_seq` is the ring `write_sequence` read at the **previous** owner poll (decision OQ3 (a)), so an avcC written
+     between the owner change and the moment the bridge notices it still opens the gate. Video slots in the re-read
+     range that went out before the cut are skipped, not sent twice.
+   - While closed, every slot is a drop except a type-1 avcC written after the cut. It opens the gate at once if the
+     previous owner's pid is gone; otherwise it is held until that pid exits or 100 ms (`in`) / 3000 ms (`proxy`) after
+     the cut pass (`reason=forced`, `gate_forced` + 1). On opening the held avcC is applied and the IDR marker created;
+     log `gate-open reason=… gate_forced=…` and `gate-stats cuts=… forced=… gate_drops=… wait_ms=…`.
+   - The gate counters are **not** in the consumer status line: the v0.2 line is already 253 B in the worst case, so
+     `gate_cuts`/`gate_forced` would break the 255 B limit. They are in `bridge.log` only (also a `gate-stats` line at
+     exit).
+   - No owner file at all: no gate, upstream behaviour (`parity` test, ts_compare SAME).
+   - Why a copy of the kit functions: the bridge links `src/pmcp_gate.c`, which holds `pmcp_pid_alive`,
+     `pmcp_owner_preempt_ms` and the kit's "consumer gate" section byte for byte (the `provenance` test checks it).
+     Linking the whole kit object adds six libc imports not proven on MU1161 (`link nanosleep strcpy strncpy strtoll
+     strtoull`): ld 2.19 keeps the dynamic references even with `--gc-sections`.
+8. **IDR request under congestion** (`writer_recovered_after_reset`, `PMCP_RECOVERY_FAST_STREAK_REQUIRED`).
+   - After a latency reset the bridge asks for an IDR only when the writer has recovered: at least 8 blocks completed
+     since the reset **and** a streak of fast (≤ 30 ms) MOST writes. Upstream required a streak of 8; any slow write
+     reset it, so under congestion the request was never made and the map stayed frozen. Now one fast write is
+     enough; the 8-blocks condition stays (blocks complete whatever their speed, so it cannot starve).
+   - Analysis and fix by **diasdio** (omonob/MHI2-Carplay-Maps#1, binary patch `cmphi r3,#7` → `#0` at 0x4174 of the
+     v1.x bridge); offsets and packaging by **ramasauskas** (`mu1367-791-artifact-fix`). diasdio's other bridge fix (no
+     queue flush in a part-written AU) is item 5, found independently here.
+   - Found by the new test, ours on top: once the IDR has been requested, the writer-recovered check is not repeated
+     for the AUs that follow. Before, the requested IDR was dropped as "writer not recovered" whenever it arrived just
+     after a slow write (streak 0), and no second request was ever made: the map stayed frozen (3 of 5 test runs with
+     the streak-1 rule; with upstream's streak 8 the same trap exists, it is only reached less often).
 
 ## Build (QNX)
 
@@ -108,7 +141,7 @@ bridge/build.sh OUTDIR            # PMCP_MOST_AA=1 also builds the AA variant
 ## Host tests
 
 ```sh
-bridge/test/run_tests.sh [steady real-h264 parity force-idr enomem session log provenance]
+bridge/test/run_tests.sh [steady real-h264 parity force-idr slow-recovery enomem session gate log provenance]
 ```
 
 How the tests run:
@@ -118,7 +151,9 @@ How the tests run:
 - `test/shim/host_shim.h` maps the ring, force-IDR, cache-lock and dmdt paths, and the reclaim window, to environment
   variables, so each test runs in its own `test/build/runs/<test>/`.
 - They also build the unmodified upstream bridge, a build with upstream's ENOMEM hook
-  (`ALTSCREEN_BRIDGE_TEST_ENOMEM_AT_BLOCKS=100`, `_REPEAT=60`) and the AA-flag variant (compile only).
+  (`ALTSCREEN_BRIDGE_TEST_ENOMEM_AT_BLOCKS=100`, `_REPEAT=60`), two slow-write builds (`PMCP_TEST_SLOW_WRITE_EVERY=4`,
+  35 ms: every 4th write from block 50 is slow; one with the fixed rule, one with the old streak of 8) and the AA-flag
+  variant (compile only).
 - `test/producer.c` writes the ring as docs/11 describes. Input is either:
   - a real Annex-B capture: `PMCP_TEST_H264`, by default the AA car capture
     `passat-mhi2-carplay/build/car-logs-20261110b/aa-stream.h264` if present; or
@@ -138,8 +173,22 @@ What the tests cover:
   - outside the window there is no dmdt call.
 - **session:** stop within 1.5 s (measured about 40 ms); a stale stop is ignored; a vanished file with a dead pid ends
   the stream.
+- **slow-recovery:** every 4th MOST write takes 35 ms; after the backlog reset the IDR is requested within 500 ms
+  (measured about 140 ms) and the stream resumes on it. Control: with the old rule (streak 8) no IDR request at all.
+- **gate:** owner switch gen 5 → 6 by `producer --switch-after` (old stream under a forked idle child's pid, new stream
+  with its own avcC; the old stream keeps writing, keyframes included, after the switch):
+  - `gate-held` (old `proxy` pid dies after 1 s): no old frame written > 40 ms after the switch reaches the output;
+    the gate opens on the pid exit (about 1030 ms), the held avcC is applied, the IDR marker is created and the new
+    stream starts on an IDR with the discontinuity flag;
+  - `gate-forced` (old `proxy` pid never exits): forced open at 3000 ms, `gate_forced=1`; the status file keeps its
+    1 s refresh through the held gate;
+  - `gate-in` (old `in` pid never exits): forced at 100 ms;
+  - `gate-oq3`: owner, avcC and IDR written back to back before the bridge's next owner poll; the gate still opens on
+    that avcC (cut_seq from the previous poll);
+  - every case: exactly one `owner-cut` (the first owner seen does not cut), no foreign `ring generation=` line,
+    ts_analyse OK, exit 0.
 - **log:** rotation at 64 KB; one `.1` only.
-- **provenance:** upstream sha256 and `pmcp` markers.
+- **provenance:** upstream sha256, `pmcp` markers, and `src/pmcp_gate.c` identical to the kit's functions.
 
 Host artefact: in file mode the writer is paced at about 9.6 Mbit/s instead of 12.288 Mbit/s, so the PTS lead over PCR
 grows. This is the same for upstream and does not exist on the unit.
@@ -155,4 +204,6 @@ grows. This is the same for upstream and does not exist on the unit.
   after a phone reconnect (stage0 risk 2).
 - The unit's own `libc.so.3` was not available offline. Six imports are proven only against the QNX 6.5.0 SDK libc and
   Tomasz's MU1367 binaries (see NOTES-stage1.md).
-- Contract v1.1 consumer gate (stage 1b), shared output library with AA (stage 3), own supervisor (stage 5).
+- Shared output library with AA (stage 3), own supervisor (stage 5).
+- A gate that never gets an avcC after the cut stays closed (spec OPEN-QUESTIONS 3): core.so is not known to resend
+  avcC on a ring generation change.

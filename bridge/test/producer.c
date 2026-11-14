@@ -14,6 +14,13 @@
  * Force-IDR: when the request file exists it is removed and the N-th next
  * frame is sent as an IDR (what core.so does), or only removed (N = -1).
  * Optional contract v0.2 owner + <src>.session files (start, later stop).
+ * Owner switch (stage 1b, consumer gate): --switch-after K writes an "old"
+ * stream under owner gen G (pid of a forked idle child, so the test controls
+ * when the previous owner dies), then after old frame K installs owner gen
+ * G+1 (this pid, --new-kind) and writes a "new" stream (its own avcC with a
+ * different SPS, frame_no from 100001) while the old stream keeps writing
+ * for --old-tail-ms (every 4th tail frame an IDR). The child is killed --kill-old-ms after the switch
+ * (-1: only at the end). Synthetic frames only.
  *
  * Writes OUT/frames.raw.jsonl (one record per frame/event, frame bytes at
  * avcc_off/avcc_bytes in OUT/input.avcc); the harness adds the SHA-256. */
@@ -26,8 +33,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -305,12 +314,149 @@ static void hex(FILE *f, const uint8_t *d, size_t n)
     for (i = 0; i < n; ++i) fprintf(f, "%02x", d[i]);
 }
 
+/* ---------------------------------------------------------------- owner switch */
+typedef struct SwitchOpts {
+    const char *dir, *src, *new_src, *kind, *new_kind;
+    unsigned gen, new_gen, frames_old_max, new_frames, fps, seed;
+    int switch_after, old_tail_ms, new_delay_ms, kill_old_ms;
+} SwitchOpts;
+
+static void put_owner(const char *dir, const char *src, long pid, unsigned gen, const char *kind)
+{
+    char line[256];
+    int n = snprintf(line, sizeof(line), "v=1 src=%s pid=%ld gen=%u since_ms=%llu", src, pid, gen,
+                     (unsigned long long)(now_ns() / 1000000ULL));
+    if (kind && kind[0]) n += snprintf(line + n, sizeof(line) - (size_t)n, " kind=%s", kind);
+    snprintf(line + n, sizeof(line) - (size_t)n, "\n");
+    put_file(dir, "owner", line);
+}
+
+static uint32_t put_avcc(FILE *man, const char *stream, unsigned w, unsigned h)
+{
+    uint8_t sps[64], pps[64], rec[160];
+    size_t sn = make_sps(sps, w, h), pn = make_pps(pps), n = 0;
+    uint32_t seq;
+    rec[n++] = 1; rec[n++] = sps[1]; rec[n++] = sps[2]; rec[n++] = sps[3]; rec[n++] = 0xff; rec[n++] = 0xe1;
+    rec[n++] = (uint8_t)(sn >> 8); rec[n++] = (uint8_t)sn; memcpy(rec + n, sps, sn); n += sn;
+    rec[n++] = 1; rec[n++] = (uint8_t)(pn >> 8); rec[n++] = (uint8_t)pn; memcpy(rec + n, pps, pn); n += pn;
+    seq = ring_put(1, rec, n, 0, NULL);
+    fprintf(man, "{\"event\":\"avcC\",\"stream\":\"%s\",\"ring_seq\":%u,\"bytes\":%zu,\"sps\":\"",
+            stream, seq, n);
+    hex(man, sps, sn); fprintf(man, "\",\"pps\":\""); hex(man, pps, pn); fprintf(man, "\"}\n");
+    return seq;
+}
+
+static int run_switch(const SwitchOpts *o, const char *idr_path, FILE *man, FILE *avcc_file)
+{
+    Buf frame = {0, 0, 0};
+    pid_t child = fork();
+    uint64_t t0, next_ns, period_ns = 1000000000ULL / o->fps, t_switch = 0;
+    unsigned old_no = 0, new_no = 0, idx = 0;
+    int switched = 0, new_started = 0, old_idr_pending = 1, new_idr_pending = 1, child_alive = 1;
+    size_t avcc_off = 0;
+    if (child < 0) { perror("fork"); return 2; }
+    if (child == 0) {
+        for (;;) pause();
+    }
+    put_owner(o->dir, o->src, (long)child, o->gen, o->kind);
+    put_avcc(man, "old", 800, 480);
+    t0 = now_ns();
+    next_ns = t0;
+    while (new_no < o->new_frames && old_no < o->frames_old_max) {
+        uint64_t now = now_ns();
+        int k;
+        if (next_ns > now) {
+            uint64_t d = next_ns - now;
+            struct timespec ts_sleep;
+            ts_sleep.tv_sec = (time_t)(d / 1000000000ULL);
+            ts_sleep.tv_nsec = (long)(d % 1000000000ULL);
+            nanosleep(&ts_sleep, NULL);
+        }
+        next_ns += period_ns;
+        now = now_ns();
+        if (access(idr_path, F_OK) == 0) {
+            unlink(idr_path);
+            fprintf(man, "{\"event\":\"idr-request\",\"before_idx\":%u,\"t_us\":%llu,\"action\":\"idr\","
+                    "\"stream\":\"%s\"}\n", idx, (unsigned long long)((now - t0) / 1000ULL),
+                    switched ? "new" : "old");
+            if (switched) new_idr_pending = 1; else old_idr_pending = 1;
+        }
+        if (switched && child_alive && o->kill_old_ms >= 0 &&
+            now >= t_switch + (uint64_t)o->kill_old_ms * 1000000ULL) {
+            kill(child, SIGKILL);
+            waitpid(child, NULL, 0);
+            child_alive = 0;
+            fprintf(man, "{\"event\":\"old-killed\",\"t_us\":%llu}\n",
+                    (unsigned long long)((now_ns() - t0) / 1000ULL));
+        }
+        for (k = 0; k < 2; ++k) {
+            int is_new = k == 1, idr, forced = 0;
+            uint32_t seq, fno;
+            uint64_t ts;
+            size_t size;
+            if (!is_new && switched && now >= t_switch + (uint64_t)o->old_tail_ms * 1000000ULL) continue;
+            if (is_new && !switched) continue;
+            if (is_new && !new_started) {
+                if (now < t_switch + (uint64_t)o->new_delay_ms * 1000000ULL) continue;
+                put_avcc(man, "new", 1024, 480);
+                new_started = 1;
+            }
+            idr = is_new ? new_idr_pending : old_idr_pending;
+            /* the stale writer keeps sending keyframes too (every 4th tail frame): only
+             * the gate, not the wait for a keyframe, may keep them off the output */
+            if (!is_new && switched && (old_no - (unsigned)o->switch_after) % 4U == 0U) idr = 1;
+            forced = idr && (is_new ? new_no : old_no) > 0;
+            if (is_new) new_idr_pending = 0; else old_idr_pending = 0;
+            size = idr ? 20000 : 1500 + (size_t)((idx * 2654435761U) % 4501U);
+            frame.n = 0;
+            make_frame(&frame, o->seed + (is_new ? 7777U : 0U), idx, idr, size);
+            fno = is_new ? 100000U + ++new_no : ++old_no;
+            seq = ring_put(2, frame.p, frame.n, fno, &ts);
+            fwrite(frame.p, 1, frame.n, avcc_file);
+            fprintf(man, "{\"idx\":%u,\"frame_no\":%u,\"stream\":\"%s\",\"idr\":%s,\"forced_idr\":%s,"
+                    "\"burst\":false,\"avcc_off\":%zu,\"avcc_bytes\":%zu,\"ring_seq\":%u,\"ntp\":%llu,"
+                    "\"t_us\":%llu}\n", idx, fno, is_new ? "new" : "old", idr ? "true" : "false",
+                    forced ? "true" : "false", avcc_off, frame.n, seq, (unsigned long long)ts,
+                    (unsigned long long)((now_ns() - t0) / 1000ULL));
+            avcc_off += frame.n;
+            ++idx;
+            if (!is_new && !switched && (int)old_no == o->switch_after) {
+                switched = 1;
+                t_switch = now_ns();
+                if (o->kill_old_ms == 0) { /* previous owner gone right at the switch */
+                    kill(child, SIGKILL);
+                    waitpid(child, NULL, 0);
+                    child_alive = 0;
+                    fprintf(man, "{\"event\":\"old-killed\",\"t_us\":%llu}\n",
+                            (unsigned long long)((now_ns() - t0) / 1000ULL));
+                }
+                put_owner(o->dir, o->new_src, (long)getpid(), o->new_gen, o->new_kind);
+                fprintf(man, "{\"event\":\"switch\",\"t_us\":%llu,\"after_ring_seq\":%u}\n",
+                        (unsigned long long)((t_switch - t0) / 1000ULL), seq);
+                printf("SWITCH\n");
+                fflush(stdout);
+                now = t_switch;
+            }
+        }
+        fflush(man);
+    }
+    if (child_alive) {
+        kill(child, SIGKILL);
+        waitpid(child, NULL, 0);
+    }
+    fprintf(man, "{\"event\":\"end\",\"old\":%u,\"new\":%u}\n", old_no, new_no);
+    free(frame.p);
+    return 0;
+}
+
 static void usage(void)
 {
     fprintf(stderr,
         "usage: producer --ring PATH --idr PATH --out DIR [--h264 FILE] [--frames N] [--fps F]\n"
         "  [--seed S] [--idr-size B] [--p-min B] [--p-max B] [--burst-at K --burst-count M --burst-size B]\n"
-        "  [--idr-on-request N] [--session-dir D --src NAME --gen G --stop-after K --stop-hold-ms MS]\n");
+        "  [--idr-on-request N] [--session-dir D --src NAME --gen G --stop-after K --stop-hold-ms MS]\n"
+        "  [--session-dir D --switch-after K [--kind K] [--new-src S] [--new-kind K] [--old-tail-ms T]\n"
+        "   [--new-delay-ms D] [--kill-old-ms X] [--new-frames N]]\n");
     exit(2);
 }
 
@@ -322,6 +468,7 @@ int main(int argc, char **argv)
     size_t idr_size = 20000, p_min = 1500, p_max = 6000, burst_size = 100000;
     int burst_at = -1, burst_count = 0, idr_on_request = 1, stop_after = -1;
     unsigned stop_hold_ms = 2000;
+    SwitchOpts sw;
     char path[512], line[256];
     FILE *man, *avcc_file;
     Buf frame = {0, 0, 0};
@@ -334,6 +481,8 @@ int main(int argc, char **argv)
     size_t avcc_off = 0;
     unsigned idx;
     int i;
+    memset(&sw, 0, sizeof(sw));
+    sw.switch_after = -1; sw.kind = ""; sw.new_kind = "in"; sw.new_frames = 90; sw.kill_old_ms = -1;
     for (i = 1; i < argc; i += 2) {
         const char *a = argv[i];
         const char *v = i + 1 < argc ? argv[i + 1] : NULL;
@@ -357,6 +506,14 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--gen")) gen = (unsigned)atoi(v);
         else if (!strcmp(a, "--stop-after")) stop_after = atoi(v);
         else if (!strcmp(a, "--stop-hold-ms")) stop_hold_ms = (unsigned)atoi(v);
+        else if (!strcmp(a, "--switch-after")) sw.switch_after = atoi(v);
+        else if (!strcmp(a, "--kind")) sw.kind = v;
+        else if (!strcmp(a, "--new-src")) sw.new_src = v;
+        else if (!strcmp(a, "--new-kind")) sw.new_kind = v;
+        else if (!strcmp(a, "--old-tail-ms")) sw.old_tail_ms = atoi(v);
+        else if (!strcmp(a, "--new-delay-ms")) sw.new_delay_ms = atoi(v);
+        else if (!strcmp(a, "--kill-old-ms")) sw.kill_old_ms = atoi(v);
+        else if (!strcmp(a, "--new-frames")) sw.new_frames = (unsigned)atoi(v);
         else usage();
     }
     if (!ring_path || !idr_path || !out || fps == 0) usage();
@@ -374,6 +531,17 @@ int main(int argc, char **argv)
         return 3;
     }
     usleep(200000); /* let the writer thread open its output */
+    if (sw.switch_after >= 0) {
+        int rc;
+        if (!session_dir) usage();
+        sw.dir = session_dir; sw.src = src; sw.new_src = sw.new_src ? sw.new_src : src;
+        sw.gen = gen; sw.new_gen = gen + 1U == 0 ? 1U : gen + 1U;
+        sw.frames_old_max = 100000U; sw.fps = fps; sw.seed = seed;
+        rc = run_switch(&sw, idr_path, man, avcc_file);
+        fclose(man);
+        fclose(avcc_file);
+        return rc;
+    }
     if (session_dir) {
         uint64_t ms = now_ns() / 1000000ULL;
         snprintf(line, sizeof(line), "v=1 src=%s pid=%ld gen=%u since_ms=%llu\n",

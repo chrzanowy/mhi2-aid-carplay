@@ -64,6 +64,14 @@
 #endif
 #define RECOVERY_FAST_WRITE_LIMIT_US 30000ULL
 #define RECOVERY_FAST_WRITES_REQUIRED 8U
+/* pmcp: the IDR request after a latency reset waits for 8 completed blocks
+ * and, upstream, for 8 fast (<= 30 ms) writes in a row. Under congestion any
+ * slow write reset that streak, so the request was never made. Fix by diasdio
+ * (omonob/MHI2-Carplay-Maps#1; binary offset 0x4174 cmphi r3,#7 -> #0, located
+ * by ramasauskas): one fast write is enough. Tests build the old value (8). */
+#ifndef PMCP_RECOVERY_FAST_STREAK_REQUIRED
+#define PMCP_RECOVERY_FAST_STREAK_REQUIRED 1U
+#endif
 #define VIDEO_PID 0x0011U
 #define PMT_PID 0x0010U
 #define PCR_PID 0x1000U
@@ -446,7 +454,7 @@ static int writer_recovered_after_reset(void)
     unsigned long streak = g_writer_fast_streak;
     return (unsigned long)(blocks - g_recovery_writer_generation) >=
                RECOVERY_FAST_WRITES_REQUIRED &&
-           streak >= RECOVERY_FAST_WRITES_REQUIRED;
+           streak >= PMCP_RECOVERY_FAST_STREAK_REQUIRED; /* pmcp: was RECOVERY_FAST_WRITES_REQUIRED */
 }
 
 static void queue_metric_snapshot(PacketQueue *queue, size_t *current,
@@ -1212,6 +1220,11 @@ static void *most_writer_thread(void *context)
             g_stop = 1;
             break;
         }
+#ifdef PMCP_TEST_SLOW_WRITE_EVERY
+        /* pmcp: host test hook, every Nth block from block 50 is a slow MOST write */
+        if (written_blocks >= 50U && written_blocks % PMCP_TEST_SLOW_WRITE_EVERY == 0U)
+            usleep(PMCP_TEST_SLOW_WRITE_US);
+#endif
         write_elapsed_us = monotonic_us() - write_start_us;
         if (write_elapsed_us > g_max_write_us)
             g_max_write_us = write_elapsed_us;
@@ -1353,7 +1366,11 @@ static int process_frame(AvcConfig *config, const uint8_t *data, size_t size,
         enter_low_latency_recovery(queued_packets, sequence, now_us);
     }
 #endif
-    if (g_waiting_for_keyframe && !writer_recovered_after_reset()) {
+    /* pmcp: once the IDR has been requested, the writer counted as recovered;
+     * re-checking it dropped the requested IDR whenever it arrived just after a
+     * slow write (streak 0), and no second request followed: frozen map. */
+    if (g_waiting_for_keyframe && !g_recovery_idr_requested &&
+        !writer_recovered_after_reset()) {
         ++g_latency_frames_discarded;
         g_last_sequence = sequence;
         free(annexb);
@@ -1545,6 +1562,21 @@ static void pmcp_status_now(uint32_t generation, uint32_t next_sequence,
     pmcp_status_write(&stats, ready, now_us);
 }
 
+/* pmcp: stage 1b, the consumer gate opened (contract v1.1, R94): ask the
+ * producer for an IDR; the wait-for-keyframe state was entered at the cut. */
+static void pmcp_gate_opened(void)
+{
+    if (request_fresh_idr() != 0)
+        cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: reconnect IDR request failed: %s\n",
+                strerror(errno));
+    cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: gate-open reason=%s gate_forced=%lu\n",
+            pmcp_gate_reason(), (unsigned long)g_pmcp_gate.forced);
+    cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
+            "bridge: gate-stats cuts=%lu forced=%lu gate_drops=%lu wait_ms=%llu\n",
+            (unsigned long)g_pmcp_gate.cuts, (unsigned long)g_pmcp_gate.forced, g_pmcp.gate_drops,
+            (unsigned long long)(monotonic_us() / 1000ULL - g_pmcp_gate.cut_ms));
+}
+
 int main(int argc, char **argv)
 {
     const char *device = argc > 1 ? argv[1] : "/dev/mlb/isoTX2";
@@ -1561,6 +1593,8 @@ int main(int argc, char **argv)
     uint32_t generation = 0;
     uint32_t next_sequence = 1;
     int pmcp_new_epoch = 1; /* pmcp */
+    int pmcp_replay = 0;           /* pmcp: stage 1b, re-reading slots after a cut */
+    uint32_t pmcp_replay_end = 0;  /* pmcp: first sequence not consumed before the cut */
     unsigned int i;
     memset(&config, 0, sizeof(config));
     pmcp_log_init();  /* pmcp: stderr -> /ramdisk/pmcp-most/bridge.log */
@@ -1647,11 +1681,46 @@ int main(int argc, char **argv)
          * stream like the supervisor's SIGTERM after its stream timeout. */
         {
             uint64_t pmcp_now = monotonic_us();
-            int pmcp_tick = pmcp_most_tick(pmcp_now);
+            uint32_t pmcp_cut_seq = 0;
+            int pmcp_tick = pmcp_most_tick(pmcp_now, (pmcp_ring *)(void *)ring, &pmcp_cut_seq);
+            int pmcp_open;
+            if (pmcp_tick & PMCP_TICK_CUT) {
+                /* Stage 1b, contract v1.1 consumer gate (R92): the owner's gen
+                 * changed. The gate bumped the ring generation (ours, so no
+                 * foreign change follows); restart at cut_seq + 1 (OQ3 (a): an
+                 * avcC written while we had not noticed yet is read again).
+                 * Video slots consumed before the cut are not sent twice. */
+                generation = ring->generation;
+                pmcp_replay_end = next_sequence;
+                next_sequence = pmcp_cut_seq + 1U;
+                if (next_sequence == 0) next_sequence = 1U;
+                pmcp_replay = (int32_t)(pmcp_replay_end - next_sequence) > 0;
+                queue_discard_all(&g_queue);
+                g_intro_waiting_live_idr = 1;
+                g_last_sequence = 0;
+                g_media_origin_ntp = 0;
+                g_local_origin_us = 0;
+                g_discontinuity_pending = 1;
+                pmcp_new_epoch = 1;
+                cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
+                        "bridge: owner-cut owner_gen=%u ring_gen=%u kind=%s prev_pid=%lu\n",
+                        (unsigned)g_pmcp_gate.owner_gen, (unsigned)generation,
+                        g_pmcp_gate.last_kind == PMCP_KIND_PROXY ? "proxy" : "in",
+                        g_pmcp_gate.prev_pid);
+                cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
+                        "bridge: gate-closed cut_seq=%u write_seq=%u resume_seq=%u replay_to=%u prev_kind=%s cuts=%lu\n",
+                        (unsigned)pmcp_cut_seq, (unsigned)g_pmcp.cut_write_seq, (unsigned)next_sequence,
+                        pmcp_replay ? (unsigned)pmcp_replay_end : 0U,
+                        g_pmcp_gate.prev_kind == PMCP_KIND_PROXY ? "proxy" : "in",
+                        (unsigned long)g_pmcp_gate.cuts);
+            }
+            /* A held avcC waits for the previous writer's exit or deadline. */
+            pmcp_open = pmcp_gate_tick(pmcp_now);
+            if (pmcp_open == 1 && parse_avcc_config(&config, g_pmcp_gate.cfg, g_pmcp_gate.cfg_len) != 0)
+                ++g_dropped_messages;
+            if (pmcp_open) pmcp_gate_opened();
             if (pmcp_tick & PMCP_TICK_STATUS)
                 pmcp_status_now(generation, next_sequence, (int)g_pmcp_most_ready, pmcp_now);
-            /* pmcp: TODO(stage 1b, contract v1.1) call the consumer gate here
-             * (owner gen change -> new ring generation, wait for avcC). */
             if (pmcp_tick & PMCP_TICK_STOP) {
                 on_signal(SIGTERM);
                 break;
@@ -1678,6 +1747,7 @@ int main(int argc, char **argv)
             g_local_origin_us = 0;
             g_discontinuity_pending = 1;
             pmcp_new_epoch = 1; /* pmcp */
+            pmcp_replay = 0; /* pmcp */
             if (request_fresh_idr() != 0)
                 cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: reconnect IDR request failed: %s\n",
                         strerror(errno));
@@ -1739,6 +1809,21 @@ int main(int argc, char **argv)
             memcpy(message, slot->data, size);
             __sync_synchronize();
             if (slot->committed_sequence != next_sequence) continue;
+            /* pmcp: stage 1b consumer gate (R93) */
+            status = g_pmcp_gate.cut ?
+                     pmcp_gate_filter(next_sequence, type, message, size, monotonic_us()) : 0;
+            if (status < 0) {
+                ++g_dropped_messages;
+                ++next_sequence;
+                continue;
+            }
+            if (status > 0) pmcp_gate_opened();
+            if (pmcp_replay && (int32_t)(pmcp_replay_end - next_sequence) <= 0) pmcp_replay = 0;
+            if (pmcp_replay && type == ALT_FRAME_TYPE_VIDEO) {
+                ++next_sequence; /* already consumed before the cut */
+                continue;
+            }
+            /* pmcp: end */
             if (type == ALT_FRAME_TYPE_CONFIG)
                 status = parse_avcc_config(&config, message, size);
             else if (type == ALT_FRAME_TYPE_VIDEO) {
@@ -1775,6 +1860,11 @@ done:
             g_latency_resets, g_latency_packets_discarded,
             g_latency_frames_discarded, g_pts_clock_rebases,
             g_intro_frames);
+    if (g_pmcp_gate.cuts) /* pmcp */
+        cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
+                "bridge: gate-stats cuts=%lu forced=%lu gate_drops=%lu closed=%d\n",
+                (unsigned long)g_pmcp_gate.cuts, (unsigned long)g_pmcp_gate.forced,
+                g_pmcp.gate_drops, g_pmcp_gate.cut);
     pmcp_status_now(generation, next_sequence, 0, monotonic_us()); /* pmcp: ready=0 on exit */
     free(message);
     if (ring != MAP_FAILED) munmap(ring, sizeof(*ring));

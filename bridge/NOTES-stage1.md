@@ -91,3 +91,63 @@
    - `cp-log-save` i przycisk 9 dla `/ramdisk/pmcp-most/`;
    - jazda testowa;
    - bramka v1.1 (etap 1b).
+
+# Etap 1b pmcp-most: bramka konsumenta + poprawka diasdio (2026-11-14)
+
+## Co zrobione
+
+- **Bramka konsumenta kontraktu v1.1** w moście (`pmcp_most.h`: `pmcp_owner_poll`, `pmcp_gate_filter`,
+  `pmcp_gate_tick`; w pętli czytnika `altscreen_most_bridge.c` w miejscu dawnych `TODO(stage 1b)`):
+  - `owner` czytany co 20 ms z istniejącej pętli czytnika (1 ms), writer nie jest dotykany;
+  - pierwszy owner w przebiegu tylko zapamiętany; zmiana `gen` = cięcie: most podbija generację ringu (własna zmiana,
+    bez ścieżki R18), czyta od `cut_seq + 1`, wyrzuca całe AU z kolejki, czeka na klatkę kluczową;
+  - `cut_seq` = `write_sequence` z POPRZEDNIEGO odczytu owner (decyzja OQ3 (a)); klatki wideo z ponownie czytanego
+    zakresu, które wyszły przed cięciem, są pomijane (nie idą drugi raz);
+  - bramka zamknięta, dopóki żyje pid poprzedniego właściciela, maks. 100 ms (`in`) / 3000 ms (`proxy`), potem
+    `reason=forced`, `gate_forced` + 1; avcC z czasu trzymania stosowane przy otwarciu, potem znacznik IDR;
+  - liczniki bramki tylko w `bridge.log` (`owner-cut`, `gate-closed`, `gate-open`, `gate-stats`): linia consumer v0.2
+    ma w najgorszym przypadku 253 B, dodatkowe klucze przekroczyłyby 255 B;
+  - bez pliku owner: brak bramki, zachowanie upstream (ts_compare SAME).
+- **Kod bramki z zestawu kontraktu:** `src/pmcp_gate.c` to dosłowna kopia `pmcp_pid_alive`, `pmcp_owner_preempt_ms` i
+  sekcji „consumer gate” z `contract/pmcp_most_producer.c` (test `provenance` sprawdza bajt w bajt). Linkowanie całego
+  obiektu zestawu (nawet z `-ffunction-sections` + `--gc-sections`) dodawało 6 importów niepotwierdzonych na libc
+  MU1161: `link nanosleep strcpy strncpy strtoll strtoull` (ld 2.19 zostawia referencje dynamiczne usuniętych sekcji).
+  Z kopią lista importów jest identyczna jak w etapie 1.
+- **Poprawka diasdio (żądanie IDR przy zatorze):** `writer_recovered_after_reset()` wymaga teraz serii ≥ 1 szybkiego
+  zapisu (≤ 30 ms) zamiast 8 (`PMCP_RECOVERY_FAST_STREAK_REQUIRED`). Odpowiednik łatki binarnej `cmphi r3,#7` → `#0`
+  (0x4174) z analizy diasdio (omonob/MHI2-Carplay-Maps#1), offsety ramasauskas. Warunek „≥ 8 bloków od resetu”
+  zostaje: bloki liczą się niezależnie od szybkości zapisu, więc nie może zagłodzić żądania (w teście 8 bloków przy co
+  4. zapisie 35 ms = ok. 140 ms); daje writerowi chwilę na opróżnienie zatoru przed IDR. Pierwsza poprawka diasdio
+  (flush tylko bez częściowo wysłanej AU) to nasz punkt 5 z etapu 1.
+- **Nasza poprawka obok niej (znaleziona przez nowy test):** po wysłaniu żądania IDR most nie sprawdza już ponownie
+  „writer odzyskany”. Wcześniej żądane IDR, które przyszło tuż po wolnym zapisie (seria 0), szło do kosza jako „writer
+  nie odzyskany”, a drugiego żądania nie było: mapa stała do końca strumienia (3 z 5 przebiegów z samą poprawką diasdio;
+  w upstream z serią 8 ta sama pułapka, tylko rzadziej osiągana).
+
+## Testy hosta
+
+- Nowe: `gate` (gate-held, gate-forced, gate-in, gate-oq3), `slow-recovery` (+ kontrola starej reguły), sprawdzenie
+  kopii bramki w `provenance`, „brak owner = brak linii bramki” w `parity`.
+- Producent testowy: `--switch-after` (stary strumień pod pid sforkowanego bezczynnego dziecka, nowy strumień z
+  własnym avcC; stary pisze dalej, także klatki kluczowe, przez `--old-tail-ms`).
+- Sprawdzenie negatywne (ręcznie, poza zestawem): bez OQ3 (a) gate-oq3 pada (bramka się nie otwiera); z wyłączoną
+  bramką padają gate-held/forced/in/oq3 (stare klatki na wyjściu, brak gate-open).
+- Wynik: `BRIDGE TESTS: 106 ok, 0 failed`, 5 pełnych przebiegów pod rząd bez błędów (force-idr stabilny). Bramka:
+  otwarcie po śmierci pid 985–1030 ms (pid zabity po 1000 ms), wymuszone 3000–3001 ms; IDR przy zatorze 138–206 ms po
+  resecie (stara reguła: brak żądania).
+
+## Build QNX
+
+- `altscreen-most-bridge`: 34972 B, sha256 `d818be15b896d3c0841bd7ce7c413202f48b62b854059797e81901e3bc8b49ed`
+  (etap 1: 32076 B, `672f791e…`). Dwa buildy identyczne, gcc 8.5.0.
+- NEEDED: `libsocket.so.3`, `libc.so.3`.
+- Importy: 68, lista identyczna jak w etapie 1 (zero nowych).
+
+## Otwarte
+
+1. Bramka bez avcC po cięciu zostaje zamknięta (spec OPEN-QUESTIONS 3); core.so po zmianie generacji ringu avcC
+   raczej nie powtarza. Zależy od reguły OQ3 (c): owner przed pierwszym avcC.
+2. Klatki starego pisarza zapisane w oknie wykrywania (≤ 20 ms + opóźnienie pętli) mogą jeszcze wyjść przed cięciem;
+   test dopuszcza 40 ms.
+3. Poprawka diasdio sprawdzona tylko na hoście (wstrzyknięte wolne zapisy); w aucie: czy po zatorze mapa wraca szybciej
+   i bez artefaktów.

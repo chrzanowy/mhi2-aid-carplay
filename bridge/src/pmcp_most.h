@@ -16,9 +16,19 @@
  *  3. Producer session files <dir>/<src>.session (contract v0.2 section 2):
  *     state=stop of the current owner ends the stream at once, the same way
  *     as the supervisor's SIGTERM. Absent files = upstream behaviour.
+ *  4. Stage 1b: consumer gate of contract v1.1 (shared code in
+ *     ../contract/pmcp_most_producer.c: pmcp_gate_owner/slot/poll). The owner
+ *     file is polled every PMCP_MOST_OWNER_POLL_MS; an owner gen change (not
+ *     the first owner seen) bumps the ring generation and closes the gate
+ *     until a type-1 avcC written after the cut, and while the previous
+ *     owner's pid lives (at most 100 ms for kind=in, 3000 ms for proxy).
+ *     cut_seq is the ring write_sequence of the PREVIOUS owner poll (contract
+ *     decision OQ3 (a)): an avcC written in the detection window opens it.
+ *     No owner file at all = no gate (upstream behaviour).
  *
  * Nothing here blocks: small files on /ramdisk, read or written by the
- * reader thread at most every PMCP_MOST_SESSION_POLL_MS / 1000 ms. */
+ * reader thread at most every PMCP_MOST_OWNER_POLL_MS / 1000 ms; the writer
+ * thread never touches any of it. */
 #ifndef PMCP_MOST_H
 #define PMCP_MOST_H
 
@@ -34,6 +44,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "pmcp_most_producer.h" /* contract kit: consumer gate, owner kinds */
+
 #ifndef PMCP_MOST_LOG_PATH
 #define PMCP_MOST_LOG_PATH "/ramdisk/pmcp-most/bridge.log"
 #endif
@@ -45,7 +57,7 @@
 #endif
 #define PMCP_MOST_STATUS_PERIOD_MS 1000U
 #define PMCP_MOST_SESSION_POLL_MS 100U
-#define PMCP_MOST_LINE_MAX 255U
+#define PMCP_MOST_OWNER_POLL_MS 20U /* PMCP_MOST_LINE_MAX: contract kit */
 
 /* Reader-visible state, set by the writer thread / signal handler. */
 static volatile sig_atomic_t g_pmcp_most_ready;
@@ -70,6 +82,8 @@ typedef struct PmcpMostState {
     uint64_t start_us;
     uint64_t next_status_us;
     uint64_t next_poll_us;
+    uint64_t next_owner_us;
+    int have_owner;        /* the last owner poll found a valid owner */
     uint32_t owner_gen;
     char src[16];          /* current (or last seen) owner source */
     int session_started;   /* state=start seen for src during this run */
@@ -81,9 +95,15 @@ typedef struct PmcpMostState {
     int64_t age_min_offset_us;
     int age_have_min;
     unsigned long age_ms;
+    /* consumer gate: ring write_sequence at the previous owner poll */
+    uint32_t poll_seq;
+    int poll_seq_have;
+    uint32_t cut_write_seq;   /* write_sequence when the cut was noticed */
+    unsigned long gate_drops; /* slots dropped by the closed gate */
 } PmcpMostState;
 
 static PmcpMostState g_pmcp;
+static pmcp_consumer_gate g_pmcp_gate;
 
 static uint64_t pmcp_now_us(void)
 {
@@ -168,15 +188,17 @@ static void pmcp_most_init(void)
     g_pmcp.start_us = pmcp_now_us();
     g_pmcp.next_status_us = g_pmcp.start_us;
     g_pmcp.next_poll_us = g_pmcp.start_us;
+    g_pmcp.next_owner_us = g_pmcp.start_us;
+    pmcp_gate_init(&g_pmcp_gate);
     pmcp_mkdirs(g_pmcp.dir, 1);
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
-            "bridge: pmcp-most stage1 pid=%ld log=%s limit=%u src_dir=%s\n",
+            "bridge: pmcp-most stage1b pid=%ld log=%s limit=%u src_dir=%s\n",
             (long)getpid(), g_pmcp.log_active ? g_pmcp.log_path : "stderr",
             (unsigned)PMCP_MOST_LOG_LIMIT, g_pmcp.dir);
 }
 
 /* Reads one contract line; returns its length or -1. */
-static int pmcp_read_line(const char *name, char *line, size_t size)
+static int pmcp_read_name(const char *name, char *line, size_t size)
 {
     char path[sizeof(g_pmcp.dir) + 32U];
     int fd;
@@ -233,39 +255,105 @@ static int pmcp_valid_src(const char *src)
     return 1;
 }
 
-/* Returns 1 when the owner's producer session has ended (state=stop newer
- * than this bridge, or its file vanished with a dead pid). */
-static int pmcp_session_check(uint64_t now_us)
+/* Owner poll (every PMCP_MOST_OWNER_POLL_MS, reader thread). Tracks the
+ * source for the session files and feeds the consumer gate. Returns 1 on a
+ * gate cut: the ring generation was bumped (by us) and *cut_seq is the
+ * write_sequence of the previous poll (OQ3 (a)); the caller restarts reading
+ * at *cut_seq + 1. A missing or invalid owner is not a cut (R92). */
+static int pmcp_owner_poll(pmcp_ring *ring, uint64_t now_us, uint32_t *cut_seq)
 {
     char line[PMCP_MOST_LINE_MAX + 2U];
     char src[16];
-    char state[16];
-    char reason[32];
-    char session_name[32];
-    unsigned long owner_gen = 0;
+    char text[16];
     unsigned long gen = 0;
     unsigned long pid = 0;
-    unsigned long ts_ms = 0;
-    int have_owner = 0;
-    (void)now_us;
-    if (pmcp_read_line("owner", line, sizeof(line)) > 0 &&
+    uint32_t seq_now;
+    pmcp_owner cur;
+    int cut = 0;
+    __sync_synchronize();
+    seq_now = ring->write_sequence;
+    if (pmcp_read_name("owner", line, sizeof(line)) > 0 &&
+        pmcp_field(line, "v", text, sizeof(text)) == 0 && strcmp(text, "1") == 0 &&
         pmcp_field(line, "src", src, sizeof(src)) == 0 && pmcp_valid_src(src) &&
-        pmcp_field_ul(line, "gen", &owner_gen) == 0) {
-        have_owner = 1;
+        pmcp_field_ul(line, "gen", &gen) == 0 && (unsigned long)(uint32_t)gen == gen) {
+        if (pmcp_field_ul(line, "pid", &pid) != 0) pid = 0;
         if (strcmp(src, g_pmcp.src) != 0) {
             memcpy(g_pmcp.src, src, strlen(src) + 1U);
             g_pmcp.session_started = 0;
             g_pmcp.session_pid = 0;
         }
+        memset(&cur, 0, sizeof(cur));
+        memcpy(cur.src, src, strlen(src) + 1U);
+        cur.pid = pid;
+        cur.gen = (uint32_t)gen;
+        cur.kind = (pmcp_field(line, "kind", text, sizeof(text)) == 0 &&
+                    strcmp(text, "proxy") == 0) ? PMCP_KIND_PROXY : PMCP_KIND_IN;
+        if (pmcp_gate_owner(&g_pmcp_gate, ring, &cur, now_us / 1000ULL)) {
+            if (g_pmcp.poll_seq_have) g_pmcp_gate.cut_seq = g_pmcp.poll_seq;
+            *cut_seq = g_pmcp_gate.cut_seq;
+            g_pmcp.cut_write_seq = seq_now;
+            cut = 1;
+        }
+        g_pmcp.have_owner = 1;
+        g_pmcp.owner_gen = (uint32_t)gen;
+    } else {
+        g_pmcp.have_owner = 0;
+        g_pmcp.owner_gen = 0;
     }
-    /* TODO(stage 1b, contract v1.1): owner kind=in|proxy; on an owner gen
-     * change bump the ring generation and drop frames until a new type-1 avcC,
-     * through the shared consumer gate in ../contract/pmcp_most_producer.{c,h}.
-     * Not implemented in stage 1. */
-    g_pmcp.owner_gen = have_owner ? (uint32_t)owner_gen : 0U;
+    g_pmcp.poll_seq = seq_now;
+    g_pmcp.poll_seq_have = 1;
+    return cut;
+}
+
+/* Gate check of one ring slot. Returns -1 = drop it (gate closed: counts as a
+ * drop, R93), 0 = process normally, 1 = process normally and the gate has
+ * just opened on this avcC slot (the caller requests an IDR and logs). */
+static int pmcp_gate_filter(uint32_t seq, uint32_t type, const void *data, uint32_t size,
+                            uint64_t now_us)
+{
+    if (!g_pmcp_gate.cut) return 0;
+    if (pmcp_gate_slot(&g_pmcp_gate, seq, type, data, size, now_us / 1000ULL) != PMCP_GATE_PASS) {
+        ++g_pmcp.gate_drops;
+        return -1;
+    }
+    return 1;
+}
+
+/* Gate poll of every reader pass while a held avcC waits for the previous
+ * writer (R94). Returns 0 = nothing, 1 = opened, apply the stored avcC
+ * (g_pmcp_gate.cfg, cfg_len), 2 = opened, stored avcC too large to keep. */
+static int pmcp_gate_tick(uint64_t now_us)
+{
+    int apply;
+    if (!g_pmcp_gate.cut || !g_pmcp_gate.cfg_have) return 0;
+    apply = pmcp_gate_poll(&g_pmcp_gate, now_us / 1000ULL);
+    if (g_pmcp_gate.cut) return 0;
+    return apply ? 1 : 2;
+}
+
+static const char *pmcp_gate_reason(void)
+{
+    return g_pmcp_gate.open_reason == PMCP_GATE_OPEN_FORCED ? "forced" : "pid-exit";
+}
+
+/* Returns 1 when the owner's producer session has ended (state=stop newer
+ * than this bridge, or its file vanished with a dead pid). The owner itself
+ * comes from the last owner poll (at most PMCP_MOST_OWNER_POLL_MS old). */
+static int pmcp_session_check(uint64_t now_us)
+{
+    char line[PMCP_MOST_LINE_MAX + 2U];
+    char state[16];
+    char reason[32];
+    char session_name[32];
+    unsigned long owner_gen = g_pmcp.owner_gen;
+    unsigned long gen = 0;
+    unsigned long pid = 0;
+    unsigned long ts_ms = 0;
+    int have_owner = g_pmcp.have_owner;
+    (void)now_us;
     if (g_pmcp.src[0] == '\0') return 0;
     snprintf(session_name, sizeof(session_name), "%s.session", g_pmcp.src);
-    if (pmcp_read_line(session_name, line, sizeof(line)) <= 0) {
+    if (pmcp_read_name(session_name, line, sizeof(line)) <= 0) {
         /* Vanished file: only a producer seen alive in this run and now dead. */
         if (g_pmcp.session_started && g_pmcp.session_pid > 0 &&
             kill((pid_t)g_pmcp.session_pid, 0) != 0 && errno == ESRCH) {
@@ -346,13 +434,19 @@ static void pmcp_status_write(const PmcpConsumerStats *s, int ready, uint64_t no
     if (rename(tmp, path) != 0) unlink(tmp);
 }
 
-/* Reader loop hook. Fills the stats only when a status line is due.
- * Returns 1 if the owner's session asked the stream to end. */
+/* Reader loop hook. PMCP_TICK_STATUS: a status line is due; PMCP_TICK_STOP:
+ * the owner's session asked the stream to end; PMCP_TICK_CUT: consumer gate
+ * cut (owner gen change), restart reading at *cut_seq + 1. */
 #define PMCP_TICK_STATUS 1
 #define PMCP_TICK_STOP 2
-static int pmcp_most_tick(uint64_t now_us)
+#define PMCP_TICK_CUT 4
+static int pmcp_most_tick(uint64_t now_us, pmcp_ring *ring, uint32_t *cut_seq)
 {
     int result = 0;
+    if (now_us >= g_pmcp.next_owner_us) {
+        g_pmcp.next_owner_us = now_us + PMCP_MOST_OWNER_POLL_MS * 1000ULL;
+        if (pmcp_owner_poll(ring, now_us, cut_seq)) result |= PMCP_TICK_CUT;
+    }
     if (now_us >= g_pmcp.next_poll_us) {
         g_pmcp.next_poll_us = now_us + PMCP_MOST_SESSION_POLL_MS * 1000ULL;
         if (!g_pmcp.stop_reported && pmcp_session_check(now_us)) {

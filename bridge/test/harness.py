@@ -18,6 +18,8 @@ PRODUCER = os.path.join(BUILD, 'producer')
 BRIDGE = os.path.join(BUILD, 'bridge-host')
 BRIDGE_UP = os.path.join(BUILD, 'bridge-host-upstream')
 BRIDGE_ENOMEM = os.path.join(BUILD, 'bridge-host-enomem')
+BRIDGE_SLOW = os.path.join(BUILD, 'bridge-host-slow')
+BRIDGE_SLOW_OLD = os.path.join(BUILD, 'bridge-host-slow-old')
 FAKE_DMDT = os.path.join(HERE, 'fake_dmdt.sh')
 LOG_LIMIT = 64 * 1024
 STATUS_KEYS = ['v', 'ready', 'pid', 'owner_gen', 'ring_gen', 'seq', 'frames', 'drops', 'overruns',
@@ -204,8 +206,10 @@ def test_upstream_parity():
     check('parity: upstream run passes ts_analyse', c1 == 0, out1[-400:])
     r = subprocess.run([sys.executable, '-I', os.path.join(TOOLS, 'ts_compare.py'), up.dir, ours.dir,
                         '--mode', 'cp'], capture_output=True, text=True)
-    check('parity: ts_compare --mode cp upstream vs pmcp = SAME', r.returncode == 0 and 'SAME' in r.stdout,
-          r.stdout[-600:])
+    check('parity: ts_compare --mode cp upstream vs pmcp = SAME (no owner file: no gate)',
+          r.returncode == 0 and 'SAME' in r.stdout, r.stdout[-600:])
+    check('parity: no owner file, no gate lines in the log', 'owner-cut' not in ours.logtext() and
+          'gate-' not in ours.logtext())
     with open(os.path.join(BUILD, 'runs', 'parity-compare.txt'), 'w') as f: f.write(r.stdout)
 
 
@@ -235,6 +239,38 @@ def test_force_idr():
     check('force-idr: exit 0', rc == 0, rc)
     r.cleanup()
 
+
+def test_slow_recovery():
+    """diasdio's fix: under intermittent slow MOST writes (> 30 ms) the IDR request after a latency reset
+    is still made. Every 4th write is slow, so a streak of 8 fast writes never happens."""
+    def run(name, binary):
+        r = Run(name, bridge=binary).start()
+        r.produce('--frames', 150, '--burst-at', 40, '--burst-count', 12, '--burst-size', 100000,
+                  '--idr-on-request', 1)
+        time.sleep(0.8)
+        rc = r.stop()
+        code, out, norm = r.analyse()
+        return r, rc, code, out, norm, r.logtext()
+    r, rc, code, out, norm, log = run('slow-recovery', BRIDGE_SLOW)
+    reset = log.find('bridge: latency-reset')
+    m = re.search(r'latency-request-idr sequence=\d+ status=0 wait_us=(\d+) blocks=\d+ streak=(\d+)', log[reset:]) \
+        if reset >= 0 else None
+    wait = int(m.group(1)) if m else None
+    print(f'info   slow-recovery: IDR requested {wait} us after the latency reset', flush=True)
+    check('slow-recovery: writes over 30 ms happened (write_us_max), latency-reset', 'bridge: latency-reset' in log and
+          any(int(x) > 30000 for x in re.findall(r'write_us_max=(\d+)', log)))
+    check('slow-recovery: IDR requested within 500 ms of the reset', wait is not None and wait <= 500000, wait)
+    check('slow-recovery: resumed on the IDR (latency-resume-idr), every drop run ends on an IDR',
+          'latency-resume-idr' in log[reset:] and norm and norm['drop_runs'] and
+          all(x['resumed_with_idr'] for x in norm['drop_runs']) and norm['output_aus'] > 60,
+          norm and norm['drop_runs'])
+    check('slow-recovery: ts_analyse format checks pass, exit 0', code == 0 and rc == 0, out[-400:])
+    r.cleanup()
+    # control: the upstream rule (8 fast writes in a row) never requests the IDR here
+    r, rc, code, out, norm, log = run('slow-recovery-old-rule', BRIDGE_SLOW_OLD)
+    check('slow-recovery: control, old rule (streak 8) never requests the IDR under the same load',
+          'bridge: latency-reset' in log and 'latency-request-idr' not in log)
+    r.cleanup()
 
 def test_enomem():
     r = Run('enomem', bridge=BRIDGE_ENOMEM, env=dict(HOST_RECLAIM_WINDOW_US='600000000')).start()
@@ -344,6 +380,125 @@ def test_session_stop():
     v.cleanup()
 
 
+# ------------------------------------------------------------------ stage 1b: consumer gate
+def gate_run(name, *args):
+    """Owner switch (producer --switch-after): old stream under owner gen 5, new under gen 6."""
+    r = Run(name).start()
+    prod = r.produce('--session-dir', r.src_dir, '--src', 'wired', '--gen', 5, '--switch-after', 30, *args,
+                     wait=False)
+    samples = []
+    while prod.poll() is None:
+        s = r.status()
+        if s: samples.append((time.monotonic(), s))
+        time.sleep(0.1)
+    time.sleep(0.6)
+    rc = r.stop()
+    code, out, norm = r.analyse()
+    man = [json.loads(l) for l in open(os.path.join(r.dir, 'input', 'frames.raw.jsonl'))]
+    log = r.logtext()
+    g = dict(r=r, rc=rc, code=code, out=out, norm=norm, man=man, log=log, samples=samples)
+    g['switch'] = next((e for e in man if e.get('event') == 'switch'), None)
+    g['killed'] = next((e for e in man if e.get('event') == 'old-killed'), None)
+    g['by_fn'] = {f['frame_no']: f for f in man if 'frame_no' in f}
+    g['out'] = [a for a in (norm['aus'] if norm else []) if a['frame_no'] is not None]
+    m = re.search(r'gate-open reason=(\S+) gate_forced=(\d+)', log)
+    g['open'] = m and (m.group(1), int(m.group(2)))
+    m = re.search(r'gate-stats cuts=(\d+) forced=(\d+) gate_drops=(\d+) wait_ms=(\d+)', log)
+    g['wait_ms'] = int(m.group(4)) if m else None
+    m = re.search(r'gate-closed cut_seq=(\d+) write_seq=(\d+)', log)
+    g['cut'] = m and (int(m.group(1)), int(m.group(2)))
+    return g
+
+
+def gate_common(name, g):
+    """Checks every owner-switch run must pass."""
+    log, sw = g['log'], g['switch']
+    t_sw = sw['t_us'] if sw else 0
+    # allowance: one 20 ms owner poll + 20 ms scheduling on a busy host; at 30 fps this still
+    # catches the second old frame after the switch (+66 ms)
+    old_late = [a['frame_no'] for a in g['out'] if g['by_fn'][a['frame_no']]['stream'] == 'old' and
+                g['by_fn'][a['frame_no']]['t_us'] > t_sw + 40000]
+    new_out = [a for a in g['out'] if g['by_fn'][a['frame_no']]['stream'] == 'new']
+    check(f'{name}: producer switched owner gen 5 -> 6', sw is not None)
+    check(f'{name}: exactly one owner-cut (the first owner seen does not cut)',
+          len(re.findall(r'bridge: owner-cut owner_gen=6 ring_gen=\d+ kind=in prev_pid=\d+', log)) == 1 and
+          log.count('owner-cut') == 1, re.findall(r'bridge: owner-cut.*', log))
+    check(f'{name}: no ring generation change seen as foreign after the cut',
+          'ring generation=' not in log, re.findall(r'bridge: ring generation=.*', log))
+    check(f'{name}: no frame of the old writer written > 40 ms after the switch is sent', not old_late,
+          old_late[:10])
+    check(f'{name}: new stream on the output, starting with an IDR',
+          len(new_out) > 20 and new_out[0]['idr'] and new_out[0]['discontinuity'],
+          f'{len(new_out)} {new_out[:1]}')
+    cut_at = log.find('bridge: gate-closed')
+    open_at = log.find('bridge: gate-open')
+    check(f'{name}: the new avcC is applied when the gate opens (avcC ready between cut and open)',
+          0 <= cut_at < open_at and 'avcC ready' in log[cut_at:open_at + 200])
+    reqs = [e for e in g['man'] if e.get('event') == 'idr-request' and e.get('stream') == 'new']
+    forced = [f for f in g['man'] if f.get('stream') == 'new' and f.get('forced_idr')]
+    check(f'{name}: IDR marker created on opening, producer sent a forced IDR', reqs and forced,
+          f'{len(reqs)} {len(forced)}')
+    check(f'{name}: ts_analyse format checks pass', g['code'] == 0, g['out'] and g['out'][-1:] or g['code'])
+    check(f'{name}: exit 0', g['rc'] == 0, g['rc'])
+    return new_out
+
+
+def test_gate():
+    # (1) previous writer (proxy) alive at the switch, dies after 1000 ms: gate opens on its exit
+    g = gate_run('gate-held', '--kind', 'proxy', '--old-tail-ms', 400, '--new-delay-ms', 100,
+                 '--kill-old-ms', 1000, '--new-frames', 90)
+    gate_common('gate-held', g)
+    w = g['wait_ms']
+    print(f'info   gate-held: gate open {w} ms after the cut (old pid killed 1000 ms after the switch)', flush=True)
+    check('gate-held: opens on the old pid exit (reason=pid-exit gate_forced=0)', g['open'] == ('pid-exit', 0),
+          g['open'])
+    check('gate-held: opened 0.9..1.2 s after the cut (not before the old pid died)',
+          w is not None and 900 <= w <= 1200, w)
+    reqs = [e for e in g['man'] if e.get('event') == 'idr-request' and e.get('stream') == 'new']
+    check('gate-held: IDR requested after the old pid died', g['killed'] and reqs and
+          reqs[0]['t_us'] >= g['killed']['t_us'], f"{g['killed']} {reqs[:1]}")
+    g['r'].cleanup()
+
+    # (2) previous writer (proxy) never exits: gate forced open at 3000 ms; status keeps refreshing
+    g = gate_run('gate-forced', '--kind', 'proxy', '--old-tail-ms', 400, '--new-delay-ms', 100,
+                 '--new-frames', 165)
+    gate_common('gate-forced', g)
+    w = g['wait_ms']
+    print(f'info   gate-forced: gate open {w} ms after the cut', flush=True)
+    check('gate-forced: forced open (reason=forced gate_forced=1)', g['open'] == ('forced', 1), g['open'])
+    check('gate-forced: opened 3.0..3.2 s after the cut', w is not None and 3000 <= w <= 3200, w)
+    vals = [parse_status(s)[1] for _, s in g['samples']]
+    ups = sorted({int(v['up_ms']) for v in vals})
+    steps = [b - a for a, b in zip(ups, ups[1:])]
+    check('gate-forced: consumer status refreshed every 1000 +- 100 ms through the held gate',
+          len(steps) >= 5 and all(900 <= s <= 1100 for s in steps), steps)
+    gens = [v.get('owner_gen') for v in vals]
+    check('gate-forced: status owner_gen 5 then 6, line <= 255 bytes',
+          '5' in gens and gens[-1] == '6' and all(len(s.encode()) <= 255 for _, s in g['samples']), gens)
+    g['r'].cleanup()
+
+    # (3) previous writer kind=in never exits: forced at 100 ms
+    g = gate_run('gate-in', '--kind', 'in', '--old-tail-ms', 60, '--new-delay-ms', 30, '--new-frames', 60)
+    gate_common('gate-in', g)
+    w = g['wait_ms']
+    check('gate-in: kind=in forced open 100..250 ms after the cut', g['open'] == ('forced', 1) and
+          w is not None and 100 <= w <= 250, f"{g['open']} {w}")
+    g['r'].cleanup()
+
+    # (4) OQ3 (a): old pid gone, owner + avcC + IDR written back to back, before the bridge's next owner
+    # poll; cut_seq comes from the previous poll, so that avcC still opens the gate
+    g = gate_run('gate-oq3', '--kind', 'proxy', '--old-tail-ms', 0, '--new-delay-ms', 0, '--kill-old-ms', 0,
+                 '--new-frames', 60)
+    gate_common('gate-oq3', g)
+    avcc_new = next((e for e in g['man'] if e.get('event') == 'avcC' and e.get('stream') == 'new'), None)
+    cut = g['cut']
+    check('gate-oq3: the new avcC was already in the ring when the cut was noticed',
+          cut and avcc_new and cut[1] >= avcc_new['ring_seq'] > cut[0], f'cut={cut} avcC={avcc_new}')
+    check('gate-oq3: gate opened at once on that avcC (reason=pid-exit)', g['open'] == ('pid-exit', 0) and
+          g['wait_ms'] is not None and g['wait_ms'] <= 100, f"{g['open']} {g['wait_ms']}")
+    g['r'].cleanup()
+
+
 def test_log_rotation():
     r = Run('log-rotation')
     os.makedirs(os.path.dirname(r.log))
@@ -388,6 +543,23 @@ def test_provenance():
             else:
                 hunk.append(line)
     check('provenance: every src/ change against upstream is marked pmcp', not unmarked, unmarked[:3])
+    # stage 1b: src/pmcp_gate.c holds verbatim copies of contract kit functions
+    def funcs(text):
+        out, cur = {}, None
+        for line in text.splitlines():
+            m = re.match(r'^[a-z].*\b(pmcp_\w+|gate_\w+)\(', line)
+            if cur is None and m:
+                cur = [m.group(1), [line]]
+            elif cur is not None:
+                cur[1].append(line)
+                if line == '}':
+                    out[cur[0]] = '\n'.join(cur[1]); cur = None
+        return out
+    kit = funcs(open(os.path.join(root, 'contract', 'pmcp_most_producer.c')).read())
+    ours = funcs(open(os.path.join(root, 'src', 'pmcp_gate.c')).read())
+    diff = [n for n in ours if kit.get(n) != ours[n]]
+    check('provenance: src/pmcp_gate.c functions are byte-identical to contract/pmcp_most_producer.c',
+          len(ours) == 7 and not diff, f'{sorted(ours)} differ={diff}')
 
 
 def main():
@@ -398,7 +570,8 @@ def main():
             st, _, name = line.strip().partition(' ')
             check(name, st == 'ok')
     tests = [('provenance', test_provenance), ('steady', None), ('real-h264', None), ('parity', test_upstream_parity), ('force-idr', test_force_idr),
-             ('enomem', test_enomem), ('session', test_session_stop), ('log', test_log_rotation)]
+             ('slow-recovery', test_slow_recovery),
+             ('enomem', test_enomem), ('session', test_session_stop), ('gate', test_gate), ('log', test_log_rotation)]
     for name, fn in tests:
         if ONLY and name not in ONLY: continue
         if name == 'steady':
