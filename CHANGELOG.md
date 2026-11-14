@@ -5,6 +5,11 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (release-candidate)
 
+- **"CP save log" includes the AID view log:** the saved CarPlay log now also carries `pmcp-kombi-view.log(.1)` (which view
+  the AID showed and when), as the Android Auto log already did. No new file: the log card and "9. Delete saved logs" are
+  unchanged.
+- **Copy helpers offer card 3 when the package has it:** option 4 (macOS `.command`, Windows `copy-to-sd.ps1`) makes the
+  log card from a `card3-logs` folder; shown only if the folder is there.
 - **One button deletes the saved logs:** "9. Delete saved logs: CarPlay and Android Auto (after the log card copied
   them)" on the GEM main screen (`log-clear`; `aa-log-clear` stays as the older name). It replaces the two delete
   buttons in `features_advanced` and `aa_advanced`. It deletes the AA and CarPlay logs, the recorded phone video, a

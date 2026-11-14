@@ -75,11 +75,13 @@ say "  What do you want to do?"
 say "    2 = make CARD 2, RESCUE  (make this one first; only for emergencies, it starts by itself)"
 say "    1 = make CARD 1, INSTALL (used from the green menu in the car)"
 say "    3 = re-arm CARD 2 after it was used (shows the result of its last run)"
+[ -d "$HERE/card3-logs" ] && say "    4 = make CARD 3, LOGS    (copies saved logs from the unit to the card; it starts by itself)"
 ask "Type 1, 2 or 3 and press Enter:"
 [ "$REPLY" = 3 ] && rearm_flow
 case "$REPLY" in
     1) SRC="$HERE/card1-install"; MAN=PMCP_CARD_MANIFEST.txt; NAME="CARD 1 (INSTALL)"; LABEL="INSTALL" ;;
     2) SRC="$HERE/card2-rescue";  MAN=PMCP_RESCUE_MANIFEST.txt; NAME="CARD 2 (RESCUE)"; LABEL="RESCUE - DO NOT INSERT" ;;
+    4) SRC="$HERE/card3-logs";    MAN=PMCP_LOGS_MANIFEST.txt;   NAME="CARD 3 (LOGS)";   LABEL="LOGS - INSERT ONLY TO COPY LOGS" ;;
     *) fail "Please type 1, 2 or 3." "Start the helper again." ;;
 esac
 [ -f "$SRC/$MAN" ] || fail "The folder $(basename "$SRC") is missing next to this helper." "Unpack the whole zip first, then start the helper from the unpacked folder."
