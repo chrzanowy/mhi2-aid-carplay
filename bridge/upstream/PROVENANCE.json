@@ -1,0 +1,64 @@
+{
+ "description": "Verbatim import of the CarPlay cluster-map MOST bridge for pmcp-most stage 1. Never edit these files; the working copy is ../src.",
+ "repository": "https://github.com/tomasz-twardzicki/MHI2-Carplay-Maps",
+ "ref": "origin/feature/mu1367-v1.5.0-e-android-auto",
+ "commit": "59d6a4e0476ab51f4da3652ff73dae883fd2a375",
+ "commit_date": "2026-11-13",
+ "imported_on": "2026-11-14",
+ "import_method": "git show <commit>:<source_path> from a local clone (no checkout)",
+ "authors": [
+  "Tomasz Twardzicki (tomasz-twardzicki/MHI2-Carplay-Maps)",
+  "omonob (original altscreen bridge, MHI2 CarPlay maps)"
+ ],
+ "history_of_bridge_c": [
+  "006e5d1 2026-10-31 omonob 2.0 bridge consolidated",
+  "c4e7723 2026-11-10 ALTSCREEN_AA_SINGLE_IDR flag",
+  "deb0364 2026-11-10 boot-time MOST reclaim (dmdt dc 72 / sc 4 72)",
+  "59d6a4e 2026-11-13 latency limit 1024 -> 2048 packets"
+ ],
+ "license": "GPL-3.0 (LICENSE from MU1367/integration/src/runtime, identical to the repository root LICENSE); the source files carry no per-file copyright header. Our changes: GPL-3.0-or-later.",
+ "files": [
+  {
+   "path": "altscreen_most_bridge.c",
+   "source_path": "MU1367/integration/src/runtime/vc-runtime/runtime/altscreen_most_bridge.c",
+   "sha256": "e181061ebec78bd7ba0c0ae60cc2179beece0367fc0341ee6f6c3576ed6569ea",
+   "bytes": 67393
+  },
+  {
+   "path": "altscreen_frame_protocol.h",
+   "source_path": "MU1367/integration/src/runtime/vc-runtime/runtime/altscreen_frame_protocol.h",
+   "sha256": "0cb45ceaeec7a418b2e9e9779a05ac3902d272e6e93cb5bf792ce73c7275a509",
+   "bytes": 1899
+  },
+  {
+   "path": "cpmap_resources.h",
+   "source_path": "MU1367/integration/src/runtime/vc-runtime/runtime/cpmap_resources.h",
+   "sha256": "e24d0e3c159d5fc173fff692ac7cd2fcda3195c73c85bc2a8fb67e526a60334b",
+   "bytes": 4218
+  },
+  {
+   "path": "cpmap_intro_policy.h",
+   "source_path": "MU1367/integration/src/runtime/vc-runtime/runtime/cpmap_intro_policy.h",
+   "sha256": "664b2379f9a040a1174b18bd6bba731badab253734b94f1a99586bc73c41ee92",
+   "bytes": 1878
+  },
+  {
+   "path": "cpmap_animation_preference.h",
+   "source_path": "MU1367/integration/src/runtime/vc-runtime/runtime/cpmap_animation_preference.h",
+   "sha256": "5d989407d49f65ddc491b86378ccd72d4f1914057ace8d9b04275715d084b7e6",
+   "bytes": 1633
+  },
+  {
+   "path": "cpmap_map_preference.h",
+   "source_path": "MU1367/integration/src/runtime/vc-runtime/runtime/cpmap_map_preference.h",
+   "sha256": "5261e86e3c8cf18fe8e2d9e2d171f83a0de4557e23ff063ee34026153996c1d7",
+   "bytes": 3419
+  },
+  {
+   "path": "LICENSE",
+   "source_path": "MU1367/integration/src/runtime/LICENSE",
+   "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+   "bytes": 35149
+  }
+ ]
+}
