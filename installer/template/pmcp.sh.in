@@ -1029,7 +1029,8 @@ do_aa_log_save() {
 
 # Everything pmcp saves for the log card: the whole logs/ directory (AA and CarPlay logs, temp files, anything else in
 # it), the recorded phone video, a half-written AA switch file (aa-extra.conf.pmcp-new; aa-extra.conf itself is the chosen
-# AA output and stays, as do the trial and state markers), the GEM button log (gem.log emptied: this press is its first entry) and pmcp's boot log (lsd.sh appends a line each start, so it is never needed back).
+# AA output and stays, as do the trial and state markers), the GEM button log (gem.log emptied: this press is its first entry) and pmcp's boot log (lsd.sh appends a line each start, so it is never needed back),
+# and the Wi-Fi test log left by the experimental Wi-Fi card (wifi-test.log, .log.1; its run counter stays).
 # Nothing to delete is not an error (A152: a second press showed a FAIL).
 do_log_clear() {
     selftest
@@ -1040,7 +1041,7 @@ do_log_clear() {
         fail "LOG_CLEAR_CARPLAYMAPS_IS_NOT_A_PMCP_INSTALL_NOTHING_CHANGED"
     fi
     _c_any=""
-    for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/boot.log" "$PERSIST/boot.log.1" "$PERSIST/gem.log.1"; do [ -e "$_c_f" ] && _c_any=1; done
+    for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/boot.log" "$PERSIST/boot.log.1" "$PERSIST/gem.log.1" "$PERSIST"/wifi-test.log*; do [ -e "$_c_f" ] && _c_any=1; done
     if [ -z "$_c_any" ]; then
         aa_gemlog_restart
         say "PMCP_LOG_CLEAR_OK (nothing saved, nothing to delete)"
@@ -1048,8 +1049,8 @@ do_log_clear() {
     fi
     remount_rw
     rm -rf "${ROOT:?}/logs" 2>/dev/null
-    rm -f "$PERSIST"/aa-stream.h264* "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/boot.log" "$PERSIST/boot.log.1" "$PERSIST/gem.log.1" 2>/dev/null
-    for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/boot.log" "$PERSIST/boot.log.1" "$PERSIST/gem.log.1"; do
+    rm -f "$PERSIST"/aa-stream.h264* "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/boot.log" "$PERSIST/boot.log.1" "$PERSIST/gem.log.1" "$PERSIST"/wifi-test.log* 2>/dev/null
+    for _c_f in "$ROOT/logs" "$PERSIST"/aa-stream.h264* "$PERSIST/aa-extra.conf.pmcp-new" "$PERSIST/boot.log" "$PERSIST/boot.log.1" "$PERSIST/gem.log.1" "$PERSIST"/wifi-test.log*; do
         [ -e "$_c_f" ] && fail "LOG_CLEAR_FAILED_${_c_f##*/}"
     done
     aa_gemlog_restart   # only after the deletes: a failure above keeps the button history that explains it

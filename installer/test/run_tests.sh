@@ -1178,11 +1178,11 @@ PEOF
     tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" | head -1 | grep -q "^RESULT=OK copied=5 aa_logs=5 cp_logs=0$" && ok "log card: RESULT=OK" || bad "log card result: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
     : > "$U/carplaymaps/logs/._aa-log-1.txt"; mkdir -p "$U/carplaymaps/logs/odd"; : > "$U/carplaymaps/logs/odd/x"
     mkdir -p "$P"; : > "$U/carplaymaps/logs/aa-log-9.txt.pmcp-new"; echo "boot set=x" >> "$P/boot.log"; echo "boot set=old" > "$P/boot.log.1"
-    : > "$P/aa-stream.h264"; : > "$P/aa-stream.h264.idx"
+    : > "$P/aa-stream.h264"; : > "$P/aa-stream.h264.idx"; : > "$P/wifi-test.log"; : > "$P/wifi-test.log.1"
     axnew=""; [ -e "$P/aa-extra.conf" ] || { axnew=1; echo "PMCP_AA_OUTPUT=direct" > "$P/aa-extra.conf"; }
     : > "$P/aa-extra.conf.pmcp-new"; ax=$(h "$P/aa-extra.conf")
     run log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "logs deleted (also unknown files and a subdirectory)" || bad "logs left"
-    [ ! -e "$P/boot.log" ] && [ ! -e "$P/boot.log.1" ] && [ ! -e "$P/aa-stream.h264" ] && [ ! -e "$P/aa-stream.h264.idx" ] && ok "boot log and phone video deleted" || bad "left: $(ls "$P")"
+    [ ! -e "$P/boot.log" ] && [ ! -e "$P/boot.log.1" ] && [ ! -e "$P/aa-stream.h264" ] && [ ! -e "$P/aa-stream.h264.idx" ] && [ ! -e "$P/wifi-test.log" ] && [ ! -e "$P/wifi-test.log.1" ] && ok "boot log, phone video and Wi-Fi test log deleted" || bad "left: $(ls "$P")"
     [ ! -e "$P/aa-extra.conf.pmcp-new" ] && [ "$(h "$P/aa-extra.conf")" = "$ax" ] && ok "log-clear: half-written AA switch file deleted, the chosen AA output kept" || bad "aa-extra.conf after log-clear"
     [ -n "$axnew" ] && rm -f "$P/aa-extra.conf"
     run aa-log-clear; rc_is 0; expect_out "PMCP_LOG_CLEAR_OK (nothing saved, nothing to delete)" "second press (older name aa-log-clear): OK, nothing to delete"
@@ -1210,6 +1210,10 @@ PEOF
         && ok "log card: boot.log and boot.log.1 copied" || bad "log card boot.log: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
     cmp -s "$P/gem.log" "$W/med3/PMCP_LOGS/pmcp-gem-log.txt" && cmp -s "$P/gem.log.1" "$W/med3/PMCP_LOGS/pmcp-gem-log-1.txt" \
         && ok "log card: gem.log and gem.log.1 copied" || bad "log card gem.log: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
+    echo "=== wifi-test run 2" > "$P/wifi-test.log"; echo "=== wifi-test run 1" > "$P/wifi-test.log.1"; rm -rf "$W/med3"; logcard
+    cmp -s "$P/wifi-test.log" "$W/med3/PMCP_LOGS/pmcp-wifi-test.txt" && cmp -s "$P/wifi-test.log.1" "$W/med3/PMCP_LOGS/pmcp-wifi-test.1.txt" \
+        && ok "log card: wifi-test.log and wifi-test.log.1 copied" || bad "log card wifi-test: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
+    rm -f "$P"/wifi-test.log*
     rm -rf "$W/u2"; mkdir -p "$W/u2"; PMCP_TEST_GEMLOG= PMCP_TEST_ROOT="$W/u2" $SH "$W/sd/pmcp.sh" status > /dev/null 2>&1
     [ ! -e "$W/u2/mnt/persist/pmcp" ] && ok "gem.log: no persist dir made on an untouched unit" || bad "persist made by status"
     rm -rf "$W/u2"; rm -f "$P"/gem.log* "$P"/boot.log*

@@ -6,7 +6,8 @@
 # Read-only on the unit. It copies to PMCP_LOGS/ on this card:
 #   - the AA logs saved in GEM by "AA save log" (pmcp.sh aa-log-save): /mnt/app/carplaymaps/logs/aa-log-*.txt;
 #   - the CarPlay logs saved by "CP save log" (pmcp.sh cp-log-save): /mnt/app/carplaymaps/logs/cp-log-*.txt;
-#   - pmcp's boot log, GEM button log and markers from /mnt/persist/pmcp (boot.log, gem.log, last-boot, the marker list).
+#   - pmcp's boot log, GEM button log, Wi-Fi test log (left by the experimental Wi-Fi card) and markers from /mnt/persist/pmcp
+#     (boot.log, gem.log, wifi-test.log, last-boot, the marker list).
 # Existing files on the card are never overwritten (a number is added). Nothing on the unit is changed or deleted:
 # "9. Delete saved logs" on the GEM main screen does that once the copies are checked on a computer.
 # Lessons of the rescue card apply: M.I.B.'s PATH, no action behind a redirect, the result line last.
@@ -76,6 +77,9 @@ done
 # GEM button log (pmcp.sh: every button's output; the SD card is read-only in GEM), older half first
 [ -f "$PERSIST/gem.log.1" ] && copy_one "$PERSIST/gem.log.1" pmcp-gem-log-1.txt
 [ -f "$PERSIST/gem.log" ] && copy_one "$PERSIST/gem.log" pmcp-gem-log.txt
+# Wi-Fi test log left by the experimental Wi-Fi card (GEM "Wi-Fi test", A-WL12), older half first
+[ -f "$PERSIST/wifi-test.log.1" ] && copy_one "$PERSIST/wifi-test.log.1" pmcp-wifi-test.1.txt
+[ -f "$PERSIST/wifi-test.log" ] && copy_one "$PERSIST/wifi-test.log" pmcp-wifi-test.txt
 # experimental cards: phone video recorded by the experimental feeder (GEM "AA record"), for the pmcp bridge host tests
 [ -f "$PERSIST/aa-stream.h264" ] && copy_one "$PERSIST/aa-stream.h264" aa-stream.h264
 [ -f "$PERSIST/aa-stream.h264.idx" ] && copy_one "$PERSIST/aa-stream.h264.idx" aa-stream.h264.idx
