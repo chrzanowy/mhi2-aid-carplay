@@ -131,6 +131,24 @@ int main(void)
     position_full(80, 11800, 870); snap(dir);                                                      /* 19 */
     state_full(36, "Pomorska", 8, "0,0"); position_full(500, 11000, 800); snap(dir);               /* 20 lanes with no direction */
     status(2); snap(dir);                                                                          /* 21 ended */
+    {   /* review A176 test gaps: a road over 200 B is cut at a UTF-8 boundary (199 'a' + "ś" + 49 'b': byte 200 is inside
+         * "ś", so 199 B stay), more than 16 lanes keep 16; LiveModel still accepts the snapshot (Java step 22) */
+        char road[251], lanes[64], st[2048];
+        const char *sp = getenv("GAL_PMCP_RG_STATUS");
+        FILE *f;
+        size_t k;
+        int i;
+        memset(road, 'a', 199); road[199] = '\xc5'; road[200] = '\x9b'; memset(road + 201, 'b', 49); road[250] = 0;
+        lanes[0] = 0;
+        for (i = 0; i < 20; ++i) strcat(lanes, i == 19 ? "5*" : "1,");
+        status(1); state_full(8, road, 250, lanes); position_full(70, 9000, 600); snap(dir);           /* 22 */
+        sleep_ms(1100);
+        st[0] = 0;
+        if (sp && (f = fopen(sp, "r")) != NULL) { k = fread(st, 1, sizeof st - 1, f); st[k] = 0; fclose(f); }
+        if (strstr(st, "droga_dl=199 pasy=16 ") == NULL) { printf("FAILED long road / 20 lanes: status=%s\n", st); fails++; }
+        else printf("ok     road 250 B -> 199 B at a UTF-8 boundary, 20 lanes -> 16\n");
+        status(2); snap(dir);                                                                      /* 23 ended */
+    }
     sleep_ms(1100);
     printf("FAILED CHECKS C: %d\n", fails);
     return fails ? 1 : 0;

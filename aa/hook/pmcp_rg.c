@@ -32,7 +32,9 @@
  *                                                             fields (road, lanes, destination/ETA) Google Maps sends;
  *                                                             at 64 KB the file becomes <file>.1 (2 x 64 KB at most)
  * Only when GAL_PMCP_RG=1. pmcp_rg_message() runs on gal's reader thread and only copies values under a mutex; all
- * file work is on this module's own thread.
+ * file work is on this module's own thread, and since review A176 it runs with the mutex released (the writer copies
+ * the image, the queued raw messages and the status text under the lock, then writes them without it), so gal's
+ * reader thread never waits for a file.
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -101,7 +103,7 @@ static raw_msg g_raw[RAW_SLOTS];
 static unsigned g_raw_head, g_raw_n;
 static unsigned long g_raw_lines, g_raw_dropped, g_raw_same;
 static char g_raw_path[128];
-static uint8_t g_raw_last6[RAW_MSG_MAX];
+static uint64_t g_raw_last6_hash;     /* review A176: the whole 0x8006 (FNV-1a + length), not only its first 1 KB */
 static unsigned g_raw_last6_len;
 static uint64_t g_raw_last7_ms;
 
@@ -580,8 +582,11 @@ static void raw_queue(unsigned id, const uint8_t *d, unsigned len)
     unsigned n = len < RAW_MSG_MAX ? len : RAW_MSG_MAX;
     if (id != 0x8003u && id != 0x8006u && id != 0x8007u) return;
     if (id == 0x8006u) {
-        if (n == g_raw_last6_len && memcmp(d, g_raw_last6, n) == 0) { g_raw_same++; return; }
-        memcpy(g_raw_last6, d, n); g_raw_last6_len = n;
+        uint64_t h = 14695981039346656037ull;
+        unsigned i;
+        for (i = 0; i < len; ++i) { h ^= d[i]; h *= 1099511628211ull; }
+        if (len == g_raw_last6_len && h == g_raw_last6_hash) { g_raw_same++; return; }
+        g_raw_last6_hash = h; g_raw_last6_len = len;
     }
     if (id == 0x8007u) {
         if (g_raw_last7_ms && t - g_raw_last7_ms < 5000u) return;
@@ -592,7 +597,8 @@ static void raw_queue(unsigned id, const uint8_t *d, unsigned len)
     m->t = t; m->id = id; m->len = n; m->full = len;
     memcpy(m->d, d, n);
     g_raw_n++;
-    g_dirty = 1;
+    /* not g_dirty (review A176): a raw line is no new rg event, so latest.bin is not rewritten for it; the writer's
+     * 250 ms wait picks the queue up */
 }
 
 typedef struct { char *b; size_t n, cap; } sbuf;
@@ -656,68 +662,80 @@ static void pb_dump(sbuf *o, const uint8_t *p, const uint8_t *e, int depth)
     }
 }
 
-/* Writer thread, g_m held: everything queued goes to the file (the lock is held only for a few lines a second). */
-static void raw_flush(void)
+/* Writer thread, WITHOUT g_m: the messages the writer took off the queue go to the file. Returns the lines written.
+ * g_raw_path and g_t0 are set once in start(). */
+static unsigned long raw_write(const raw_msg *q, unsigned cnt)
 {
     static char line[RAW_MSG_MAX * 3u + 256u];
+    unsigned long lines = 0;
+    unsigned i;
     FILE *f;
     struct stat st;
-    if (!g_raw_n) return;
+    if (!cnt) return 0;
     if (stat(g_raw_path, &st) == 0 && st.st_size >= RAW_FILE_MAX) {
         char old[160];
         snprintf(old, sizeof old, "%s.1", g_raw_path);
         (void)rename(g_raw_path, old);
     }
     f = fopen(g_raw_path, "a");
-    while (g_raw_n) {
-        raw_msg *m = &g_raw[g_raw_head];
+    if (f == NULL) return 0;
+    for (i = 0; i < cnt; ++i) {
+        const raw_msg *m = &q[i];
         sbuf o;
         o.b = line; o.n = 0; o.cap = sizeof line;
         sb_put(&o, "t=%lu.%lus %04x len=%u%s | ", (unsigned long)((m->t - g_t0) / 1000u),
                (unsigned long)((m->t - g_t0) % 1000u / 100u), m->id, m->full, m->full > m->len ? " (uciete)" : "");
         pb_dump(&o, m->d, m->d + m->len, 0);
-        if (f != NULL) { fputs(line, f); fputc('\n', f); g_raw_lines++; }
-        g_raw_head = (g_raw_head + 1u) % RAW_SLOTS;
-        g_raw_n--;
+        fputs(line, f); fputc('\n', f); lines++;
     }
-    if (f != NULL) fclose(f);
+    fclose(f);
+    return lines;
 }
 
-static void write_status(void)
+/* Writer thread, g_m held: the status text from the current values into s (written later without the lock). */
+static void build_status(char *s, size_t cap)
 {
-    char s[1536];
     int n;
     unsigned i;
-    n = snprintf(s, sizeof s, "RG AA: komunikaty 0x8003=%lu 0x8006=%lu 0x8007=%lu prowadzenie=%s\n"
+    n = snprintf(s, cap, "RG AA: komunikaty 0x8003=%lu 0x8006=%lu 0x8007=%lu prowadzenie=%s\n"
                  "manewry rozpoznane=%lu nierozpoznane=%lu", g_n3, g_n6, g_n7, g_guiding ? "tak" : "nie", g_known, g_unknown);
     if (g_unk_n) {
-        n += snprintf(s + n, sizeof s - (size_t)n, " (typy AA:");
-        for (i = 0; i < g_unk_n; ++i) n += snprintf(s + n, sizeof s - (size_t)n, " %u", g_unk[i]);
-        n += snprintf(s + n, sizeof s - (size_t)n, ")");
+        n += snprintf(s + n, cap - (size_t)n, " (typy AA:");
+        for (i = 0; i < g_unk_n; ++i) n += snprintf(s + n, cap - (size_t)n, " %u", g_unk[i]);
+        n += snprintf(s + n, cap - (size_t)n, ")");
     }
-    n += snprintf(s + n, sizeof s - (size_t)n, "\nzapis: zdarzenia=%lu pliki=%lu bledy=%lu dystans=%ldm\n",
+    n += snprintf(s + n, cap - (size_t)n, "\nzapis: zdarzenia=%lu pliki=%lu bledy=%lu dystans=%ldm\n",
                   g_events, g_writes, g_werr, g_meters);
-    n += snprintf(s + n, sizeof s - (size_t)n, "cisza telefonu: ostatnia nawigacja %lds temu, pauzy=%lu koniec_po_ciszy=%lu%s\n",
+    n += snprintf(s + n, cap - (size_t)n, "cisza telefonu: ostatnia nawigacja %lds temu, pauzy=%lu koniec_po_ciszy=%lu%s\n",
                   g_nav_ms ? (long)((now_ms() - g_nav_ms) / 1000u) : -1L, g_pauses, g_silent_ends, g_paused ? " (pauza)" : "");
     if (g_raw_path[0])
-        n += snprintf(s + n, sizeof s - (size_t)n, "surowe: linie=%lu pominiete_bez_zmian=%lu zgubione=%lu plik=%s\n",
+        n += snprintf(s + n, cap - (size_t)n, "surowe: linie=%lu pominiete_bez_zmian=%lu zgubione=%lu plik=%s\n",
                       g_raw_lines, g_raw_same, g_raw_dropped, g_raw_path);
-    n += snprintf(s + n, sizeof s - (size_t)n, "AA 1.1: droga='%.60s' pasy=%u zdarzenia_pasow=%lu zle_nazwy=%lu cel=%ldm/%lds\n",
-                  g_road, g_lane_n, g_lane_events, g_road_bad, g_dest_m, g_dest_s);
-    for (i = 0; i < g_last_n && n < (int)sizeof s - 100; ++i) n += snprintf(s + n, sizeof s - (size_t)n, "manewr %s\n", g_last[i]);
-    {
-        char tmp[200];
-        FILE *f;
-        snprintf(tmp, sizeof tmp, "%s.tmp", g_status);
-        if ((f = fopen(tmp, "w")) == NULL) return;
-        fputs(s, f);
-        if (fclose(f) == 0) rename(tmp, g_status);
-    }
+    n += snprintf(s + n, cap - (size_t)n, "AA 1.1: droga='%.60s' droga_dl=%u pasy=%u zdarzenia_pasow=%lu zle_nazwy=%lu cel=%ldm/%lds\n",
+                  g_road, g_road_len, g_lane_n, g_lane_events, g_road_bad, g_dest_m, g_dest_s);
+    for (i = 0; i < g_last_n && n < (int)cap - 100; ++i) n += snprintf(s + n, cap - (size_t)n, "manewr %s\n", g_last[i]);
+}
+
+/* Writer thread, WITHOUT g_m: the status text to g_status (tmp + rename). */
+static void status_write(const char *s)
+{
+    char tmp[200];
+    FILE *f;
+    snprintf(tmp, sizeof tmp, "%s.tmp", g_status);
+    if ((f = fopen(tmp, "w")) == NULL) return;
+    fputs(s, f);
+    if (fclose(f) == 0) rename(tmp, g_status);
 }
 
 static void *writer(void *arg)
 {
+    static raw_msg q[RAW_SLOTS];
+    static char st[1536];
     uint64_t last_write = 0, last_status = 0;
+    size_t img_n;
+    unsigned raw_n;
+    unsigned long lines;
+    int do_status, werr;
     (void)arg;
     pthread_mutex_lock(&g_m);
     for (;;) {
@@ -743,14 +761,24 @@ static void *writer(void *arg)
         }
         /* heartbeat 0.5 s: the bridge wants a new serial within 1.5 s (review m1: 1 s left ~150 ms margin) */
         need = g_dirty || t - last_write >= 500u;
-        if (need) {
-            size_t n = build();
-            g_dirty = 0;
-            if (write_file(g_dir, "latest.bin", g_img, n, NULL, 0) == 0) g_writes++; else g_werr++;
-            last_write = t;
+        img_n = 0;
+        if (need) { img_n = build(); g_dirty = 0; last_write = t; }
+        raw_n = 0;
+        while (g_raw_n) {                         /* the queue is copied out: gal's thread can fill it again at once */
+            q[raw_n++] = g_raw[g_raw_head];
+            g_raw_head = (g_raw_head + 1u) % RAW_SLOTS;
+            g_raw_n--;
         }
-        if (g_raw_n) raw_flush();
-        if (t - last_status >= 1000u) { write_status(); last_status = t; }
+        do_status = t - last_status >= 1000u;
+        if (do_status) { build_status(st, sizeof st); last_status = t; }
+        /* review A176: no file work under g_m. g_img is the writer's own buffer (build() runs only here). */
+        pthread_mutex_unlock(&g_m);
+        werr = img_n ? write_file(g_dir, "latest.bin", g_img, img_n, NULL, 0) : 0;
+        lines = raw_write(q, raw_n);
+        if (do_status) status_write(st);
+        pthread_mutex_lock(&g_m);
+        if (img_n) { if (werr == 0) g_writes++; else g_werr++; }
+        g_raw_lines += lines;
     }
     return NULL;
 }

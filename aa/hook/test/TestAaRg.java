@@ -12,7 +12,7 @@ public final class TestAaRg {
         String dir = a[0];
         Path cur = Paths.get(dir, "cur.bin");
         MailboxReader r = new MailboxReader(cur.toString());
-        final int N = 22;
+        final int N = 24;
         LiveModel.Frame[] f = new LiveModel.Frame[N];
         for (int i = 0; i < N; i++) {
             Files.copy(Paths.get(dir, "step-" + i + ".bin"), cur, StandardCopyOption.REPLACE_EXISTING);
@@ -47,6 +47,9 @@ public final class TestAaRg {
         check(f[19] != null && f[19].meters == 80 && f[19].remainingSeconds == 870, "19 80 m, 870 s");
         check(f[20] != null && f[20].main == 13 && f[20].direction == 0 && f[20].meters == 500, "20 straight 500 m");
         check(f[21] != null && !f[21].active && f[21].remainingMeters == -1, "21 route ended: destination cleared");
+        check(f[22] != null && f[22].active && f[22].main == 13 && f[22].direction == 192 && f[22].meters == 70
+            && f[22].remainingMeters == 9000, "22 road 250 B (cut to 199) and 20 lanes (16 kept): snapshot accepted, right 70 m");
+        check(f[23] != null && !f[23].active, "23 route ended");
         boolean noEta = true;
         for (int i = 0; i < 15; i++) if (f[i] != null && (f[i].remainingMeters != -1 || f[i].remainingSeconds != -1)) noEta = false;
         check(noEta, "0-14 (no destination in 0x8007): no ETA / remaining distance");
