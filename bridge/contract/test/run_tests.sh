@@ -155,12 +155,117 @@ check "gen wraps past 0 (0xFFFFFFFF -> 1)" grep -q "event=acquired src=aa gen=1 
 sleep 30 &
 LP=$!
 PIDS="$PIDS $LP"
-printf 'v=1 src=wireless pid=%s gen=3 since_ms=1\n' "$LP" >"$D/owner"
+"$BIN/test_unit" putowner "$D" wireless "$LP" 3
 "$BIN/example_producer" --src aa --frames 3 >"$T/own.c" 2>&1; rc=$?
 check "live owner => busy (exit 3), owner file untouched" sh -c "[ $rc = 3 ] && grep -q 'event=busy' '$T/own.c' && grep -q 'pid=$LP gen=3' '$D/owner'"
 "$BIN/example_producer" --src wired --frames 3 >"$T/own.d" 2>&1
 check "wired takes a live wireless owner, gen 3+1" grep -q "event=acquired src=wired gen=4 " "$T/own.d"
 kill "$LP" 2>/dev/null
+
+echo "== v1.1: old v1 owner line (no kind) still works"
+newenv v1
+mkdir -p "$D"
+printf 'v=1 src=wireless pid=%s gen=5 since_ms=1\n' "$$" >"$D/owner"
+"$BIN/test_unit" owner-show "$D" >"$T/v1.show" 2>&1
+check "v1 owner line without kind parses (src pid gen)" grep -q "^wireless $$ 5$" "$T/v1.show"
+"$BIN/example_producer" --src aa --frames 3 --create-ring >"$T/v1.a" 2>&1; rc=$?
+check "v1 line without kind (live pid, old since_ms, no session) = stale in-kind owner, taken by aa gen 6" sh -c "[ $rc = 0 ] && grep -q 'event=acquired src=aa gen=6 ' '$T/v1.a'"
+
+echo "== v1.1: two concurrent takers on a dead owner (200 rounds)"
+newenv race
+"$BIN/test_unit" race "$D" 200 >"$T/race.out" 2>&1
+while read -r line; do
+    case $line in
+        ok:*) ok "${line#ok: }" ;;
+        FAIL:*) bad "${line#FAIL: }" ;;
+    esac
+done <"$T/race.out"
+[ -s "$T/race.out" ] || bad "race produced no output"
+
+echo "== v1.1: proxy owner preempted by wired, consumer cuts the old writer"
+newenv prx
+bg "$T/prx.cons" "$BIN/fake_consumer" --duration 25
+CP=$BGPID
+waitgrep "$T/prx.cons" "event=start" 5
+bg "$T/prx.supa" "$BIN/test_unit" supervisor "$D" wireless proxy 15000
+SA=$BGPID
+waitgrep "$T/prx.supa" "event=acquired" 5 || bad "proxy supervisor A acquired"
+bg "$T/prx.wra" "$BIN/test_unit" rawwriter "$R" 0 1 "$E/stopA" 15000 100
+WA=$BGPID
+waitgrep "$T/prx.cons" "^frame seq=[0-9]* size=104 " 5 || bad "old proxy writer reaches the consumer"
+check "owner line says kind=proxy" grep -q " kind=proxy" "$D/owner"
+bg "$T/prx.supb" "$BIN/test_unit" supervisor "$D" wired proxy 3000
+SB=$BGPID
+waitgrep "$T/prx.supb" "event=acquired" 5 || bad "wired supervisor acquired over wireless proxy"
+waitgrep "$T/prx.cons" "event=owner-cut" 3 || bad "consumer cut on owner gen change"
+sleep 0.6   # grace: the old writer (core.so) keeps writing
+touch "$E/stopA"
+sleep 0.3
+bg "$T/prx.wrb" "$BIN/test_unit" rawwriter "$R" 0 1 - 1500 200
+WB=$BGPID
+waitgrep "$T/prx.cons" "^frame seq=[0-9]* size=204 " 5 || bad "new writer frames accepted"
+sleep 0.5
+check "wireless supervisor noticed preemption" grep -q "event=preempted" "$T/prx.supa"
+check "owner cut reported once" test "$(grep -c 'event=owner-cut' "$T/prx.cons")" -eq 1
+nold=$(grep -c "event=drop reason=owner-cut .*size=104" "$T/prx.cons")
+check "old writer frames written during the grace were dropped ($nold)" test "$nold" -ge 5
+check "no old-writer frame reaches the output after the cut" sh -c "awk '/event=owner-cut/ {f=1} f && /^frame .*size=104 / {n++} END {exit n > 0}' '$T/prx.cons'"
+check "nothing passes between the cut and the new avcC" sh -c "awk '/event=owner-cut/ {f=1} f && /^config / {exit 0} f && /^frame / {exit 1}' '$T/prx.cons'"
+nnew=$(grep -c "^frame .*size=204 " "$T/prx.cons")
+check "new writer frames accepted after its avcC ($nnew)" test "$nnew" -ge 20
+check "ring generation bumped by the cut" sh -c "grep -q 'event=owner-cut owner_gen=2 ring_gen=2 kind=proxy' '$T/prx.cons'"
+kill "$CP" "$SA" "$SB" "$WA" "$WB" 2>/dev/null; wait 2>/dev/null
+
+echo "== v1.1: gate holds while the old proxy writer is alive"
+newenv gh1
+bg "$T/gh1.cons" "$BIN/fake_consumer" --duration 25
+CP=$BGPID
+waitgrep "$T/gh1.cons" "event=start" 5
+bg "$T/gh1.za" "$BIN/test_unit" zombie "$D" wireless "$R" 2500 100
+ZA=$BGPID
+waitgrep "$T/gh1.za" "event=acquired" 5 || bad "old proxy writer acquired"
+waitgrep "$T/gh1.cons" "^frame seq=[0-9]* size=104 " 5 || bad "old proxy writer reaches the consumer"
+bg "$T/gh1.supb" "$BIN/test_unit" supervisor "$D" wired proxy 6000
+SB=$BGPID
+waitgrep "$T/gh1.supb" "event=acquired" 5 || bad "wired supervisor acquired"
+bg "$T/gh1.wrb" "$BIN/test_unit" rawwriter "$R" 0 1 - 4500 200
+WB=$BGPID
+waitgrep "$T/gh1.cons" "event=gate-open" 6 || bad "gate opened after the old writer exited"
+sleep 0.6
+tdone=$(tval "$T/gh1.za" "event=writer-done")
+topen=$(tval "$T/gh1.cons" "event=gate-open")
+check "new avcC was held while the old writer lived (gate-held drop)" grep -q "event=drop reason=gate-held" "$T/gh1.cons"
+check "no frame at all between the cut and the gate opening" sh -c "awk '/event=owner-cut/ {f=1} /event=gate-open/ {f=0} f && /^frame / {n++} END {exit n > 0}' '$T/gh1.cons'"
+check "no old-writer frame ever reaches the output after the cut" sh -c "awk '/event=owner-cut/ {f=1} f && /^frame .*size=104 / {n++} END {exit n > 0}' '$T/gh1.cons'"
+check "gate opened right after the old pid exited (reason=pid-exit, <= 300 ms)" sh -c "grep -q 'event=gate-open reason=pid-exit gate_forced=0' '$T/gh1.cons' && [ -n '$tdone' ] && [ -n '$topen' ] && [ $topen -ge $tdone ] && [ $((topen - tdone)) -le 300 ]"
+check "held avcC emitted when the gate opened (new source did not resend)" sh -c "awk '/event=gate-open/ {f=1; next} f && /^config / {exit 0} f && /^frame / {exit 1}' '$T/gh1.cons'"
+check "new writer frames accepted after the gate opened" test "$(grep -c '^frame .*size=204 ' "$T/gh1.cons")" -ge 20
+kill "$CP" "$ZA" "$SB" "$WB" 2>/dev/null; wait 2>/dev/null
+
+echo "== v1.1: old writer that never exits, gate forced at 3000 ms"
+newenv gh2
+bg "$T/gh2.cons" "$BIN/fake_consumer" --duration 25
+CP=$BGPID
+waitgrep "$T/gh2.cons" "event=start" 5
+bg "$T/gh2.za" "$BIN/test_unit" zombie "$D" wireless "$R" 20000 100
+ZA=$BGPID
+waitgrep "$T/gh2.za" "event=acquired" 5 || bad "old proxy writer acquired"
+waitgrep "$T/gh2.cons" "^frame seq=[0-9]* size=104 " 5 || bad "old proxy writer reaches the consumer"
+bg "$T/gh2.supb" "$BIN/test_unit" supervisor "$D" wired proxy 9000
+SB=$BGPID
+waitgrep "$T/gh2.supb" "event=acquired" 5 || bad "wired supervisor acquired"
+bg "$T/gh2.wrb" "$BIN/test_unit" rawwriter "$R" 0 1 - 7000 200
+WB=$BGPID
+waitgrep "$T/gh2.cons" "event=gate-open" 8 || bad "gate forced open"
+sleep 0.5
+tcut=$(tval "$T/gh2.cons" "event=owner-cut")
+topen=$(tval "$T/gh2.cons" "event=gate-open")
+check "forced open reported with gate_forced=1" grep -q "event=gate-open reason=forced gate_forced=1" "$T/gh2.cons"
+check "gate opened at 3000 ms after the cut (got $((topen - tcut)) ms)" sh -c "[ -n '$tcut' ] && [ -n '$topen' ] && [ $((topen - tcut)) -ge 3000 ] && [ $((topen - tcut)) -le 3300 ]"
+check "nothing passed between the cut and the forced open" sh -c "awk '/event=owner-cut/ {f=1} /event=gate-open/ {f=0} f && /^frame / {n++} END {exit n > 0}' '$T/gh2.cons'"
+check "held avcC emitted at the forced open" sh -c "awk '/event=gate-open/ {f=1; next} f && /^config / {exit 0} f && /^frame / {exit 1}' '$T/gh2.cons'"
+check "new writer frames accepted after the forced open" test "$(grep -c '^frame .*size=204 ' "$T/gh2.cons")" -ge 20
+kill "$CP" "$ZA" "$SB" "$WB" 2>/dev/null; wait 2>/dev/null
 
 echo "== IDR marker"
 newenv idr

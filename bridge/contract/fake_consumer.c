@@ -80,6 +80,8 @@ int main(int argc, char **argv)
     pmcp_ring *ring;
     pmcp_consumer_status st;
     sess_seen ss[3];
+    pmcp_consumer_gate gate;
+    uint64_t last_owner = 0;
     static const char *const srcs[3] = {PMCP_SRC_WIRED, PMCP_SRC_WIRELESS, PMCP_SRC_AA};
     uint32_t W = 1, my_gen;
     int cfg_seen = 0, nal_len = 4, stalled = 0, i;
@@ -122,6 +124,7 @@ int main(int argc, char **argv)
     my_gen = pmcp_ring_consumer_attach(&map);
     memset(&st, 0, sizeof st);
     memset(ss, 0, sizeof ss);
+    pmcp_gate_init(&gate);
     st.ready = 1;
     st.pid = (unsigned long)getpid();
     st.ring_gen = my_gen;
@@ -134,6 +137,36 @@ int main(int argc, char **argv)
     while (!g_stop) {
         uint64_t now = pmcp_now_ms();
         int worked = 0;
+
+        /* ---- owner gen change => cut off the old writer (v1.1), every 2 ms ---- */
+        if (now - last_owner >= 2 && ring->magic == PMCP_RING_MAGIC) {
+            pmcp_owner ow0;
+            int have0 = pmcp_owner_read(dir, &ow0) == PMCP_OK;
+            last_owner = now;
+            if (pmcp_gate_owner(&gate, ring, have0 ? &ow0 : NULL, now)) {
+                my_gen = ring->generation;
+                st.ring_gen = my_gen;
+                W = ring->write_sequence + 1u; /* everything before is the old writer's */
+                cfg_seen = 0;
+                printf("event=owner-cut owner_gen=%lu ring_gen=%lu kind=%s t=%llu\n",
+                       (unsigned long)ow0.gen, (unsigned long)my_gen,
+                       ow0.kind == PMCP_KIND_PROXY ? "proxy" : "in", (unsigned long long)now);
+            }
+        }
+        /* gate held an avcC while the old writer was alive: emit it when it opens */
+        if (pmcp_gate_poll(&gate, now)) {
+            int sps = 0;
+            printf("event=gate-open reason=%s gate_forced=%lu t=%llu\n",
+                   gate.open_reason == PMCP_GATE_OPEN_FORCED ? "forced" : "pid-exit",
+                   (unsigned long)gate.forced, (unsigned long long)now);
+            if (check_avcc_config(gate.cfg, gate.cfg_len, &nal_len, &sps)) {
+                cfg_seen = 1;
+                printf("config seq=%lu size=%lu nal_len=%d sps=%d\n", (unsigned long)gate.cfg_seq,
+                       (unsigned long)gate.cfg_len, nal_len, sps);
+            }
+            if (pmcp_idr_request(idrp) == PMCP_OK)
+                printf("event=idr-request\n"); /* frames while held were dropped */
+        }
 
         /* ---- ring ---- */
         if (ring->magic != PMCP_RING_MAGIC || ring->version != PMCP_RING_VERSION) {
@@ -162,7 +195,14 @@ int main(int argc, char **argv)
                     W++;
                     worked = 1;
                     st.seq = seqn;
-                    if (!ok || (type != PMCP_RING_TYPE_CONFIG && type != PMCP_RING_TYPE_FRAME)) {
+                    int gr = ok ? pmcp_gate_slot(&gate, seqn, type, g_buf, size, now)
+                                : (gate.cut ? PMCP_GATE_DROP : PMCP_GATE_PASS);
+                    if (gr != PMCP_GATE_PASS) {
+                        st.drops++;
+                        printf("event=drop reason=%s seq=%lu type=%lu size=%lu\n",
+                               gr == PMCP_GATE_HELD ? "gate-held" : "owner-cut",
+                               (unsigned long)seqn, (unsigned long)type, (unsigned long)size);
+                    } else if (!ok || (type != PMCP_RING_TYPE_CONFIG && type != PMCP_RING_TYPE_FRAME)) {
                         st.drops++;
                         printf("event=drop reason=bad-type-or-size seq=%lu type=%lu size=%lu\n",
                                (unsigned long)seqn, (unsigned long)type, (unsigned long)size);
@@ -263,8 +303,8 @@ int main(int argc, char **argv)
     st.ready = 0;
     st.up_ms = (uint32_t)(pmcp_now_ms() - t0);
     pmcp_consumer_write(dir, &st);
-    printf("event=exit frames=%lu drops=%lu overruns=%lu\n", (unsigned long)st.frames,
-           (unsigned long)st.drops, (unsigned long)st.overruns);
+    printf("event=exit frames=%lu drops=%lu overruns=%lu gate_forced=%lu\n", (unsigned long)st.frames,
+           (unsigned long)st.drops, (unsigned long)st.overruns, (unsigned long)gate.forced);
     pmcp_ring_close(&map);
     return 0;
 }

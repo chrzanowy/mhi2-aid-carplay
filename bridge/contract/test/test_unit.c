@@ -6,14 +6,20 @@
  *   stress-writer DIR N      rewrite the consumer file N times (varying length)
  *   stress-reader DIR N      read it N times, every read must be a full line
  *   status-watch DIR SECS    consumer file must refresh ~1 Hz with all keys
+ *   race DIR N               N rounds of two takers on a dead owner, one must win
+ *   rawwriter RING DELAY_MS CFG STOPFILE|- MAXMS PAYLOAD   core.so-like ring writer
+ *   zombie DIR SRC RING MAXMS PAYLOAD   proxy owner + writer that ignores preemption
+ *   supervisor DIR SRC in|proxy HOLD_MS   owner holder without a ring
  *   deaddir DIR GEN SRC      write an owner file held by a dead pid
  *   owner-show DIR           print "src pid gen" of the owner file
  *   ring-gen RING [N]        print ring generation; with N, set it first
  */
 #define _POSIX_C_SOURCE 200112L
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -40,8 +46,323 @@ static unsigned long dead_pid(void)
 static void put_owner(const char *dir, const char *src, unsigned long pid, unsigned long gen)
 {
     char line[200];
-    snprintf(line, sizeof line, "v=1 src=%s pid=%lu gen=%lu since_ms=5", src, pid, gen);
+    snprintf(line, sizeof line, "v=1 src=%s pid=%lu gen=%lu since_ms=%llu", src, pid, gen,
+             (unsigned long long)pmcp_now_ms());
     pmcp_atomic_write(dir, "owner", line);
+}
+
+/* owner line with explicit since_ms (<0 = key omitted) and kind (NULL = key omitted) */
+static void put_owner_x(const char *dir, const char *src, unsigned long pid, unsigned long gen,
+                        long long since_ms, const char *kind)
+{
+    char line[200];
+    int n = snprintf(line, sizeof line, "v=1 src=%s pid=%lu gen=%lu", src, pid, gen);
+    if (since_ms >= 0)
+        n += snprintf(line + n, sizeof line - (size_t)n, " since_ms=%lld", since_ms);
+    if (kind != NULL)
+        snprintf(line + n, sizeof line - (size_t)n, " kind=%s", kind);
+    pmcp_atomic_write(dir, "owner", line);
+}
+
+static void rm_in(const char *dir, const char *name)
+{
+    char p[600];
+    snprintf(p, sizeof p, "%s/%s", dir, name);
+    unlink(p);
+}
+
+static pmcp_ring g_ring; /* 16 MB in BSS, for the gate tests */
+static const uint8_t g_avcc[] = {1, 0x64, 0, 0x28, 0xff, 0xe1, 0, 4, 0x67, 0x64, 0, 0x28, 1, 0, 2, 0x68, 0xee};
+
+static pid_t fork_sleeper(void)
+{
+    pid_t c = fork();
+    if (c == 0) {
+        sleep(30);
+        _exit(0);
+    }
+    return c;
+} /* 16 MB in BSS, for the gate tests */
+
+static void run_v11(const char *dir)
+{
+    pmcp_owner o, mine;
+    pmcp_producer pp;
+    pmcp_session se;
+    pmcp_consumer_gate g;
+    char line[300], path[600];
+    unsigned long live = (unsigned long)getppid();
+    long long now = (long long)pmcp_now_ms();
+    int r;
+
+    CHECK(PMCP_MOST_CONTRACT_VERSION == 1 && PMCP_MOST_CONTRACT_REVISION == 1, "line version 1, revision 1");
+    CHECK(PMCP_MOST_PREEMPT_MS == 100 && PMCP_MOST_PREEMPT_PROXY_MS == 3000
+          && pmcp_owner_preempt_ms(PMCP_KIND_IN) == 100 && pmcp_owner_preempt_ms(PMCP_KIND_PROXY) == 3000,
+          "preempt deadlines in=100 proxy=3000");
+
+    /* parser: v1 line without kind = in; proxy; unknown keys */
+    r = pmcp_owner_parse("v=1 src=aa pid=12 gen=3 since_ms=5", &o);
+    CHECK(r == PMCP_OK && o.kind == PMCP_KIND_IN && o.since_ms == 5, "v1 owner line without kind parses as in");
+    r = pmcp_owner_parse("v=1 src=wired pid=12 gen=3 since_ms=5 kind=proxy zzz=1", &o);
+    CHECK(r == PMCP_OK && o.kind == PMCP_KIND_PROXY, "owner kind=proxy parses");
+    r = pmcp_owner_parse("v=1 src=wired pid=12 gen=3 kind=in", &o);
+    CHECK(r == PMCP_OK && o.kind == PMCP_KIND_IN && o.since_ms == 0, "owner kind=in, no since_ms tolerated");
+
+    /* writer */
+    rm_in(dir, "owner");
+    r = pmcp_owner_acquire(dir, PMCP_SRC_AA, &mine);
+    snprintf(path, sizeof path, "%s/owner", dir);
+    pmcp_read_line(path, line, sizeof line);
+    CHECK(r == PMCP_OK && mine.kind == PMCP_KIND_IN && strstr(line, " kind=in") != NULL, "writer: default kind=in");
+    pmcp_owner_release(dir, &mine);
+    r = pmcp_owner_acquire_kind(dir, PMCP_SRC_WIRED, PMCP_KIND_PROXY, &mine);
+    pmcp_read_line(path, line, sizeof line);
+    CHECK(r == PMCP_OK && mine.kind == PMCP_KIND_PROXY && strstr(line, " kind=proxy") != NULL
+          && pmcp_owner_read(dir, &o) == PMCP_OK && o.kind == PMCP_KIND_PROXY, "writer: kind=proxy round trip");
+    CHECK(strlen(line) + 1 <= PMCP_MOST_LINE_MAX, "owner line <= 255 B");
+    pmcp_owner_release(dir, &mine);
+    CHECK(pmcp_owner_acquire_kind(dir, PMCP_SRC_AA, 7, &mine) == PMCP_E_INVAL, "bad kind refused");
+
+    /* supervisor (proxy) mode: owns, writes the session, no frames */
+    rm_in(dir, "owner");
+    rm_in(dir, "wireless.session");
+    r = pmcp_producer_init_proxy(&pp, PMCP_SRC_WIRELESS, dir);
+    CHECK(r == PMCP_OK && pp.map.ring == NULL, "proxy init without ring");
+    r = pmcp_producer_acquire(&pp);
+    CHECK(r == PMCP_OK && pp.owner.kind == PMCP_KIND_PROXY, "proxy acquire takes kind=proxy");
+    CHECK(pmcp_producer_session_start(&pp) == PMCP_OK
+          && pmcp_session_read(dir, PMCP_SRC_WIRELESS, &se) == PMCP_OK && se.start && se.gen == pp.owner.gen,
+          "proxy session start");
+    CHECK(pmcp_producer_write_frame(&pp, "x", 1, 0, 1) == PMCP_E_INVAL
+          && pmcp_producer_write_config(&pp, "xxxxxxxx", 8) == PMCP_E_INVAL, "proxy writes no frames");
+    CHECK(pmcp_producer_check_owner(&pp) == PMCP_OK, "proxy check_owner ok");
+    pmcp_producer_close(&pp, "done");
+    CHECK(pmcp_owner_read(dir, &o) == PMCP_E_NOENT
+          && pmcp_session_read(dir, PMCP_SRC_WIRELESS, &se) == PMCP_OK && !se.start, "proxy close: stop + owner released");
+
+    /* stale-by-no-session (PID reuse guard) */
+    rm_in(dir, "aa.session");
+    rm_in(dir, "wireless.session");
+    put_owner_x(dir, "wireless", live, 20, now - 5000, "proxy");
+    CHECK(pmcp_owner_acquire(dir, PMCP_SRC_AA, &mine) == PMCP_E_BUSY, "live owner 5 s old without session: still busy");
+    put_owner_x(dir, "wireless", live, 20, -1, NULL);
+    CHECK(pmcp_owner_acquire(dir, PMCP_SRC_AA, &mine) == PMCP_E_BUSY, "live owner without since_ms: rule not applied");
+    put_owner_x(dir, "wireless", live, 20, now - 11000, "proxy");
+    CHECK(pmcp_owner_read(dir, &o) == PMCP_OK && pmcp_owner_is_stale(dir, &o), "owner 11 s old without session is stale");
+    r = pmcp_owner_acquire(dir, PMCP_SRC_AA, &mine);
+    CHECK(r == PMCP_OK && mine.gen == 21, "stale (no session in 10 s) live owner taken over, gen+1");
+    pmcp_owner_release(dir, &mine);
+    put_owner_x(dir, "wireless", live, 20, now - 11000, "proxy");
+    pmcp_session_write(dir, PMCP_SRC_WIRELESS, 1, 20, "start");
+    CHECK(pmcp_owner_acquire(dir, PMCP_SRC_AA, &mine) == PMCP_E_BUSY, "11 s old owner WITH session start of that gen: busy");
+    pmcp_session_write(dir, PMCP_SRC_WIRELESS, 1, 19, "start");
+    r = pmcp_owner_acquire(dir, PMCP_SRC_AA, &mine);
+    CHECK(r == PMCP_OK && mine.gen == 21, "session with another gen does not count");
+    pmcp_owner_release(dir, &mine);
+    rm_in(dir, "wireless.session");
+
+    /* consumer gate */
+    {
+        pmcp_owner a, b;
+        uint8_t big[PMCP_CFG_CACHE_MAX + 1];
+        memset(&a, 0, sizeof a);
+        b = a;
+        strcpy(a.src, "wired"); strcpy(b.src, "wired");
+        memset(big, 1, sizeof big);
+        memset(&g_ring, 0, sizeof g_ring);
+        g_ring.generation = 4294967295u;
+        g_ring.write_sequence = 100;
+        pmcp_gate_init(&g);
+        a.pid = live; a.gen = 5; a.kind = PMCP_KIND_PROXY;
+        b.pid = 4242; b.gen = 6; b.kind = PMCP_KIND_IN;
+        CHECK(pmcp_gate_owner(&g, &g_ring, NULL, 0) == 0, "gate: no owner file, no cut");
+        CHECK(pmcp_gate_owner(&g, &g_ring, &a, 0) == 0 && g_ring.generation == 4294967295u, "gate: first observation does not cut");
+        CHECK(pmcp_gate_slot(&g, 101, PMCP_RING_TYPE_FRAME, "x", 1, 0) == PMCP_GATE_PASS, "gate open passes");
+        CHECK(pmcp_gate_owner(&g, &g_ring, &a, 0) == 0, "gate: same gen, no cut");
+        CHECK(pmcp_gate_owner(&g, &g_ring, NULL, 0) == 0, "gate: missing owner file keeps the previous owner");
+        CHECK(pmcp_gate_owner(&g, &g_ring, &b, 1000) == 1 && g_ring.generation == 1
+              && g.prev_pid == live && g.prev_kind == PMCP_KIND_PROXY, "gate: gen change bumps ring generation (wrap skips 0), remembers previous owner");
+        CHECK(pmcp_gate_slot(&g, 101, PMCP_RING_TYPE_FRAME, "x", 1, 1000) == PMCP_GATE_DROP
+              && pmcp_gate_slot(&g, 100, PMCP_RING_TYPE_CONFIG, g_avcc, sizeof g_avcc, 1000) == PMCP_GATE_DROP
+              && pmcp_gate_slot(&g, 102, PMCP_RING_TYPE_FRAME, "x", 1, 1000) == PMCP_GATE_DROP, "gate: frames and avcC written before/at the cut dropped");
+        /* previous pid alive: avcC is held, frames dropped */
+        CHECK(pmcp_gate_slot(&g, 103, PMCP_RING_TYPE_CONFIG, g_avcc, sizeof g_avcc, 1010) == PMCP_GATE_HELD
+              && pmcp_gate_slot(&g, 104, PMCP_RING_TYPE_FRAME, "x", 1, 1020) == PMCP_GATE_DROP
+              && pmcp_gate_poll(&g, 2000) == 0, "gate: new avcC held while the previous pid is alive (proxy, < 3000 ms)");
+        CHECK(pmcp_gate_poll(&g, 3999) == 0 && g.forced == 0, "gate: still closed at cut+2999 ms");
+        CHECK(pmcp_gate_poll(&g, 4000) == 1 && g.forced == 1 && g.open_reason == PMCP_GATE_OPEN_FORCED
+              && g.cfg_len == sizeof g_avcc && g.cfg_seq == 103 && !memcmp(g.cfg, g_avcc, sizeof g_avcc)
+              && pmcp_gate_slot(&g, 105, PMCP_RING_TYPE_FRAME, "x", 1, 4000) == PMCP_GATE_PASS,
+              "gate: forced open at the 3000 ms deadline, forced=1, held avcC returned");
+        /* in-kind previous owner: 100 ms */
+        a = b; a.pid = live; a.gen = 6; a.kind = PMCP_KIND_IN;
+        pmcp_gate_init(&g);
+        g_ring.write_sequence = 0xFFFFFFFFu;
+        pmcp_gate_owner(&g, &g_ring, &a, 0);
+        b.gen = 7; b.pid = 4242;
+        CHECK(pmcp_gate_owner(&g, &g_ring, &b, 50) == 1
+              && pmcp_gate_slot(&g, 1, PMCP_RING_TYPE_FRAME, "x", 1, 50) == PMCP_GATE_DROP
+              && pmcp_gate_slot(&g, 1, PMCP_RING_TYPE_CONFIG, g_avcc, sizeof g_avcc, 60) == PMCP_GATE_HELD
+              && pmcp_gate_poll(&g, 149) == 0 && pmcp_gate_poll(&g, 150) == 1 && g.forced == 1,
+              "gate: in-kind previous owner alive: forced at 100 ms, sequence wrap");
+        /* previous pid dead: opens on the avcC itself, nothing to emit later */
+        a.pid = dead_pid(); a.gen = 8;
+        pmcp_gate_init(&g);
+        pmcp_gate_owner(&g, &g_ring, &a, 0);
+        b.gen = 9;
+        CHECK(pmcp_gate_owner(&g, &g_ring, &b, 10) == 1
+              && pmcp_gate_slot(&g, 2, PMCP_RING_TYPE_CONFIG, g_avcc, sizeof g_avcc, 10) == PMCP_GATE_PASS
+              && g.forced == 0 && g.open_reason == PMCP_GATE_OPEN_EXIT, "gate: previous pid dead: opens at the new avcC, no force");
+        /* previous pid dies while the avcC is held: poll opens at once */
+        a.pid = (unsigned long)fork_sleeper();
+        a.gen = 10;
+        pmcp_gate_init(&g);
+        pmcp_gate_owner(&g, &g_ring, &a, 0);
+        b.gen = 11;
+        pmcp_gate_owner(&g, &g_ring, &b, 0);
+        CHECK(pmcp_gate_slot(&g, 3, PMCP_RING_TYPE_CONFIG, big, sizeof big, 1) == PMCP_GATE_HELD
+              && g.cfg_len == 0, "gate: oversized avcC is not stored");
+        pmcp_gate_slot(&g, 4, PMCP_RING_TYPE_CONFIG, g_avcc, sizeof g_avcc, 2);
+        CHECK(pmcp_gate_poll(&g, 3) == 0, "gate: sleeper alive: held");
+        kill((pid_t)a.pid, SIGKILL);
+        waitpid((pid_t)a.pid, NULL, 0);
+        CHECK(pmcp_gate_poll(&g, 4) == 1 && g.forced == 0 && g.cfg_seq == 4, "gate: opens right after the previous pid exits, held avcC emitted");
+    }
+}
+
+/* two takers race for one dead owner, N times: exactly one must win */
+static int race(const char *dir, unsigned long n)
+{
+    unsigned long i, bad = 0, both = 0, none = 0;
+    for (i = 0; i < n; i++) {
+        int gate[2], res[2], k;
+        pid_t kid[2];
+        unsigned long win_pid = 0;
+        int wins = 0;
+        pmcp_owner o;
+        put_owner_x(dir, "wired", dead_pid(), i + 1, (long long)pmcp_now_ms(), NULL);
+        if (pipe(gate) != 0)
+            return 2;
+        for (k = 0; k < 2; k++) {
+            kid[k] = fork();
+            if (kid[k] == 0) {
+                char b;
+                pmcp_owner m;
+                close(gate[1]);
+                if (read(gate[0], &b, 1) < 0) { /* EOF = go */ }
+                _exit(pmcp_owner_acquire(dir, PMCP_SRC_AA, &m) == PMCP_OK ? 10 : 11);
+            }
+        }
+        close(gate[0]);
+        close(gate[1]);
+        for (k = 0; k < 2; k++) {
+            int st = 0;
+            waitpid(kid[k], &st, 0);
+            res[k] = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+            if (res[k] == 10) {
+                wins++;
+                win_pid = (unsigned long)kid[k];
+            }
+        }
+        if (wins == 2)
+            both++;
+        else if (wins == 0)
+            none++;
+        if (wins != 1 || pmcp_owner_read(dir, &o) != PMCP_OK || o.pid != win_pid)
+            bad++;
+    }
+    CHECK(bad == 0, "race: two takers on a dead owner, exactly one winner, owner file = winner (200x)");
+    if (bad)
+        printf("# both=%lu none=%lu bad=%lu\n", both, none, bad);
+    return g_fail ? 1 : 0;
+}
+
+
+/* raw ring writer like core.so: no owner file, no avcC resend on generation change.
+ * rawwriter RING DELAY_MS CFG(0|1) STOPFILE|- MAXMS PAYLOAD */
+static int rawwriter(const char *ring, unsigned delay, int cfg, const char *stopfile,
+                     unsigned maxms, unsigned payload)
+{
+    pmcp_ring_map m;
+    static uint8_t fr[PMCP_RING_SLOT_DATA_MAX];
+    uint64_t t0;
+    uint32_t fno = 0;
+    struct stat sb;
+    if (payload + 4u > sizeof fr || pmcp_ring_open(&m, ring, 0) != PMCP_OK)
+        return 1;
+    pmcp_sleep_ms(delay);
+    if (cfg)
+        pmcp_ring_publish(m.ring, PMCP_RING_TYPE_CONFIG, g_avcc, sizeof g_avcc, 0, 0, 0);
+    memset(fr, 0xab, sizeof fr);
+    fr[0] = (uint8_t)(payload >> 24); fr[1] = (uint8_t)(payload >> 16);
+    fr[2] = (uint8_t)(payload >> 8); fr[3] = (uint8_t)payload;
+    fr[4] = 0x65;
+    t0 = pmcp_now_ms();
+    while (pmcp_now_ms() - t0 < maxms && !(stopfile[0] != '-' && stat(stopfile, &sb) == 0)) {
+        pmcp_ring_publish(m.ring, PMCP_RING_TYPE_FRAME, fr, payload + 4u, 0, ++fno, pmcp_ntp_now());
+        pmcp_sleep_ms(5);
+    }
+    printf("event=writer-done frames=%lu\n", (unsigned long)fno);
+    pmcp_ring_close(&m);
+    return 0;
+}
+
+/* zombie DIR SRC RING MAXMS PAYLOAD: an old proxy writer that owns the ring as proxy and
+ * never notices a preemption: keeps writing until MAXMS, then exits (its pid dies). */
+static int zombie(const char *dir, const char *src, const char *ring, unsigned maxms, unsigned payload)
+{
+    pmcp_producer p;
+    static uint8_t fr[PMCP_RING_SLOT_DATA_MAX];
+    pmcp_ring_map m;
+    uint64_t t0;
+    uint32_t fno = 0;
+    if (payload + 4u > sizeof fr || pmcp_producer_init_proxy(&p, src, dir) != PMCP_OK
+        || pmcp_ring_open(&m, ring, 0) != PMCP_OK || pmcp_producer_acquire(&p) != PMCP_OK)
+        return 1;
+    pmcp_producer_session_start(&p);
+    pmcp_ring_publish(m.ring, PMCP_RING_TYPE_CONFIG, g_avcc, sizeof g_avcc, 0, 0, 0);
+    memset(fr, 0xab, sizeof fr);
+    fr[0] = (uint8_t)(payload >> 24); fr[1] = (uint8_t)(payload >> 16);
+    fr[2] = (uint8_t)(payload >> 8); fr[3] = (uint8_t)payload;
+    fr[4] = 0x65;
+    printf("event=acquired src=%s gen=%lu t=%llu\n", src, (unsigned long)p.owner.gen,
+           (unsigned long long)pmcp_now_ms());
+    t0 = pmcp_now_ms();
+    while (pmcp_now_ms() - t0 < maxms) {
+        pmcp_ring_publish(m.ring, PMCP_RING_TYPE_FRAME, fr, payload + 4u, 0, ++fno, pmcp_ntp_now());
+        pmcp_sleep_ms(5);
+    }
+    printf("event=writer-done t=%llu\n", (unsigned long long)pmcp_now_ms());
+    return 0; /* no close: the owner file stays, like a crashed writer */
+}
+
+/* supervisor DIR SRC KIND HOLD_MS : owns on behalf of a writer, never writes frames */
+static int supervisor(const char *dir, const char *src, const char *kind, unsigned hold)
+{
+    pmcp_producer p;
+    uint64_t t0;
+    if (pmcp_producer_init_proxy(&p, src, dir) != PMCP_OK)
+        return 1;
+    p.kind = strcmp(kind, "proxy") == 0 ? PMCP_KIND_PROXY : PMCP_KIND_IN;
+    if (pmcp_producer_acquire(&p) != PMCP_OK) {
+        printf("event=busy\n");
+        return 3;
+    }
+    pmcp_producer_session_start(&p);
+    printf("event=acquired src=%s gen=%lu kind=%s t=%llu\n", src, (unsigned long)p.owner.gen, kind,
+           (unsigned long long)pmcp_now_ms());
+    t0 = pmcp_now_ms();
+    while (pmcp_now_ms() - t0 < hold) {
+        if (pmcp_producer_check_owner(&p) == PMCP_E_PREEMPTED) {
+            printf("event=preempted t=%llu\n", (unsigned long long)pmcp_now_ms());
+            pmcp_producer_close(&p, "preempted");
+            return 0;
+        }
+        pmcp_sleep_ms(5);
+    }
+    pmcp_producer_close(&p, "done");
+    printf("event=released\n");
+    return 0;
 }
 
 static int run_unit(const char *dir)
@@ -141,6 +462,8 @@ static int run_unit(const char *dir)
     CHECK(r == PMCP_OK && se.start == 0 && se.gen == 5 && !strcmp(se.reason, "preempted")
           && se.pid == (unsigned long)getpid(), "session read back");
     CHECK(pmcp_session_write(dir, PMCP_SRC_WIRELESS, 1, 5, "Bad Reason") == PMCP_E_INVAL, "session reason must be a word");
+
+    run_v11(dir);
 
     /* IDR marker */
     {
@@ -243,6 +566,7 @@ static int status_watch(const char *dir, unsigned secs)
 
 int main(int argc, char **argv)
 {
+    setvbuf(stdout, NULL, _IOLBF, 0);
     if (argc >= 3 && !strcmp(argv[1], "unit"))
         return run_unit(argv[2]);
     if (argc >= 4 && !strcmp(argv[1], "stress-writer"))
@@ -251,6 +575,19 @@ int main(int argc, char **argv)
         return stress_reader(argv[2], strtoul(argv[3], NULL, 10));
     if (argc >= 4 && !strcmp(argv[1], "status-watch"))
         return status_watch(argv[2], (unsigned)atoi(argv[3]));
+    if (argc >= 6 && !strcmp(argv[1], "putowner")) { /* DIR SRC PID GEN: since_ms = now, no kind */
+        put_owner(argv[2], argv[3], strtoul(argv[4], NULL, 10), strtoul(argv[5], NULL, 10));
+        return 0;
+    }
+    if (argc >= 4 && !strcmp(argv[1], "race"))
+        return race(argv[2], strtoul(argv[3], NULL, 10));
+    if (argc >= 8 && !strcmp(argv[1], "rawwriter"))
+        return rawwriter(argv[2], (unsigned)atoi(argv[3]), atoi(argv[4]), argv[5],
+                         (unsigned)atoi(argv[6]), (unsigned)atoi(argv[7]));
+    if (argc >= 7 && !strcmp(argv[1], "zombie"))
+        return zombie(argv[2], argv[3], argv[4], (unsigned)atoi(argv[5]), (unsigned)atoi(argv[6]));
+    if (argc >= 6 && !strcmp(argv[1], "supervisor"))
+        return supervisor(argv[2], argv[3], argv[4], (unsigned)atoi(argv[5]));
     if (argc >= 5 && !strcmp(argv[1], "deaddir")) {
         put_owner(argv[2], argv[4], dead_pid(), strtoul(argv[3], NULL, 10));
         return 0;

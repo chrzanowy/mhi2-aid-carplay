@@ -1,10 +1,39 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-# MOST bridge producer contract kit (contract version 1)
+# MOST bridge producer contract kit (line format v=1, contract revision 1 = v1.1)
 
 Everything a video producer needs to feed the MOST bridge: the contract header,
 a small producer library, a stand-in for the bridge (fake consumer) and a demo
 producer. Producers are: CarPlay wired (core.so), CarPlay Wi-Fi (WL manager),
 Android Auto (feeder). The bridge is the consumer.
+
+## Changes in v1.1 (additive, `PMCP_MOST_CONTRACT_REVISION 1`; `v=1` unchanged)
+
+* **Owner key `kind=in|proxy`**, written last; a v1 line without it parses as `in`.
+* **Proxy model**: when the ring is written by a process that does not know the
+  owner file (core.so inside the factory dio_manager, or the second dio_manager of
+  WL), a *supervisor* holds the owner on its behalf: `pmcp_producer_init_proxy()`,
+  `pmcp_producer_acquire()` (takes `kind=proxy`), `pmcp_producer_session_start()`,
+  `pmcp_producer_check_owner()`, `pmcp_producer_close()`. No frames are written by
+  the supervisor; core.so writes them.
+* **Preemption deadlines**: `in` 100 ms (`PMCP_MOST_PREEMPT_MS`), `proxy` 3000 ms
+  (`PMCP_MOST_PREEMPT_PROXY_MS`); `pmcp_owner_preempt_ms(kind)`.
+* **Consumer gate** (`pmcp_consumer_gate`, used by `fake_consumer`): on an owner
+  `gen` change the consumer bumps the ring generation and drops every slot until a
+  new type-1 (avcC) written after the change. The gate also remembers the previous
+  owner (pid, kind): while that pid is alive it stays closed even after the new avcC,
+  until the pid is gone or the old kind's deadline (in 100 ms, proxy 3000 ms) since
+  the cut passes; then it opens anyway and counts `gate_forced`. The avcC seen while
+  held is stored in the gate and emitted on opening (`pmcp_gate_poll()`), so the new
+  source need not resend it. For `proxy` the owner pid must live as long as the
+  writer it supervises.
+* **Race on a dead owner**: after taking over, the taker waits 20 ms and re-verifies;
+  the loser returns `PMCP_E_BUSY` without writing.
+* **Stale owner also without a session**: an owner whose `since_ms` is older than
+  10 s and for which no `<src>.session` with that gen has appeared is stale (PID
+  reuse guard). Recommendation for proxy producers: take the owner only when you can
+  write `<src>.session state=start` within seconds (Wi-Fi: right when the first
+  screen-stream SETUP reaches the dio_manager, not when the phone joins the hotspot).
+* `create_ring==2` is consumer-only; producers always use `create_ring=0`.
 
 ## What to copy into your repo
 
@@ -52,12 +81,12 @@ mkdir -p scratch
    (the library does this on the next frame). The ring is normally created by
    the consumer; the library can create one for tests (`create_ring`).
 3. **Owner** `/ramdisk/most-src/owner`:
-   `v=1 src=wired|wireless|aa pid= gen= since_ms=`. Take it with tmp + rename only
+   `v=1 src=wired|wireless|aa pid= gen= since_ms= [kind=in|proxy]`. Take it with tmp + rename only
    if there is no owner, the owner pid is dead, or you are `wired` and the owner is
    `wireless`. `gen` = previous + 1, 0 skipped. Release only if the file still
    holds your pid and gen.
 4. **Preemption**: if `owner` shows another pid/gen, stop writing to the ring
-   within 100 ms and write `state=stop`. Call `pmcp_producer_check_owner()` from
+   within 100 ms (`kind=proxy`: writer process dead within 3000 ms) and write `state=stop`. Call `pmcp_producer_check_owner()` from
    your idle loop too (it is throttled to one file read per 10 ms).
 5. **Session** `/ramdisk/most-src/<src>.session`:
    `v=1 state=start|stop gen= pid= ts_ms= reason=<word>`. Write start before the

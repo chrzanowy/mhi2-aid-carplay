@@ -50,8 +50,9 @@ typedef struct pmcp_ring_map {
 } pmcp_ring_map;
 
 /* create=0: open existing ring (E_NOENT when missing, E_PARSE if the size or
- * magic is wrong: the consumer has not initialised it yet).
- * create=2: consumer mode: create/extend the file, leave the header alone
+ * magic is wrong: the consumer has not initialised it yet). Producers ALWAYS
+ * use create=0.
+ * create=2: CONSUMER ONLY: create/extend the file, leave the header alone
  *           (pmcp_ring_consumer_attach() initialises it).
  * create=1: create/extend; if magic is missing initialise it like the
  * consumer does (zero, version 1, generation 1, magic last). */
@@ -66,19 +67,31 @@ uint32_t pmcp_ring_publish(pmcp_ring *r, uint32_t type, const void *data,
                            uint64_t ntp_ts);
 
 /* ---- owner ------------------------------------------------------------ */
+#define PMCP_KIND_IN    0   /* owner writes the ring itself (default) */
+#define PMCP_KIND_PROXY 1   /* supervisor owns, another process writes */
+
 typedef struct pmcp_owner {
     char src[PMCP_SRC_NAME_MAX];
     unsigned long pid;
     uint32_t gen;
     uint64_t since_ms;
+    int kind;                /* PMCP_KIND_*; missing key in the file = IN */
 } pmcp_owner;
+
+/* Preemption deadline for an owner of this kind (100 or 3000 ms). */
+unsigned pmcp_owner_preempt_ms(int kind);
 
 int pmcp_src_valid(const char *src);
 int pmcp_pid_alive(unsigned long pid);
 int pmcp_owner_parse(const char *line, pmcp_owner *o);
 int pmcp_owner_read(const char *dir, pmcp_owner *o);   /* E_NOENT if none */
-/* PMCP_OK + *out filled, or PMCP_E_BUSY. */
+/* Stale = unparsable, dead pid, or (since_ms present, older than
+ * PMCP_MOST_SESSION_WAIT_MS and no <src>.session with this gen). */
+int pmcp_owner_is_stale(const char *dir, const pmcp_owner *o);
+/* PMCP_OK + *out filled, or PMCP_E_BUSY (also when we lost the race: after a
+ * takeover we wait PMCP_MOST_TAKE_VERIFY_MS and re-verify). kind = in. */
 int pmcp_owner_acquire(const char *dir, const char *src, pmcp_owner *out);
+int pmcp_owner_acquire_kind(const char *dir, const char *src, int kind, pmcp_owner *out);
 /* OK if removed; E_PREEMPTED if the file is not ours (left untouched). */
 int pmcp_owner_release(const char *dir, const pmcp_owner *mine);
 /* OK = still ours, E_PREEMPTED = someone else (or nobody) is in `owner`. */
@@ -96,6 +109,59 @@ typedef struct pmcp_session {
 int pmcp_session_write(const char *dir, const char *src, int start,
                        uint32_t gen, const char *reason);
 int pmcp_session_read(const char *dir, const char *src, pmcp_session *s);
+
+/* ---- consumer gate (v1.1) --------------------------------------------- */
+/* Cuts off a stale writer after an owner gen change. Reusable by the bridge:
+ *   per loop:  if (pmcp_gate_owner(&g, ring, have ? &ow : NULL, now)) {
+ *                  W = ring->write_sequence + 1; forget avcC; }   (ring gen bumped)
+ *              if (pmcp_gate_poll(&g, now)) emit the held avcC g.cfg/g.cfg_len
+ *                  (as a type-1 slot, seq g.cfg_seq) and request an IDR;
+ *   per slot:  r = pmcp_gate_slot(&g, seq, type, data, size, now);
+ *              PASS = process normally, DROP/HELD = discard (count as drop).
+ * Rules: after an owner gen change every slot is dropped until a new type-1
+ * (avcC) written after the change. Additionally the gate remembers the PREVIOUS
+ * owner (pid, kind): if that pid is still alive the gate stays closed even
+ * after the new avcC, until (a) the pid is gone (kill(pid,0) == ESRCH) or (b)
+ * pmcp_owner_preempt_ms(prev kind) (100 / 3000 ms) have passed since the cut;
+ * on (b) it opens anyway and counts `forced`. The last avcC seen after the cut
+ * is kept in the gate (<= PMCP_CFG_CACHE_MAX) and emitted by pmcp_gate_poll()
+ * when the gate opens late, so the new source need not resend it. Note: for
+ * kind=proxy the owner pid is the supervisor; it must live exactly as long as
+ * the writer it supervises (parent of the writing process). */
+#define PMCP_GATE_PASS 0
+#define PMCP_GATE_DROP 1
+#define PMCP_GATE_HELD 2  /* a new avcC arrived but the old writer is alive: stored, dropped */
+#define PMCP_GATE_OPEN_NONE   0
+#define PMCP_GATE_OPEN_EXIT   1 /* previous owner pid gone (or none known) */
+#define PMCP_GATE_OPEN_FORCED 2 /* deadline passed, previous pid still alive */
+typedef struct pmcp_consumer_gate {
+    int have;                /* an owner has been observed */
+    uint32_t owner_gen;
+    unsigned long last_pid;  /* current owner as last observed */
+    int last_kind;
+    int cut;                 /* closed */
+    uint32_t cut_seq;        /* ring write_sequence at the cut */
+    uint64_t cut_ms;
+    unsigned long prev_pid;  /* owner before the cut */
+    int prev_kind;
+    int cfg_have;            /* an avcC after the cut is stored */
+    uint32_t cfg_seq;
+    uint32_t cfg_len;
+    int open_reason;         /* PMCP_GATE_OPEN_* of the last opening */
+    uint32_t cuts;
+    uint32_t forced;         /* gate_forced counter */
+    uint8_t cfg[PMCP_CFG_CACHE_MAX];
+} pmcp_consumer_gate;
+void pmcp_gate_init(pmcp_consumer_gate *g);
+/* cur=NULL: owner file missing (state kept, no cut). Returns 1 when the gen
+ * changed against the last observed one: ring generation bumped (0 skipped),
+ * gate closed. The first observation never cuts. */
+int pmcp_gate_owner(pmcp_consumer_gate *g, pmcp_ring *ring, const pmcp_owner *cur, uint64_t now_ms);
+int pmcp_gate_slot(pmcp_consumer_gate *g, uint32_t seq, uint32_t type, const void *data,
+                   uint32_t size, uint64_t now_ms);
+/* 1 = the gate just opened and a stored avcC (g->cfg, g->cfg_len, g->cfg_seq)
+ * must be emitted now. */
+int pmcp_gate_poll(pmcp_consumer_gate *g, uint64_t now_ms);
 
 /* ---- IDR marker ------------------------------------------------------- */
 /* Producer: 1 = marker existed and was consumed (next frame = keyframe). */
@@ -141,6 +207,7 @@ typedef struct pmcp_producer {
     pmcp_owner owner;
     int owned;               /* acquired and not (yet) lost/released */
     int preempted;           /* lost ownership; further writes refused */
+    int kind;                /* PMCP_KIND_*, owner kind taken by acquire */
     int session_open;        /* session start written, stop not yet */
     uint32_t frame_no;
     uint32_t seen_ring_gen;
@@ -162,6 +229,13 @@ int pmcp_producer_check_owner(pmcp_producer *p);
 int pmcp_producer_write_config(pmcp_producer *p, const void *avcc, uint32_t size);
 int pmcp_producer_write_frame(pmcp_producer *p, const void *avcc_au,
                               uint32_t size, uint64_t ntp_ts, int keyframe);
+/* Proxy / supervisor mode: no ring, no frames. Owns on behalf of another
+ * process that writes the ring (core.so). Use pmcp_producer_acquire() (takes
+ * the owner with kind=proxy), pmcp_producer_session_start(),
+ * pmcp_producer_check_owner() (on E_PREEMPTED you have
+ * pmcp_owner_preempt_ms(PMCP_KIND_PROXY) to kill the writer) and
+ * pmcp_producer_close(). write_config/write_frame return E_INVAL. */
+int pmcp_producer_init_proxy(pmcp_producer *p, const char *src, const char *dir);
 /* Session stop (if open and not yet stopped), owner release, unmap. */
 void pmcp_producer_close(pmcp_producer *p, const char *reason);
 

@@ -3,8 +3,10 @@
  * pmcp_most_contract.h -- producer/consumer contract of the MOST video bridge.
  *
  * Self-contained C99 header, no platform-specific includes: it compiles on
- * macOS (host tests) and on QNX 6.5 gcc (head unit). Contract version 1
- * (contract document: docs/23-wlasny-most.md, "Kontrakt v0.2").
+ * macOS (host tests) and on QNX 6.5 gcc (head unit). Line format version 1,
+ * contract revision 1 = "v1.1" (contract document: docs/23-wlasny-most.md,
+ * "Kontrakt v0.2" + "Kontrakt v1.1"). v1.1 is purely additive: every v1 line
+ * (an owner line without `kind`) still parses; a missing kind means `in`.
  *
  * Roles
  *   producer  = whoever decodes/receives the phone video and writes H.264
@@ -72,6 +74,9 @@
  * producer normally opens an EXISTING ring (core.so does exactly that). The
  * producer library can create one, for tests and stand-alone use, in the
  * same way as the consumer does (zero, version 1, generation 1, magic last).
+ * pmcp_ring_open(create==2) is CONSUMER-ONLY (file only, header left alone,
+ * pmcp_ring_consumer_attach() initialises it). Producers ALWAYS use
+ * create_ring=0 in the field (create==1 exists for host tests only).
  *
  * ===========================================================================
  * 2. CONTRACT DIRECTORY  (src dir, PMCP_MOST_SRC_DIR_DEFAULT)
@@ -85,6 +90,7 @@
  *
  * 2.1 owner  --  `owner`
  *   v=1 src=wired|wireless|aa pid=<pid> gen=<u32> since_ms=<monotonic ms>
+ *   [kind=in|proxy]
  *   Acquire: write owner.tmp.<pid>, then install it over `owner` only if
  *     (a) there is no owner file, or
  *     (b) the owner's pid is dead (kill(pid,0) fails with ESRCH), or
@@ -95,7 +101,51 @@
  *   Release: remove `owner` only if it still holds my pid AND gen.
  *   Preemption: a producer that finds another pid/gen (or no file) in
  *     `owner` MUST stop writing to the ring within PMCP_MOST_PREEMPT_MS
- *     (100 ms) and end its session (write session state=stop).
+ *     (100 ms, kind=in) and end its session (write session state=stop).
+ *   Extra key (v1.1): `kind=in|proxy`, written last, missing = `in`.
+ *     kind=in    the owner process writes the ring itself (library producer);
+ *                preemption deadline PMCP_MOST_PREEMPT_MS = 100 ms.
+ *     kind=proxy the ring is written by another process that does not know
+ *                the owner file (core.so inside the factory dio_manager, or the
+ *                second dio_manager of WL). A supervisor (AID dio_manager
+ *                wrapper = wired, WL supervisor = wireless) holds the owner on
+ *                its behalf: it acquires/releases the owner and writes the
+ *                session, but never writes frames (pmcp_producer_init_proxy).
+ *                Deadline PMCP_MOST_PREEMPT_PROXY_MS = 3000 ms: the supervisor
+ *                must have the writing process dead within 3 s of losing the
+ *                owner. Meanwhile the CONSUMER cuts the old writer off, see
+ *                "consumer gate" below.
+ *   Consumer gate (v1.1): the ring has no source field, so only the consumer
+ *     can cut off a stale writer. When it sees `gen` of the owner file change
+ *     it bumps the ring generation and drops EVERY ring slot until a new
+ *     type-1 (avcC) slot written after the change (pmcp_consumer_gate in
+ *     pmcp_most_producer.h; fake_consumer uses it). The gate also remembers
+ *     the PREVIOUS owner's pid and kind: while that pid is alive the gate stays
+ *     closed even after the new avcC, until (a) kill(pid,0) == ESRCH, or (b)
+ *     the preemption deadline of the previous kind (in 100 ms, proxy 3000 ms)
+ *     has passed since the cut; on (b) it opens anyway and the consumer counts
+ *     and logs `gate_forced`. The avcC that arrives while the gate is held is
+ *     kept (last one seen after the cut) and emitted when the gate opens, so
+ *     the new source need not resend it; frames dropped meanwhile are lost
+ *     (the consumer should request an IDR on opening). For kind=proxy the
+ *     owner pid is the supervisor: it must live as long as the writer it
+ *     supervises (e.g. the wrapper that waits for the dio_manager child).
+ *   Race window on a dead/stale owner: two takers may both rename() over the
+ *     same dead owner. After taking ownership the taker waits
+ *     PMCP_MOST_TAKE_VERIFY_MS (20 ms) and re-reads `owner`; if it no longer
+ *     holds its pid+gen it LOST and backs off (PMCP_E_BUSY) without writing
+ *     anything. The last rename wins. (The window is not closed, only made
+ *     very unlikely: a taker whose rename lands > 20 ms after another
+ *     taker's verification, having read the dead owner before it, still wins.)
+ *     The link() path (no owner file) is atomic and needs no wait.
+ *   Stale owner (PID reuse guard): besides a dead pid, an owner is stale when
+ *     since_ms is present and more than PMCP_MOST_SESSION_WAIT_MS (10 s, on the
+ *     monotonic clock) old and no `<src>.session` file with that gen (state
+ *     start, or a later stop) exists. Hence: a proxy supervisor SHOULD take the
+ *     owner only when it can write `<src>.session state=start` within seconds
+ *     (e.g. Wi-Fi: right when the first screen-stream SETUP reaches the
+ *     dio_manager, not when the phone joins the hotspot); an owner held longer
+ *     without a session may be taken over by anyone.
  *   Implementation notes (not wire format): the library installs with
  *     link() when no owner exists (atomic fail-if-exists, avoids a double
  *     take) and rename() otherwise; an unparsable owner file counts as stale.
@@ -144,7 +194,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define PMCP_MOST_CONTRACT_VERSION 1
+#define PMCP_MOST_CONTRACT_VERSION 1   /* line format, "v=1" */
+#define PMCP_MOST_CONTRACT_REVISION 1  /* additive revision: 1 = v1.1 */
 
 /* ---- paths ------------------------------------------------------------ */
 #ifndef PMCP_MOST_BASE_DIR
@@ -172,7 +223,10 @@
 #define PMCP_MOST_LINE_MAX        255   /* bytes incl. trailing '\n' */
 #define PMCP_MOST_REFRESH_MS      1000  /* consumer status refresh */
 #define PMCP_MOST_REFRESH_TOL_MS  100
-#define PMCP_MOST_PREEMPT_MS      100   /* preempted producer must stop within */
+#define PMCP_MOST_PREEMPT_MS      100   /* kind=in: preempted producer must stop within */
+#define PMCP_MOST_PREEMPT_PROXY_MS 3000 /* kind=proxy: writer process dead within */
+#define PMCP_MOST_TAKE_VERIFY_MS  20    /* wait + re-verify after taking owner */
+#define PMCP_MOST_SESSION_WAIT_MS 10000 /* owner without session start = stale */
 #define PMCP_MOST_DIR_MODE        0755
 
 /* ---- ring ------------------------------------------------------------- */

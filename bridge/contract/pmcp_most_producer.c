@@ -314,7 +314,31 @@ int pmcp_owner_parse(const char *line, pmcp_owner *o)
     o->since_ms = 0;
     if (get_u(line, "since_ms", ~0ULL, &x) == PMCP_OK)
         o->since_ms = x;
+    /* v1.1: kind missing (a v1 line) or unknown = in */
+    o->kind = (pmcp_kv_get(line, "kind", v, sizeof v) == PMCP_OK && strcmp(v, "proxy") == 0)
+        ? PMCP_KIND_PROXY : PMCP_KIND_IN;
     return PMCP_OK;
+}
+
+unsigned pmcp_owner_preempt_ms(int kind)
+{
+    return kind == PMCP_KIND_PROXY ? PMCP_MOST_PREEMPT_PROXY_MS : PMCP_MOST_PREEMPT_MS;
+}
+
+int pmcp_owner_is_stale(const char *dir, const pmcp_owner *o)
+{
+    uint64_t now;
+    pmcp_session se;
+    if (!pmcp_pid_alive(o->pid))
+        return 1;
+    if (o->since_ms == 0)
+        return 0; /* since_ms missing: tolerated, rule not applicable */
+    now = pmcp_now_ms();
+    if (now <= o->since_ms || now - o->since_ms <= PMCP_MOST_SESSION_WAIT_MS)
+        return 0;
+    if (pmcp_session_read(dir, o->src, &se) == PMCP_OK && se.gen == o->gen)
+        return 0; /* a session with this gen has appeared (start, maybe stop since) */
+    return 1;
 }
 
 static int owner_path(const char *dir, char *out, size_t sz)
@@ -337,11 +361,16 @@ int pmcp_owner_read(const char *dir, pmcp_owner *o)
 
 int pmcp_owner_acquire(const char *dir, const char *src, pmcp_owner *out)
 {
+    return pmcp_owner_acquire_kind(dir, src, PMCP_KIND_IN, out);
+}
+
+int pmcp_owner_acquire_kind(const char *dir, const char *src, int kind, pmcp_owner *out)
+{
     unsigned long pid = (unsigned long)getpid();
     char path[512], tmp[512], line[PMCP_MOST_LINE_MAX + 1];
     int attempt, r;
 
-    if (!pmcp_src_valid(src))
+    if (!pmcp_src_valid(src) || (kind != PMCP_KIND_IN && kind != PMCP_KIND_PROXY))
         return PMCP_E_INVAL;
     if ((r = ensure_dir(dir)) != PMCP_OK || (r = owner_path(dir, path, sizeof path)) != PMCP_OK)
         return r;
@@ -364,7 +393,7 @@ int pmcp_owner_acquire(const char *dir, const char *src, pmcp_owner *out)
                 *out = cur;
                 return PMCP_OK;
             }
-            if (pmcp_pid_alive(cur.pid)
+            if (!pmcp_owner_is_stale(dir, &cur)
                 && !(strcmp(src, PMCP_SRC_WIRED) == 0
                      && strcmp(cur.src, PMCP_SRC_WIRELESS) == 0))
                 return PMCP_E_BUSY;
@@ -372,9 +401,10 @@ int pmcp_owner_acquire(const char *dir, const char *src, pmcp_owner *out)
         gen = prev + 1u;
         if (gen == 0)
             gen = 1;
-        snprintf(line, sizeof line, "v=%d src=%s pid=%lu gen=%lu since_ms=%llu",
+        snprintf(line, sizeof line, "v=%d src=%s pid=%lu gen=%lu since_ms=%llu kind=%s",
                  PMCP_MOST_CONTRACT_VERSION, src, pid, (unsigned long)gen,
-                 (unsigned long long)pmcp_now_ms());
+                 (unsigned long long)pmcp_now_ms(),
+                 kind == PMCP_KIND_PROXY ? "proxy" : "in");
         r = write_tmp(dir, PMCP_MOST_FILE_OWNER, line, tmp, sizeof tmp);
         if (r != PMCP_OK)
             return r;
@@ -392,10 +422,13 @@ int pmcp_owner_acquire(const char *dir, const char *src, pmcp_owner *out)
             unlink(tmp);
             return PMCP_E_IO;
         }
+        if (!missing)
+            pmcp_sleep_ms(PMCP_MOST_TAKE_VERIFY_MS); /* race window: re-verify */
         if (pmcp_owner_read(dir, &now) == PMCP_OK && now.pid == pid && now.gen == gen) {
             *out = now;
             return PMCP_OK;
         }
+        return PMCP_E_BUSY; /* lost the race: back off, nothing written */
     }
     return PMCP_E_BUSY;
 }
@@ -651,9 +684,25 @@ int pmcp_producer_init(pmcp_producer *p, const char *src, const char *dir,
     return PMCP_OK;
 }
 
+int pmcp_producer_init_proxy(pmcp_producer *p, const char *src, const char *dir)
+{
+    memset(p, 0, sizeof *p);
+    p->map.fd = -1;
+    p->kind = PMCP_KIND_PROXY;
+    if (!pmcp_src_valid(src))
+        return PMCP_E_INVAL;
+    if (dir == NULL)
+        dir = pmcp_most_src_dir();
+    if (strlen(dir) >= sizeof p->dir)
+        return PMCP_E_INVAL;
+    strcpy(p->dir, dir);
+    strcpy(p->src, src);
+    return PMCP_OK;
+}
+
 int pmcp_producer_acquire(pmcp_producer *p)
 {
-    int r = pmcp_owner_acquire(p->dir, p->src, &p->owner);
+    int r = pmcp_owner_acquire_kind(p->dir, p->src, p->kind, &p->owner);
     if (r == PMCP_OK) {
         p->owned = 1;
         p->preempted = 0;
@@ -700,7 +749,10 @@ int pmcp_producer_check_owner(pmcp_producer *p)
 int pmcp_producer_write_config(pmcp_producer *p, const void *avcc, uint32_t size)
 {
     const uint8_t *b = (const uint8_t *)avcc;
-    int r = pmcp_producer_check_owner(p);
+    int r;
+    if (p->map.ring == NULL)
+        return PMCP_E_INVAL;
+    r = pmcp_producer_check_owner(p);
     if (r != PMCP_OK)
         return r;
     if (size < 7 || size > PMCP_RING_SLOT_DATA_MAX || b[0] != 1)
@@ -721,7 +773,10 @@ int pmcp_producer_write_frame(pmcp_producer *p, const void *avcc_au,
                               uint32_t size, uint64_t ntp_ts, int keyframe)
 {
     uint32_t g;
-    int r = pmcp_producer_check_owner(p);
+    int r;
+    if (p->map.ring == NULL)
+        return PMCP_E_INVAL;
+    r = pmcp_producer_check_owner(p);
     if (r != PMCP_OK)
         return r;
     if (size == 0 || size > PMCP_RING_SLOT_DATA_MAX)
@@ -759,4 +814,88 @@ void pmcp_producer_close(pmcp_producer *p, const char *reason)
         p->owned = 0;
     }
     pmcp_ring_close(&p->map);
+}
+
+/* ---- consumer gate ---- */
+void pmcp_gate_init(pmcp_consumer_gate *g)
+{
+    memset(g, 0, sizeof *g);
+}
+
+int pmcp_gate_owner(pmcp_consumer_gate *g, pmcp_ring *ring, const pmcp_owner *cur, uint64_t now_ms)
+{
+    uint32_t ng;
+    if (cur == NULL)
+        return 0;
+    if (!g->have || g->owner_gen == cur->gen) {
+        g->have = 1;
+        g->owner_gen = cur->gen;
+        g->last_pid = cur->pid;
+        g->last_kind = cur->kind;
+        return 0;
+    }
+    g->prev_pid = g->last_pid;
+    g->prev_kind = g->last_kind;
+    g->owner_gen = cur->gen;
+    g->last_pid = cur->pid;
+    g->last_kind = cur->kind;
+    g->cut_seq = ring->write_sequence;
+    g->cut_ms = now_ms;
+    g->cut = 1;
+    g->cfg_have = 0;
+    g->cfg_len = 0;
+    g->cuts++;
+    ng = ring->generation + 1u;
+    ring->generation = ng == 0 ? 1u : ng;
+    PMCP_BARRIER();
+    return 1;
+}
+
+/* 1 = may open now (sets open_reason, counts forced) */
+static int gate_release(pmcp_consumer_gate *g, uint64_t now_ms)
+{
+    if (g->prev_pid == 0 || !pmcp_pid_alive(g->prev_pid)) {
+        g->open_reason = PMCP_GATE_OPEN_EXIT;
+        return 1;
+    }
+    if (now_ms - g->cut_ms >= pmcp_owner_preempt_ms(g->prev_kind)) {
+        g->open_reason = PMCP_GATE_OPEN_FORCED;
+        g->forced++;
+        return 1;
+    }
+    return 0;
+}
+
+int pmcp_gate_slot(pmcp_consumer_gate *g, uint32_t seq, uint32_t type, const void *data,
+                   uint32_t size, uint64_t now_ms)
+{
+    if (!g->cut)
+        return PMCP_GATE_PASS;
+    if (type != PMCP_RING_TYPE_CONFIG || (int32_t)(seq - g->cut_seq) <= 0)
+        return PMCP_GATE_DROP;
+    g->cfg_have = 1;
+    g->cfg_seq = seq;
+    if (data != NULL && size <= PMCP_CFG_CACHE_MAX) {
+        memcpy(g->cfg, data, size);
+        g->cfg_len = size;
+    } else {
+        g->cfg_len = 0;
+    }
+    if (gate_release(g, now_ms)) {
+        g->cut = 0;
+        g->cfg_have = 0;
+        return PMCP_GATE_PASS; /* this very slot is the avcC */
+    }
+    return PMCP_GATE_HELD;
+}
+
+int pmcp_gate_poll(pmcp_consumer_gate *g, uint64_t now_ms)
+{
+    if (!g->cut || !g->cfg_have)
+        return 0;
+    if (!gate_release(g, now_ms))
+        return 0;
+    g->cut = 0;
+    g->cfg_have = 0;
+    return g->cfg_len > 0;
 }
