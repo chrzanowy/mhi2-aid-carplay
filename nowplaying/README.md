@@ -2,7 +2,8 @@
 
 [Polska wersja: README.pl.md](README.pl.md)
 
-Status: **works in the car (MU1161 + AID 791, October 2026).** JAR: `build/np-mu1161-aa11/pmcp-np.jar` (25,007 B, `1f3b0dc0…`, installed as `pmcp-np2.jar`, since v1.7.0 also the Android Auto title;
+Status: **works in the car (MU1161 + AID 791, October 2026).** JAR: `build/np-mu1161-aa12/pmcp-np.jar` (26,579 B, `ab2b27e8…`, installed as `pmcp-np3.jar`; since v1.7.0 also the Android Auto title, since A185 the AA track event log below;
+v1.7.0/v1.7.1: `build/np-mu1161-aa11/pmcp-np.jar`, 25,007 B, `1f3b0dc0…`, as `pmcp-np2.jar`;
 v1.x before v1.7.0: `build/np-mu1161-v2/pmcp-np.jar`, 17,928 B, `6b638868…dc23`;
 v2 2026-10-22: all 4 helper calls guarded by `buildtools/Guard.java`, J9 API check `RefCheck`;
 v1 `1af4d5e8…761b`).
@@ -14,6 +15,13 @@ card that knows only `pmcp-np.jar` 6b638868 still recognises the unit's set). Th
 only "Android Auto". A fourth hook, after the stock `dsiAndroidAuto2.setNotification(...)` in
 `AndroidAutoTarget.initializeDSI`, calls `NowPlaying.attachAa(dsiAndroidAuto2)`, which registers `AaNowPlayingListener`
 for attribute 3; `fill()` uses the Android Auto strings for connection type 3 and CarPlay's for 2. Host test: `TestNp`.
+
+**AA track event log (A185, review A176):** `NpLog` writes one line per Android Auto track update (valid flag, title
+length, changed), per switch of the cluster text between our title and the stock "Android Auto", and per DSI callback
+that reaches our listener (`videoAvailable`, `videoFocusRequestNotification`, `updatePlaybackState`) to
+`/ramdisk/pmcp-aa-np.log` (300 lines, then `.1`). Never the title, artist or album text. GEM "AA save log" copies it
+into the AA log. Purpose: to see whether the stock DSI tells us when an Android Auto session ends, before the AA
+title is cleared between sessions.
 Not yet seen in the car.
 
 ## Why the factory code shows only "Apple CarPlay"

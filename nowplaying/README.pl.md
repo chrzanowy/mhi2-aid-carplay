@@ -2,7 +2,8 @@
 
 [English version: README.md](README.md)
 
-Stan: **działa w aucie (MU1161 + AID 791, październik 2026).** JAR: `build/np-mu1161-aa11/pmcp-np.jar` (25 007 B, `1f3b0dc0…`, instalowany jako `pmcp-np2.jar`, od v1.7.0 także tytuł z Android Auto;
+Stan: **działa w aucie (MU1161 + AID 791, październik 2026).** JAR: `build/np-mu1161-aa12/pmcp-np.jar` (26 579 B, `ab2b27e8…`, instalowany jako `pmcp-np3.jar`; od v1.7.0 także tytuł z Android Auto, od A185 log zdarzeń tytułu AA opisany niżej;
+v1.7.0/v1.7.1: `build/np-mu1161-aa11/pmcp-np.jar`, 25 007 B, `1f3b0dc0…`, jako `pmcp-np2.jar`;
 przed v1.7.0: `build/np-mu1161-v2/pmcp-np.jar`, 17 928 B, `6b638868…dc23`;
 v2 2026-10-22: wszystkie 4 wywołania helpera osłonięte `buildtools/Guard.java`, kontrola API J9 `RefCheck`;
 v1 `1af4d5e8…761b`).
@@ -13,7 +14,14 @@ karta znająca tylko `pmcp-np.jar` 6b638868 nadal rozpozna zestaw jednostki). Fa
 `DSIAndroidAuto2` na atrybuty `{1,6,2}`, bez 3 (`ATTR_NOWPLAYINGDATA`), a `setStationInfoForMirrorLink` wysyła tylko
 „Android Auto”. Czwarty hook, po fabrycznym `dsiAndroidAuto2.setNotification(...)` w `AndroidAutoTarget.initializeDSI`,
 woła `NowPlaying.attachAa(dsiAndroidAuto2)`, który rejestruje `AaNowPlayingListener` na atrybut 3; `fill()` bierze
-napisy Android Auto dla typu 3, a CarPlay dla 2. Test na hoście: `TestNp`. W aucie jeszcze nie sprawdzone.
+napisy Android Auto dla typu 3, a CarPlay dla 2. Test na hoście: `TestNp`.
+
+**Log zdarzeń tytułu AA (A185, przegląd A176):** `NpLog` zapisuje do `/ramdisk/pmcp-aa-np.log` (300 linii, potem `.1`)
+po jednej linii na aktualizację utworu z Android Auto (flaga ważności, długość tytułu, czy się zmienił), na przełączenie
+napisu na liczniku między naszym tytułem a fabrycznym „Android Auto” i na każde wywołanie DSI, które dotrze do naszego
+listenera (`videoAvailable`, `videoFocusRequestNotification`, `updatePlaybackState`). Nigdy treści tytułu, wykonawcy ani
+albumu. Przycisk GEM „AA save log” dołącza go do logu AA. Cel: sprawdzić, czy fabryczne DSI zgłasza koniec sesji Android
+Auto, zanim tytuł AA zacznie być czyszczony między sesjami. W aucie jeszcze nie sprawdzone.
 
 ## Dlaczego fabrycznie jest tylko „Apple CarPlay”
 

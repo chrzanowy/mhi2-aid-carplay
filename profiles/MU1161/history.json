@@ -157,6 +157,12 @@
     ["0340ccca9e7d9953206809b28fc141c0d3b0a70f5d36918ab6fc628f99b69e0b", "59e22ec0266de8694880dc2114835a774d2ff09a", 136636],
     ["395d99b756789e39b119eded68f90d4eceee269138d7f950447aa928ea464592", "c0b446643bf6d4770be41c0f3a3c6b6a19faf019", 58656],
     ["716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839],
+    ["08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", "c9cbdfc4536944af21eab325fbf281703c08f44d", 1566]]},
+  {"note": "AA 1.1 (v1.7.0/v1.7.1, cards b5f758bf/6ab6432c; exp cards 9c0c4493 to 3403e8c5): hook cbf2e388, feeder v15, the same hook settings and feeder.conf",
+   "mode": "gamma", "files": [
+    ["cbf2e388ab053c0468daab6a6d3e3e2bb27875cfb16c2e260147b37282baa3af", "d8d71327093045db8e238686863e84eb9f0ca6a3", 141023],
+    ["395d99b756789e39b119eded68f90d4eceee269138d7f950447aa928ea464592", "c0b446643bf6d4770be41c0f3a3c6b6a19faf019", 58656],
+    ["716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", "62541fb7ec7fbce89b0a4365cdfa2c0808c205b3", 1839],
     ["08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", "c9cbdfc4536944af21eab325fbf281703c08f44d", 1566]]}
  ],
  "rg_known_note": "Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): the v1.0-v1.3 driver and Tomasz's reader. (kind, sha256, sha1, size): only their hashes go to the card, so no earlier build is needed here.",
@@ -182,6 +188,7 @@
   {"note": "v1.5.0, v1.5.1 and v1.6.0 rg (rg/build.sh lanes-uturn-asf-m-aa, before rg/lanes/v146.py): this card's rg is pmcp-guidance5.jar, so java-update (main menu 4) replaces it in place and keeps sl, ui and the speed-limit mode", "name": "rg", "sha256": "4e32e7f7e2af8613b264998911a278b50d4ebf0a4b5d0c6245089e782d6236ee", "sha1": "c14f3a68ffff673697d13985749a85adbdb1e2b4", "size": 53514, "jar": "pmcp-guidance4.jar", "successor": "rg"},
   {"note": "RC test cards (v1.6.0 rg + v146) in pmcp-guidance5.jar; this card's rg (+ KombiView, AA 1.1 gate) is pmcp-guidance7.jar", "name": "rg", "sha256": "70f714fbaf3efb85bf3235f72971f638c822a117838589bfdf46281037c38fa4", "sha1": "8f212f550a6e7c30c66e008e5d0bea197b0c2dfa", "size": 55780, "jar": "pmcp-guidance5.jar", "successor": "rg"},
   {"note": "experimental card b542b2d4 (A166): rg + KombiView; this card's rg (+ AA 1.1 gate) is pmcp-guidance7.jar", "name": "rg", "sha256": "637dc949c4eabb1eab487f1dcbe0cb566600c07f7e17c4ef671b0a053214de18", "sha1": "1409b1b4c10430690256f08812da8e0f38c3f4c9", "size": 64300, "jar": "pmcp-guidance6.jar", "successor": "rg"},
-  {"note": "v1.x np (CarPlay title only); this card's np (+ Android Auto title) is pmcp-np2.jar", "name": "np", "sha256": "6b638868e65a6e573117cbf249850bb29e7b9aac3cd0502c2830652411f1dc23", "sha1": "ead546cc8af3d2c5ac0035c0aecbd1faed8fe431", "size": 17928, "jar": "pmcp-np.jar", "successor": "np"}
+  {"note": "v1.x np (CarPlay title only); this card's np (+ Android Auto title) is pmcp-np2.jar", "name": "np", "sha256": "6b638868e65a6e573117cbf249850bb29e7b9aac3cd0502c2830652411f1dc23", "sha1": "ead546cc8af3d2c5ac0035c0aecbd1faed8fe431", "size": 17928, "jar": "pmcp-np.jar", "successor": "np"},
+  {"note": "v1.7.0/v1.7.1 np (+ Android Auto title, exp cards 9c0c4493..3403e8c5); this card's np (+ AA track event log) is pmcp-np3.jar", "name": "np", "sha256": "1f3b0dc0a0e27f349f051bc40ad92e38cd2da5a320050e6f57a73de15a6eea8e", "sha1": "6c39b01c6669ba30b8487d33b9725f30137e9ab8", "size": 25007, "jar": "pmcp-np2.jar", "successor": "np"}
  ]
 }

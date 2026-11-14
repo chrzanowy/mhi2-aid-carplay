@@ -111,11 +111,11 @@ PAYLOAD_BY_PROFILE["MU1161"] = {
     # v2 (2026-10-22, review 2): every hook call guarded, RefCheck against the unit's java.* classes
     "JAR_nai": (PROJ / "build/nai-mu1161-v2/NavActiveIgnore.jar",
             "dbd031ecb28a2ec91c4704e133f4e2126cf1fe11498f673bc2e07fc0b1aaa7ab", 13285, "jars/NavActiveIgnore.jar"),
-    # nowplaying/build.sh; since v1.7.0 (AA 1.1, A171): + Android Auto title (AndroidAutoTarget hook). Own file name
-    # pmcp-np2.jar: v1.x's pmcp-np.jar keeps its one content (6b638868, JAVA_OLD). The same file as experimental card
-    # 9c0c4493 (tested in the car 2026-11-12, A174)
-    "JAR_np": (PROJ / "build/np-mu1161-aa11/pmcp-np.jar",
-               "1f3b0dc0a0e27f349f051bc40ad92e38cd2da5a320050e6f57a73de15a6eea8e", 25007, "jars/pmcp-np2.jar"),
+    # nowplaying/build.sh; since v1.7.0 (AA 1.1, A171): + Android Auto title (AndroidAutoTarget hook). A185: + the AA
+    # track event log /ramdisk/pmcp-aa-np.log (lengths and flags only; aa-log-save copies it). Own file name
+    # pmcp-np3.jar: v1.x's pmcp-np.jar (6b638868) and v1.7.x's pmcp-np2.jar (1f3b0dc0) keep their one content (JAVA_OLD)
+    "JAR_np": (PROJ / "build/np-mu1161-aa12/pmcp-np.jar",
+               "ab2b27e8fbe695c0212a02802e89a158bbf4853c3b87358facb1ad4d6e8ece53", 26579, "jars/pmcp-np3.jar"),
     # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa-r (RC's rg 70f714fb = v1.6.0's rg 4e32e7f7 plus rg/lanes/v146.py,
     # tomasz-twardzicki MU1367 v1.4.5/v1.4.6) + com.pmcp.kv.KombiView (A166: which view the AID shows,
     # /ramdisk/pmcp-kombi-view.log) + rg/lanes/aa11.py (AA 1.1, A171: AA road name, lanes, destination only while the AID
@@ -155,8 +155,9 @@ PAYLOAD_BY_PROFILE["MU1161"] = {
 PAYLOAD_BY_PROFILE["MU1161"].update({
     "AA_WRAPPER": (PROJ / "aa/unit/gal.wrapper.sh", "57b63037a7d82d45f47773ec76e99ad659490f6d29d540f20de90930f0d65137", 3259, "aa/gal.wrapper.sh"),
     # v1.7.0: hook g2 + raw dump of the navigation messages (/ramdisk/pmcp-aa-rg-raw.txt, A166) + road name, lanes and
-    # destination into the rg mailbox (AA 1.1, A171); the same file as experimental card 9c0c4493 (car 2026-11-12, A174)
-    "AA_HOOK": (PROJ / "aa/prebuilt/libgal_hook.so", "cbf2e388ab053c0468daab6a6d3e3e2bb27875cfb16c2e260147b37282baa3af", 141023, "aa/libgal_hook.so"),
+    # destination into the rg mailbox (AA 1.1, A171); v1.7.0/v1.7.1 had cbf2e388 (AA_OLD). Since A185: file writes
+    # outside the rg mutex, the raw dump no longer rewrites latest.bin, 0x8006 dedupe over the whole message (review A176)
+    "AA_HOOK": (PROJ / "aa/prebuilt/libgal_hook.so", "dedd6452a086cd8f04f8dede4f9c74707483af5854f4a5f7cbb487452abbf2fe", 141514, "aa/libgal_hook.so"),
     "AA_DMDT_FLUSH": (PROJ / "aa/prebuilt/libdmdt_flush.so", "4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f", 5328, "aa/libdmdt_flush.so"),
     # AA 1.0 (A153): feeder v14 = v13 (pmcp's own MOST writer, direct) + only direct|ring taken from PMCP_AA_OUTPUT
     # v1.7.0: feeder v15 = v14 + MOST taken back when the factory encoder grabs isoTX2 early after boot (A166; in the car

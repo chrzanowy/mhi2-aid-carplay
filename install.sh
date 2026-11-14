@@ -471,7 +471,7 @@ if has_pkg nai; then
     run_long "NavActiveIgnore.jar" bash "$PROJ/navactiveignore/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/nai-$PROFILE_LC-v2"
 fi
 if has_pkg np; then
-    run_long "pmcp-np.jar (track title and artist, CarPlay and Android Auto)" bash "$PROJ/nowplaying/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/np-$PROFILE_LC-aa11"
+    run_long "pmcp-np.jar (track title and artist, CarPlay and Android Auto)" bash "$PROJ/nowplaying/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/np-$PROFILE_LC-aa12"
 fi
 if has_pkg zoom || has_pkg dn; then
     run_long "pmcp-zoom.jar and pmcp-dn.jar (zoom, day/night)" bash "$PROJ/hmiextras/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/extras-$PROFILE_LC-v2"

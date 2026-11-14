@@ -5,6 +5,17 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (release-candidate)
 
+- **Android Auto hook: review fixes (no visible change):** the route guidance part of the hook now writes its files
+  (`latest.bin`, the raw navigation dump, the status) with its lock released, so gal's message thread never waits for a
+  file; a raw-dump line no longer rewrites `latest.bin`; repeated 0x8006 messages are recognised over the whole message,
+  not its first 1 KB. Host tests for a road name over 200 bytes (cut at a UTF-8 boundary) and more than 16 lanes. Hook
+  `dedd6452…` (v1.7.x: `cbf2e388…`); main menu 3 brings it, the AA output stays.
+- **Android Auto title: event log:** the now-playing package writes Android Auto track events to
+  `/ramdisk/pmcp-aa-np.log` (valid flag, title length, whether the cluster shows our title, DSI callbacks; never the
+  title text), and "AA save log" copies it into the AA log. Purpose: find out whether the radio reports the end of an AA
+  session before the AA title is cleared between sessions. New file `pmcp-np3.jar` (`ab2b27e8…`); main menu 4 replaces
+  v1.7.x's `pmcp-np2.jar` in place, without resetting the other features. RAM only, so nothing new for the log card or
+  "9. Delete saved logs".
 - **"CP save log" includes the AID view log:** the saved CarPlay log now also carries `pmcp-kombi-view.log(.1)` (which view
   the AID showed and when), as the Android Auto log already did. No new file: the log card and "9. Delete saved logs" are
   unchanged.
