@@ -63,7 +63,7 @@ Planned rows (later, they need changes in `core.so`): map layout, fps, IDR.
   Java set it does not know with *4. Install additional features*, so nothing is needed first. Older cards (v1.5.0
   and earlier) see such a set as PARTIAL and change nothing (fail-closed): press *Off ui* on the `ui` card first, or
   only *Remove everything* helps there (installer test [40]).
-- To remove the package for good, use *Off ui* in GEM `features_advanced`. All Java packages also have the usual
+- To remove the package for good, use *Off ui* in GEM `rg_features`. All Java packages also have the usual
   safety net: the trial boot plus *5. Confirm*, and the rescue card.
 
 ## Build

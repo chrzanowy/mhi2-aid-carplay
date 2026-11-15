@@ -155,8 +155,8 @@ AWARIA - KARTA 2 (RATUNKOWA)
   bez naszych plików niczego nie zmienia. Potem uzbrój ją ponownie pomocnikiem kopiowania,
   opcja 3.
 
-  Pojedyncze funkcje, inne układy mapy, szczegóły Android Auto i przyciski logów są w podmenu
-  pmcp_advanced  (ekrany features_advanced, carplay_advanced, aa_advanced; napisy po
+  Pojedyncze funkcje, szczegóły Android Auto i przyciski logów są w podmenu
+  pmcp_advanced  (ekrany features_advanced, rg_features, aa_advanced; napisy po
   angielsku, opisane w docs/tutorial-w-aucie.pl.md).
 
 ------------------------------------------------------------------------------------------

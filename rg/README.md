@@ -57,7 +57,7 @@ the base `717fb53c` byte for byte.
 ## Installation (GEM buttons)
 
 Button "4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)" on the main screen does
-all of this. Single steps in `pmcp_advanced` → `features_advanced`:
+all of this. Single steps in `pmcp_advanced` → `rg_features`:
 
 1. "Route guidance system on (iAP2 driver, iap2.cfg, reader)": saves the factory driver and cfg in `carplaymaps/rollback/`
    (hash), replaces the driver and cfg (remount `/mnt/app` and `/mnt/system`), installs the reader, and finally the marker
@@ -65,10 +65,10 @@ all of this. Single steps in `pmcp_advanced` → `features_advanced`:
    (factory iAP2 driver and iap2.cfg)" or "8. Remove everything (back to factory files)" undoes.
 2. "On rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)": the JAR through the
    Java mechanism with a trial start.
-3. Updating from an earlier card: "Route guidance system update (driver and reader of this card, RG stays on)" replaces
+3. Updating from an earlier card: main "4. Install additional features: ..." (or "10. Reinstall: remove everything, then
+   this card's versions of what was on") does it; there are no separate buttons. The `rg-update` action replaces
    only the v1.0-v1.3 driver `76926bde…` and Tomasz's reader `b683cef7…` (staged and hashed, factory copies kept;
-   "Status" shows "Route guidance system: old" before). "Java update: packages of an earlier card -> this card's
-   (rglu -> rg)" makes one new set in which `rg`, `rglu` or an experimental variant becomes this `rg` (new JAR file name,
+   "Status" shows "Route guidance system: old" before). The `java-update` action makes one new set in which `rg`, `rglu` or an experimental variant becomes this `rg` (new JAR file name,
    so the old set stays intact until `HMI_BOOT` switches; one trial start, then "5. Confirm").
 4. The reader starts in the background from our `lsd.sh` block, only when `SYSTEM_ON` is present and the Java set loads
    (with Tomasz's arguments: `start-live /dev/ipod0/rgi-events /ramdisk/carplay-route-guidance`).

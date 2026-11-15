@@ -79,7 +79,9 @@ App-Connect → Settings → **AID navigation configuration** (instaluje ją prz
 
 Szczegóły i ograniczenia: [ui/README.md](ui/README.md).
 
-### Warianty układu mapy (GEM → `pmcp_advanced` → `carplay_advanced`)
+### Warianty układu mapy
+
+Przyciski układu mapy usunięto z menu GEM jako niepotrzebne: instaluje się tylko domyślny `map-square-fps40`. Pozostałe warianty zostają w repo (i na karcie) i mogą wrócić później.
 
 Strumień ma 800×480 i leży 1:1 na panelu AID. Safe area: x / y / szerokość / wysokość.
 

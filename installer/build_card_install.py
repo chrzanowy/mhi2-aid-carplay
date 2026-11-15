@@ -54,7 +54,8 @@ This is M.I.B. 3.6.0 plus the CarPlay-on-AID installer. Nothing starts by itself
      (no Confirm, or black screen: restart again -> factory start, nothing to fix)
   2, 3 and 4 also update an earlier install and replace versions this card does not support.
   8. Remove everything (back to factory files) -> undo it all
-  More (logs, single features, map layouts, Android Auto details): pmcp_advanced
+  10. Reinstall                             -> remove everything, then this card's versions of what was on
+  More (diagnostics, logs, single features on/off, Android Auto details): pmcp_advanced
 
 Photograph each result (the card is read-only in GEM, there is no log file).
 Do not copy the rescue card (pmcp-rescue/, Swdlautorun.txt) onto this card.

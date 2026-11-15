@@ -193,17 +193,19 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
      zostawia pliki fabryczne albo kroki zrobione do tej pory (2, 3 i 4 obsługują oba stany). Tryb ograniczenia prędkości
      jest tylko zgłaszany: wymaga potwierdzonego zestawu, więc ustawia się go ponownie po 5. Confirm. Na fabrycznym radiu
      niczego nie zmienia (`REINSTALL_NOTHING_INSTALLED_USE_2_3_4`), a gdy `restore` odmawia, nic więcej się nie wykonuje;
-   - podekran `pmcp_advanced` („Advanced” na ekranie, pod 9) z trzema podekranami:
-     `features_advanced`: „0. Diagnostics (read-only, photograph the screen)” (działa nawet wtedy, gdy `pmcp.sh`
+   - podekran `pmcp_advanced` („Advanced” na ekranie, pod 10) z trzema podekranami:
+     `features_advanced` (tylko odczyt i logi): „Diagnostics (read-only, photograph the screen)” (działa nawet wtedy, gdy `pmcp.sh`
      zatrzyma się na self teście), „Start timeline: …”, „RG last maneuver: …” (co wysłał iPhone i jaką strzałkę VW daje
      ścisłe mapowanie; gdzie pokazuje main 0, paczka `rg` może jeszcze pokazać strzałkę zastępczą), „Navigation
      diagnostics: …”, „CP save log: copy this start's CarPlay log to the unit (for the log card)” (`cp-log-save`),
-     cztery przyciski „Speed limit …”, „Route
-     guidance system on (iAP2 driver, iap2.cfg, reader)”, „Route guidance system off (factory iAP2 driver and
-     iap2.cfg)”, „Route guidance system update (driver and reader of this card, RG stays on)” (`rg-update`), „Java
-     update: packages of an earlier card -> this card's (rglu -> rg)” (`java-update`) oraz „On …” / „Off …” dla każdej
-     paczki (nai, np, rg, zoom, dn i opcjonalnej `sl`, którą instaluje tylko ten ekran);
-     `carplay_advanced`: „Install map layout: <wariant>” i „Switch map layout to: <wariant>” (`switch`);
+     oraz „Speed limit status: …”;
+     `rg_features` (pierwszy start po zmianie jest próbny): „Route guidance system on (iAP2 driver, iap2.cfg, reader)”,
+     „Route guidance system off (factory iAP2 driver and iap2.cfg)”, potem „On …” i „Off …” dla każdej paczki (nai, np,
+     rg, zoom, dn i opcjonalnej `sl`, którą instaluje tylko ten ekran). Akcje `rg-update` i `java-update` nie mają
+     przycisku: główne „4. Install additional features” aktualizuje w miejscu sterownik, reader i paczki Javy z
+     wcześniejszej karty, a „10. Reinstall” robi wszystko od nowa; obie akcje nadal istnieją w wierszu poleceń. Nie ma
+     też przycisków układu mapy (tylko domyślny `map-square-fps40` daje „2. Install CarPlay”; `pmcp.sh switch <wariant>`
+     i `install <wariant>` zostają w wierszu poleceń);
      `aa_advanced`: „AA Confirm: AA works (only in the start of the AA trial; 5 does the same)”, „AA Try again: the next
      AA connection is a new trial”, „AA status and stream analysis (read-only)”, „AA save log: …”, „AA remove (factory Android Auto back)”. Karty eksperymentalne (nie wydania) dodają swoje
      eksperymentalne oprogramowanie Android Auto tylko na tym ekranie.
@@ -220,7 +222,7 @@ Kolejność (jedna wizyta w aucie):
 1. „1. Check card and unit” (`verify`): tylko odczyt. Oczekiwane `PMCP_VERIFY_OK state=STOCK`.
 2. „2. Install CarPlay: the map on the AID” (etap A), potem pełny restart. Jeśli na AID nie ma obrazu CarPlay: w iPhonie
    Ustawienia → Ogólne → CarPlay → auto → „Zapomnij to auto” i podłączyć ponownie (iPhone pamięta stare wyświetlacze auta).
-   Inny układ mapy: `pmcp_advanced` → `carplay_advanced` → „Switch map layout to: …”.
+   Przyciski układu mapy usunięto z menu (instaluje się tylko domyślny `map-square-fps40`).
 3. Tylko gdy mapa działa: „4. Install additional features” (i opcjonalnie „3. Install Android Auto”) → restart (start
    próbny) → sprawdzić HMI i funkcje → **w tym samym starcie** „5. Confirm” → restart. Bez potwierdzenia następny start
    jest fabryczny.

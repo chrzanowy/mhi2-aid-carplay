@@ -43,7 +43,7 @@ zawsze slot **SD1**.
 2. **„1. Check card and unit (read-only)”**. Trwa kilka sekund (hashe liczy fabryczny `sha1sum` radia).
 3. Oczekiwany wynik: **`PMCP_VERIFY_OK state=STOCK`**. W radiu nic się nie zmienia. Przy innym firmware zatrzyma się tutaj.
 
-Gdy coś jest niejasne: **„0. Diagnostics (read-only, photograph the screen)”** (podmenu `pmcp_advanced` →
+Gdy coś jest niejasne: **„Diagnostics (read-only, photograph the screen)”** (podmenu `pmcp_advanced` →
 `features_advanced`) pokazuje stan radia i niczego nie zmienia. „RG last maneuver” (też tylko odczyt) pokazuje, co iPhone ostatnio wysłał i jaką strzałkę VW
 daje ścisłe mapowanie; gdzie jest main 0, paczka prowadzenia może jeszcze pokazać strzałkę zastępczą (np. na starcie trasy
 albo na rondzie).
@@ -68,12 +68,8 @@ albo na rondzie).
 
 **Jeśli na AID nie ma obrazu:**
 1. W iPhonie: Ustawienia → Ogólne → CarPlay → to auto → **„Zapomnij to auto”**, podłącz ponownie.
-2. Dalej nic: zielone menu → **`pmcp_advanced` → `carplay_advanced`** → „Switch map layout to: map-clean” (szersze
-   i niższe okno mapy), restart.
-3. Inne układy w tym samym podmenu (każda zmiana → restart; układy: [mapa ramki AID](../aid-frame-map.pl.html)):
-   `card-clean` (z kartą manewru iPhone'a), `url-map-hybrid` (mapa z parametrem ograniczenia prędkości, który w aucie nic
-   nie pokazał), `map-clean-l40` (mapa 40 kolumn w lewo), `map-clean` (200 / 108 / 400 / 296).
-   Powrót do domyślnego: „Switch map layout to: map-square-fps40”.
+2. Dalej nic: przyciski układu mapy usunięto z menu jako niepotrzebne (instaluje się tylko domyślny
+   `map-square-fps40`). Zgłoś problem z „Diagnostics” i logami (układy: [mapa ramki AID](../aid-frame-map.pl.html)).
 
 Bez mapy na AID nie przechodź do kroku 3. Etap A nie zmienia startu ekranu radia: najgorszy skutek to brak obrazu CarPlay,
 a zielone menu z „8. Remove everything (back to factory files)” działa zawsze.
@@ -194,11 +190,11 @@ naszego (po drodze ponownie instaluje się M.I.B. 3.6.0). Potem uzbrój ją opcj
 | Brak obrazu na AID | iPhone: „Zapomnij to auto”, podłącz ponownie; potem inny układ (krok 2) |
 | Czarny ekran / logo w kółko w starcie próbnym | pokrętło ~10 s; następny start jest fabryczny |
 | Któraś funkcja źle działa | restart bez potwierdzenia (fabryczny), potem funkcje po jednej ([zaawansowane](#zaawansowane-funkcje-po-jednej)) |
-| CarPlay nie łączy się po kroku 3 | `pmcp_advanced` → `features_advanced` → „Route guidance system off (factory iAP2 driver and iap2.cfg)”, restart |
+| CarPlay nie łączy się po kroku 3 | `pmcp_advanced` → `rg_features` → „Route guidance system off (factory iAP2 driver and iap2.cfg)”, restart |
 | Czarny ekran po potwierdzeniu | **karta 2** (awaria wyżej), potem karta 1 → „8. Remove everything (back to factory files)” |
 | Wycofanie wszystkiego | „8. Remove everything (back to factory files)” → `PMCP_RESTORE_OK` → restart (radio fabryczne) |
 | Zacząć od nowa z tą kartą (starsza albo nieznana instalacja, coś pomieszanego) | „10. Reinstall: remove everything, then this card's versions of what was on” → `PMCP_REINSTALL_OK` → restart, potem „5. Confirm” w tym starcie; tryb ograniczenia prędkości ustaw ponownie po nim |
-| Każdy `PMCP_FAIL` albo coś niejasnego | nic więcej nie naciskaj, zdjęcie ekranu, „0. Diagnostics” (tylko odczyt) |
+| Każdy `PMCP_FAIL` albo coś niejasnego | nic więcej nie naciskaj, zdjęcie ekranu, „Diagnostics” (tylko odczyt) |
 
 Jedyna dozwolona aktualizacja firmware to oficjalna K4525. Nigdy cross-flash z innego modelu.
 
@@ -206,7 +202,7 @@ Jedyna dozwolona aktualizacja firmware to oficjalna K4525. Nigdy cross-flash z i
 
 # Zaawansowane: funkcje po jednej
 
-Zamiast kroku 3 funkcje można włączać po jednej w **`pmcp_advanced` → `features_advanced`**. Każde „On ...” tworzy
+Zamiast kroku 3 funkcje można włączać po jednej w **`pmcp_advanced` → `rg_features`**. Każde „On ...” tworzy
 nowy zestaw → restart → start próbny → test → „5. Confirm”. „Off ...” wraca do zestawu bez tej paczki: jeśli ten zestaw był
 wcześniej potwierdzony, ładuje się od razu; jeśli nie, też jest próbny. Po restarcie „Status” pokazuje
 `This boot: set=... use=trial` (próbny, potrzebne Confirm) albo `use=yes` (potwierdzony).
@@ -219,9 +215,9 @@ wcześniej potwierdzony, ładuje się od razu; jeśli nie, też jest próbny. Po
      czy CarPlay się łączy**. Jeśli nie: **„Route guidance system off (factory iAP2 driver and iap2.cfg)”**, restart i pomiń
      następny punkt.
    - **„On rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)”**.
-   - Z wcześniejszej karty: **„Route guidance system update (driver and reader of this card, RG stays on)”** i **„Java
-     update: packages of an earlier card -> this card's (rglu -> rg)”** (jeden start próbny, potem „5. Confirm”); przycisk 4
-     uruchamia oba sam.
+   - Z wcześniejszej karty: osobnych przycisków nie ma; główne **„4. Install additional features: ...”** aktualizuje w
+     miejscu sterownik, reader i paczki Javy z wcześniejszej karty (jeden start próbny, potem „5. Confirm”), a **„10.
+     Reinstall: remove everything, then this card's versions of what was on”** robi wszystko od nowa.
 4. **„On zoom: CarPlay map zoom with the steering wheel arrows”**. Obserwuj, czy nie przeszkadza w menu licznika (te same strzałki).
 5. **„On dn: CarPlay map day/night on the AID (sent again after start)”**. Kluczowy przypadek (zgłoszony przez innego
    właściciela 791, omonob #51): auto na zewnątrz w dzień, światła zgaszone (nie AUTO) → start → mapa musi być jasna. Bez tej
@@ -229,7 +225,7 @@ wcześniej potwierdzony, ładuje się od razu; jeśli nie, też jest próbny. Po
 6. Opcjonalnie, tylko tutaj (przycisk 4 jej nie instaluje): **„On sl: native VW map speed limit in the AID road text
    (optional, output off until enabled)”**, zob. [16-native-speed-limits.md](../en/16-native-speed-limits.md).
 
-W `features_advanced` jest też przycisk logów do wsparcia: **„CP save log: copy this start's CarPlay log to the unit (for
+W `features_advanced` jest przycisk logów do wsparcia: **„CP save log: copy this start's CarPlay log to the unit (for
 the log card)”**. Gdy karta logów (karta 3) już je skopiowała, usuń je na głównym ekranie przyciskiem **„9. Delete saved logs:
 CarPlay and Android Auto (after the log card copied them)”**.
 

@@ -195,16 +195,18 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
      interruption leaves the factory files or the steps done so far (2, 3 and 4 handle both). A speed-limit mode is
      only reported: it needs a confirmed set, so it is set again after 5. Confirm. On a factory unit it changes nothing
      (`REINSTALL_NOTHING_INSTALLED_USE_2_3_4`), and when `restore` refuses, nothing else runs;
-   - sub-screen `pmcp_advanced` ("Advanced" on the screen, below 9) with three sub-screens:
-     `features_advanced`: "0. Diagnostics (read-only, photograph the screen)" (works even when `pmcp.sh` stops at its
+   - sub-screen `pmcp_advanced` ("Advanced" on the screen, below 10) with three sub-screens:
+     `features_advanced` (read-only and log buttons only): "Diagnostics (read-only, photograph the screen)" (works even when `pmcp.sh` stops at its
      self test), "Start timeline: …", "RG last maneuver: …" (what the iPhone sent and which VW arrow the strict mapping
      gives; where it shows main 0 the `rg` package may still show a fallback arrow), "Navigation diagnostics: …", "CP save
-     log: copy this start's CarPlay log to the unit (for the log card)" (`cp-log-save`), the four "Speed limit …" buttons, "Route guidance system on (iAP2 driver,
-     iap2.cfg, reader)", "Route guidance system off (factory iAP2 driver and iap2.cfg)", "Route guidance system update
-     (driver and reader of this card, RG stays on)" (`rg-update`), "Java update: packages of an earlier card -> this
-     card's (rglu -> rg)" (`java-update`), and "On …" / "Off …" for each package (nai, np, rg, zoom, dn, and the optional
-     `sl`, which only this screen installs);
-     `carplay_advanced`: "Install map layout: <variant>" and "Switch map layout to: <variant>" (`switch`);
+     log: copy this start's CarPlay log to the unit (for the log card)" (`cp-log-save`) and "Speed limit status: …";
+     `rg_features` (the first start after a change is a trial): "Route guidance system on (iAP2 driver, iap2.cfg,
+     reader)", "Route guidance system off (factory iAP2 driver and iap2.cfg)", then "On …" and "Off …" for each package
+     (nai, np, rg, zoom, dn, and the optional `sl`, which only this screen installs). The `rg-update` and `java-update`
+     actions have no button: main "4. Install additional features" updates an earlier card's driver, reader and Java
+     packages in place, and "10. Reinstall" redoes everything; both actions still exist on the command line. There are
+     no map layout buttons either (only the default `map-square-fps40` is offered by "2. Install CarPlay"; `pmcp.sh
+     switch <variant>` and `install <variant>` remain on the command line);
      `aa_advanced`: "AA Confirm: AA works (only in the start of the AA trial; 5 does the same)", "AA Try again: the next
      AA connection is a new trial", "AA status and stream analysis (read-only)", "AA save log: …", "AA remove (factory Android Auto back)". Experimental cards (not releases) add their experimental
      Android Auto software only on this screen.
@@ -222,7 +224,7 @@ Order (one visit to the car):
 1. "1. Check card and unit" (`verify`): read-only. Expected `PMCP_VERIFY_OK state=STOCK`.
 2. "2. Install CarPlay: the map on the AID" (stage A), then a full restart. If the AID shows no CarPlay picture: on the iPhone,
    Settings → General → CarPlay → the car → "Forget This Car", and reconnect (the iPhone remembers the car's old displays).
-   For another map layout: `pmcp_advanced` → `carplay_advanced` → "Switch map layout to: …".
+   The map layout buttons were removed from the menu (only the default `map-square-fps40` is installed).
 3. Only if the map works: "4. Install additional features" (and, optionally, "3. Install Android Auto") → restart (trial
    boot) → check the HMI and the features → **in the same boot** "5. Confirm" → restart. Without confirmation the next
    boot is stock.

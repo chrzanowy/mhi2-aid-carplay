@@ -536,17 +536,22 @@ PY
     labels=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | awk '/^script/{s=1;next} s&&/^    label/{print substr($0,14,1);s=0}' | tr -d '\n')
     [ "$labels" = 1234567891 ] && ok "main screen buttons numbered 1-10" || bad "main numbering: $labels"
     scr=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,$p' | grep '^screen' | tr '\n' '|')
-    [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen features_advanced pmcp_advanced|screen carplay_advanced pmcp_advanced|screen aa_advanced pmcp_advanced|" ] \
-        && ok "screens: pmcp_stream_map_aid > pmcp_advanced > features / carplay / aa_advanced" || bad "screens: $scr"
-    feat=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen carplay_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh menu/speedlimit-status.sh menu/rg-system-on.sh "*"menu/java-update.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh ") ok "features_advanced: diagnostics, CarPlay log, speed-limit status only (mode on the page), RG system, packages (ui last)" ;; *) bad "features_advanced: $feat" ;; esac
+    [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen features_advanced pmcp_advanced|screen rg_features pmcp_advanced|screen aa_advanced pmcp_advanced|" ] \
+        && ok "screens: pmcp_stream_map_aid > pmcp_advanced > features_advanced / rg_features / aa_advanced (no map layout screen)" || bad "screens: $scr"
+    feat=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen rg_features/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+    case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh "*) ok "features_advanced: diagnostics and the CarPlay log first" ;; *) bad "features_advanced: $feat" ;; esac
+    case "$feat" in *java-*|*rg-system*|*rg-update*) bad "features_advanced still has on/off or update buttons: $feat" ;; *) ok "features_advanced: no on/off, no update buttons" ;; esac
+    onoff=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen rg_features/,/^screen aa_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+    case "$onoff" in "menu/rg-system-on.sh menu/rg-system-off.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh menu/java-off-nai.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh "|"menu/java-on-nai.sh "*"menu/java-off-ui.sh ") ok "rg_features: RG system on/off, then every package on, then off (ui last)" ;; *) bad "rg_features: $onoff" ;; esac
+    for _m in rg-update java-update; do
+        [ ! -e "$SDB/pmcp/menu/$_m.sh" ] && ! grep -q "menu/$_m.sh" "$SDB/esd/Launcher-sda0.esd" && ok "no GEM button $_m (main 4 and 10 do it)" || bad "GEM button $_m still there"
+    done
+    ! grep -q '"0\. \|below 9\|Android Auto 0\.1\|map layouts' "$SDB/esd/Launcher-sda0.esd" && ok "menu texts: no 0., below 9, AA 0.1, map layouts" || bad "outdated menu text left"
     for _m in speedlimit-on speedlimit-cpi speedlimit-off; do
         [ ! -e "$SDB/pmcp/menu/$_m.sh" ] && ! grep -q "menu/$_m.sh" "$SDB/esd/Launcher-sda0.esd" && ok "no GEM button $_m (mode set on the page)" \
             || bad "GEM speed-limit mode button $_m still there"
     done
-    cpa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen carplay_advanced/,/^screen aa_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    [ "$cpa" = "menu/install-map-clean.sh menu/install-card-clean.sh menu/install-url-map-hybrid.sh menu/install-map-clean-l40.sh menu/install-map-square.sh menu/switch-map-clean.sh menu/switch-card-clean.sh menu/switch-url-map-hybrid.sh menu/switch-map-clean-l40.sh menu/switch-map-square.sh menu/switch-map-square-fps40.sh " ] \
-        && ok "carplay_advanced: other layouts (install, switch)" || bad "carplay_advanced: $cpa"
+    ls "$SDB"/pmcp/menu/install-*.sh "$SDB"/pmcp/menu/switch-*.sh > /dev/null 2>&1 && bad "map layout buttons left" || ok "no map layout buttons (layouts stay on the card for 2 and 10)"
     ORIG="$REPO/archives/mib-3.6.0/Launcher-sda0.esd"
     head -c "$(stat -f %z "$ORIG")" "$SDB/esd/Launcher-sda0.esd" | cmp -s - "$ORIG" && ok "M.I.B. menu content unchanged (only appended)" || bad "M.I.B. menu prefix changed"
     for ref in $(grep -o '/net/mmx/fs/sda0/pmcp/menu/[a-z0-9-]*\.sh' "$SDB/esd/Launcher-sda0.esd"); do
@@ -1320,10 +1325,10 @@ PEOF
     echo "[40] package ui (AID navigation configuration page, Save of trial starts): own JAR, in main 4, java-off and restore exact, shares the mode file"
     UI=$(jid ui)
     grep -q "java-on_ui" "$SDB/pmcp/menu/features-on.sh" && ok "main 4 installs ui (Save on the page)" || bad "main 4 leaves ui out"
-    tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features_advanced/,/^screen carplay_advanced/p' > "$W/feat.esd"
+    tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen rg_features/,/^screen aa_advanced/p' > "$W/feat.esd"
     grep -q '"On ui: AID navigation configuration in App-Connect settings, saves trial starts without the card"' "$W/feat.esd" \
         && grep -q '"Off ui: AID navigation configuration in App-Connect settings, saves trial starts without the card"' "$W/feat.esd" \
-        && ok "features_advanced: On ui / Off ui" || bad "GEM ui buttons missing in features_advanced"
+        && ok "rg_features: On ui / Off ui" || bad "GEM ui buttons missing in rg_features"
     fresh_unit; factory=$(snapshot "$W/unit")
     run install map-square-fps40; rc_is 0; run java-on nai; rc_is 0; unit_boot > /dev/null; run java-confirm; rc_is 0
     jars_before=$(cd "$U/eso/hmi/lsd/jars" && ls); boot_before=$(cat "$U/carplaymaps/HMI_BOOT")

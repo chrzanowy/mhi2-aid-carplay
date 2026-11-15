@@ -18,6 +18,12 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 - **"10. Reinstall" on the main screen:** remove everything, then this card's versions of what was on (map layout, route
   guidance system, the same Java packages, Android Auto and its output). The plan is read before anything changes; a
   speed-limit mode is set again after "5. Confirm".
+- **Advanced menu cleaned up:** `pmcp_advanced` now has `features_advanced` (diagnostics, CarPlay log, speed limit
+  status: read-only and logs only), a new `rg_features` (route guidance system on/off and every package on/off) and
+  `aa_advanced`. The map layout screen (`carplay_advanced`) is gone: only the default layout `map-square-fps40` is offered
+  by "2. Install CarPlay"; the other layouts stay in the repository and on the card ("10. Reinstall" keeps an installed
+  one, `pmcp.sh switch` still works). "Route guidance system update" and "Java update" are gone (main menu 4 and 10 do
+  it). "Diagnostics" lost its "0." and the outdated hints ("below 9", "Android Auto 0.1") are fixed.
 - **Tests: update tests only from the last two releases (v1.6.0, v1.7.1).** Every other earlier version is made from this
   card in the test (`old_java`, synthetic AA sets, `fx:java-old` in the power-loss chains), so no earlier experimental
   card is needed. About half the installer test runs.

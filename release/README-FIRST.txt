@@ -150,8 +150,8 @@ EMERGENCY - CARD 2 (RESCUE)
   Optional: you can test CARD 2 once on a working unit before step 1. It changes nothing on a
   unit without our files. Re-arm it afterwards with the copy helper, option 3.
 
-  Single features, other map layouts, Android Auto details and the log buttons are in the
-  submenu  pmcp_advanced  (screens features_advanced, carplay_advanced, aa_advanced;
+  Single features, Android Auto details and the log buttons are in the
+  submenu  pmcp_advanced  (screens features_advanced, rg_features, aa_advanced;
   explained in docs/in-car-guide.md).
 
 ------------------------------------------------------------------------------------------

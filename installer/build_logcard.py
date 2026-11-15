@@ -38,8 +38,8 @@ It changes NOTHING on pmcp's files (it only reads them). To get there it runs th
 mode (SWDL), as when M.I.B. was installed: the unit re-installs M.I.B. 3.6.0 on the way.
 
 When the normal screen is back: remove the card. PMCP_LOGS/PMCP_LOGS_RESULT.txt ends with "RESULT=OK".
-After the copies are checked on a computer: GEM -> pmcp_stream_map_aid -> pmcp_advanced -> aa_advanced, "AA delete saved
-logs, AA and CarPlay (after the log card copied them)".
+After the copies are checked on a computer: GEM -> pmcp_stream_map_aid, "9. Delete saved logs: CarPlay and Android Auto
+(after the log card copied them)".
 
 After each use M.I.B. disarms the card (Swdlautorun.txt -> _Swdlautorun.txt). To use it again, rename
 _Swdlautorun.txt back to Swdlautorun.txt on a computer.

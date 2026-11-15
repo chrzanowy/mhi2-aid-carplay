@@ -80,7 +80,9 @@ App-Connect > Settings > **AID navigation configuration** (installed by main men
 
 Details and limits: [ui/README.md](ui/README.md).
 
-### Map layout variants (GEM → `pmcp_advanced` → `carplay_advanced`)
+### Map layout variants
+
+The layout buttons were removed from the GEM menu as not useful: only the default `map-square-fps40` is installed. The other variants stay in the repo (and on the card's payload) and may return later.
 
 The stream is 800×480 and lies 1:1 on the AID panel. Safe area values are x / y / width / height.
 

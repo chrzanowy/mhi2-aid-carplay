@@ -53,7 +53,7 @@ bajt w bajt bazowy `717fb53c`.
 ## Instalacja (przyciski GEM)
 
 Wszystko to robi przycisk „4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)” na
-ekranie głównym. Pojedyncze kroki w `pmcp_advanced` → `features_advanced`:
+ekranie głównym. Pojedyncze kroki w `pmcp_advanced` → `rg_features`:
 
 1. „Route guidance system on (iAP2 driver, iap2.cfg, reader)”: zapisuje fabryczny sterownik i cfg w `carplaymaps/rollback/`
    (hash), podmienia sterownik i cfg (remount `/mnt/app` i `/mnt/system`), instaluje czytnik, na końcu znacznik
@@ -61,10 +61,10 @@ ekranie głównym. Pojedyncze kroki w `pmcp_advanced` → `features_advanced`:
    iAP2 driver and iap2.cfg)” albo „8. Remove everything (back to factory files)”.
 2. „On rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)”: JAR przez mechanizm
    Java z próbnym startem.
-3. Aktualizacja z wcześniejszej karty: „Route guidance system update (driver and reader of this card, RG stays on)” podmienia
+3. Aktualizacja z wcześniejszej karty: robi ją główne „4. Install additional features: ...” (albo „10. Reinstall:
+   remove everything, then this card's versions of what was on”); osobnych przycisków nie ma. Akcja `rg-update` podmienia
    tylko sterownik v1.0–v1.3 `76926bde…` i czytnik Tomasza `b683cef7…` (kopia robocza, hash, kopie fabryczne zostają;
-   wcześniej „Status” pokazuje „Route guidance system: old”). „Java update: packages of an earlier card -> this card's
-   (rglu -> rg)” tworzy jeden nowy zestaw, w którym `rg`, `rglu` albo wariant eksperymentalny staje się tą paczką `rg`
+   wcześniej „Status” pokazuje „Route guidance system: old”). Akcja `java-update` tworzy jeden nowy zestaw, w którym `rg`, `rglu` albo wariant eksperymentalny staje się tą paczką `rg`
    (nowa nazwa pliku JAR, więc stary zestaw zostaje nietknięty, aż przełączy się `HMI_BOOT`; jeden start próbny, potem
    „5. Confirm”).
 4. Czytnik startuje z naszego bloku `lsd.sh` w tle, tylko gdy jest `SYSTEM_ON` i zestaw Java się ładuje

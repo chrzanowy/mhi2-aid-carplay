@@ -66,4 +66,4 @@ je dopiero po sprawdzeniu braku literałów klas), stałe w obu klasach identycz
 - czy licznik pokazuje drugą i trzecią linię dla źródła „smartfon” (dla multimediów pokazuje);
 - czy `ThreadSwitchingService` jest gotowy w chwili pierwszej zmiany utworu (jeśli nie, pokaże się przy następnej aktualizacji).
 
-W instalatorze: paczka Java `np` (menu główne „4. Install additional features” albo GEM → pmcp_stream_map_aid → pmcp_advanced → features_advanced → „On np: CarPlay song title and artist on the AID”).
+W instalatorze: paczka Java `np` (menu główne „4. Install additional features” albo GEM → pmcp_stream_map_aid → pmcp_advanced → rg_features → „On np: CarPlay song title and artist on the AID”).

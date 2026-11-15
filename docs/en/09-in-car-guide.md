@@ -48,7 +48,7 @@ unit start to CarPlay, MOST, navigation), "RG last maneuver" (what the iPhone la
 where it says main 0 the guidance package may still show a fallback arrow, e.g. at the start of a route or at a roundabout)
 and "Navigation diagnostics" (why the VW navigation does not start).
 
-If anything is unclear, **"0. Diagnostics (read-only, photograph the screen)"** (submenu `pmcp_advanced` →
+If anything is unclear, **"Diagnostics (read-only, photograph the screen)"** (submenu `pmcp_advanced` →
 `features_advanced`) shows the unit's state and changes nothing.
 
 ## Step 2. Install the map (stage A)
@@ -71,12 +71,9 @@ If anything is unclear, **"0. Diagnostics (read-only, photograph the screen)"** 
 
 **If the AID shows no picture:**
 1. On the iPhone: Settings → General → CarPlay → this car → **"Forget This Car"**, reconnect.
-2. Still nothing: green menu → **`pmcp_advanced` → `carplay_advanced`** → "Switch map layout to: map-clean"
-   (wider and lower map window), restart.
-3. Other layouts in the same submenu (each change → restart; layouts: [AID frame map](../aid-frame-map.html)):
-   `card-clean` (with the iPhone's manoeuvre card), `url-map-hybrid` (map with the speed-limit parameter, which showed
-   nothing in the car), `map-clean-l40` (map 40 columns to the left), `map-clean` (200 / 108 / 400 / 296).
-   Back to the default: "Switch map layout to: map-square-fps40".
+2. Still nothing: the map layout buttons were removed from the menu as not useful (only the default
+   `map-square-fps40` is installed). Report the problem with "Diagnostics" and the logs (layouts:
+   [AID frame map](../aid-frame-map.html)).
 
 Do not go on to step 3 without a map on the AID. Stage A does not touch how the head unit screen starts: the worst
 outcome is no CarPlay picture, and the green menu with "8. Remove everything (back to factory files)" always works.
@@ -192,14 +189,14 @@ ours (M.I.B. 3.6.0 is installed again on the way). Re-arm it afterwards with opt
 
 | Situation | What to do |
 |---|---|
-| No picture on the AID | iPhone: "Forget This Car", reconnect; then another layout (step 2) |
+| No picture on the AID | iPhone: "Forget This Car", reconnect; then report it with "Diagnostics" and logs (step 2) |
 | Black screen / boot logo looping in the trial start | knob ~10 s; the next start is factory |
 | A feature misbehaves | restart without Confirm (factory), then enable features one at a time ([advanced](#advanced-one-feature-at-a-time)) |
-| CarPlay does not connect after step 3 | `pmcp_advanced` → `features_advanced` → "Route guidance system off (factory iAP2 driver and iap2.cfg)", restart |
+| CarPlay does not connect after step 3 | `pmcp_advanced` → `rg_features` → "Route guidance system off (factory iAP2 driver and iap2.cfg)", restart |
 | Black screen after Confirm | **card 2** (emergency above), then card 1 → "8. Remove everything (back to factory files)" |
 | Roll back everything | "8. Remove everything (back to factory files)" → `PMCP_RESTORE_OK` → restart (factory unit) |
 | Start again with this card (an older or unknown install, or something mixed) | "10. Reinstall: remove everything, then this card's versions of what was on" → `PMCP_REINSTALL_OK` → restart, then "5. Confirm" in that start; set the speed-limit mode again afterwards |
-| Any `PMCP_FAIL` or anything unclear | do not press anything else, photograph the screen, "0. Diagnostics" (read-only) |
+| Any `PMCP_FAIL` or anything unclear | do not press anything else, photograph the screen, "Diagnostics" (read-only) |
 
 The only allowed firmware update is the official K4525. Never cross-flash firmware from another model.
 
@@ -207,7 +204,7 @@ The only allowed firmware update is the official K4525. Never cross-flash firmwa
 
 # Advanced: one feature at a time
 
-Instead of step 3, the features can be enabled one by one in **`pmcp_advanced` → `features_advanced`**. Every "On ..."
+Instead of step 3, the features can be enabled one by one in **`pmcp_advanced` → `rg_features`**. Every "On ..."
 makes a new set → restart → trial start → test → "5. Confirm". "Off ..." goes back to the set without that package: if that set was confirmed before, it loads straight away; if not, it is a trial too. After a restart "Status" shows
 `This boot: set=... use=trial` (trial, Confirm needed) or `use=yes` (confirmed).
 
@@ -219,9 +216,9 @@ makes a new set → restart → trial start → test → "5. Confirm". "Off ..."
      CarPlay connects**. If not: **"Route guidance system off (factory iAP2 driver and iap2.cfg)"**, restart, and skip
      the next item.
    - **"On rg: route guidance: arrows, lanes, distance bar, street, ETA (needs Route guidance system)"**.
-   - From an earlier card: **"Route guidance system update (driver and reader of this card, RG stays on)"** and
-     **"Java update: packages of an earlier card -> this card's (rglu -> rg)"** (one trial start, then "5. Confirm");
-     button 4 runs both by itself.
+   - From an earlier card: there are no separate buttons; main **"4. Install additional features: ..."** updates the
+     earlier card's driver, reader and Java packages in place (one trial start, then "5. Confirm"), and
+     **"10. Reinstall: remove everything, then this card's versions of what was on"** redoes everything.
 4. **"On zoom: CarPlay map zoom with the steering wheel arrows"**. Watch whether it gets in the way of the cluster menu
    (same arrows).
 5. **"On dn: CarPlay map day/night on the AID (sent again after start)"**.
@@ -230,7 +227,7 @@ makes a new set → restart → trial start → test → "5. Confirm". "Off ..."
 6. Optional, only here (button 4 does not install it): **"On sl: native VW map speed limit in the AID road text (optional,
    output off until enabled)"**, see [16-native-speed-limits.md](16-native-speed-limits.md).
 
-`features_advanced` also has the log button for support: **"CP save log: copy this start's CarPlay log to the unit (for
+`features_advanced` has the log button for support: **"CP save log: copy this start's CarPlay log to the unit (for
 the log card)"**. After the log card (card 3) copied the logs, delete them on the main screen with **"9. Delete saved logs:
 CarPlay and Android Auto (after the log card copied them)"**.
 
