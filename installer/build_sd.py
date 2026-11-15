@@ -457,7 +457,7 @@ STOP=0
 while read A B; do
     [ -n "$A" ] || continue
     echo "- $A $B"
-    OUT=`/bin/ksh $PMCP $A $B 2>&1`
+    OUT=`/bin/ksh $PMCP $A $B 2>&1 </dev/null`
     echo "$OUT" | while read L; do case "$L" in PMCP_WARN*) ;; PMCP_*) echo "  $L" ;; esac; done
     case "$OUT" in
         *PMCP_FAIL=*_ALREADY_*) echo "  (already on)" ;;

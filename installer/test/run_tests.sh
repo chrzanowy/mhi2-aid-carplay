@@ -796,10 +796,11 @@ PEOF
     [ "$(cat "$P/native-speedlimit-mode" 2>/dev/null)" = turnto ] && ok "4: speed-limit mode kept" || bad "4: speed-limit mode lost"
     restore_exact "restore after earlier versions: exact factory tree"
     # not an earlier version of ours: the set is mixed (PARTIAL) and 4 resets it with the verified factory files
-    for bad_case in samename unknownpkg foreignfile damaged; do
+    for bad_case in samename otherfile unknownpkg foreignfile damaged; do
         fresh_unit; run map-install map-square-fps40; rc_is 0; run java-on nai; rc_is 0; run java-on np; rc_is 0; confirm_now
         case $bad_case in
             samename) old_java np np "$NPF" ;;                       # other content under this card's file name: no safe swap
+            otherfile) old_java np np "$ZOOMF" ;;                     # under another package's file name of this card
             unknownpkg) old_java np kf ;;                            # a name this card does not know
             foreignfile) old_java np np NowPlaying.jar ;;            # a JAR outside our name space
             damaged) printf x >> "$U/eso/hmi/lsd/jars/$NPF" ;;       # this card's np, damaged
@@ -811,6 +812,12 @@ PEOF
         rm -f "$U/eso/hmi/lsd/jars/NowPlaying.jar"
         run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "$bad_case: restore exact" || bad "$bad_case: tree after restore"
     done
+    # a stray pmcp-*.jar without carplaymaps (the factory lsd.sh never loads it) does not block a factory unit
+    fresh_unit; echo stray > "$U/eso/hmi/lsd/jars/pmcp-stray.jar"
+    run verify; rc_is 0; expect_out "PMCP_VERIFY_OK state=STOCK" "stray pmcp-*.jar without carplaymaps: still STOCK"
+    run install map-clean; rc_is 0; expect_out "PMCP_INSTALL_OK" "install works next to it"
+    [ ! -e "$U/eso/hmi/lsd/jars/pmcp-stray.jar" ] && ok "install removes the leftover JAR of ours" || bad "stray JAR left by install"
+    run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "restore: factory again"
     for gone in rglu rgluasfm rgl dn2 kf kf4; do
         run install map-clean > /dev/null; run java-on $gone; rc_is 1; expect_out "UNKNOWN_JAVA_PACKAGE_$gone" "$gone is not a package of this card"
         run restore > /dev/null
@@ -1530,8 +1537,8 @@ PEOF
     o=$(unit_boot); case "$o" in "boot=trial "*) ok "first start is a trial" ;; *) bad "boot: $o" ;; esac
     # restore refuses (not a pmcp carplaymaps): nothing written, the plan is not run
     printf x >> "$U/carplaymaps/rollback/lsd.sh"; broken=$(snapshot "$W/unit")
-    reinst; rc_is 0; expect_out "PMCP_FAIL=REINSTALL_STOPPED_AT_restore" "restore refused: reinstall stops"
-    [ "$broken" = "$(snapshot "$W/unit")" ] && ok "restore refused: nothing changed" || bad "reinstall wrote after a refused restore"
+    reinst; rc_is 0; expect_out "PMCP_FAIL=REINSTALL_" "not a pmcp install: reinstall stops"
+    [ "$broken" = "$(snapshot "$W/unit")" ] && ok "not a pmcp install: nothing changed" || bad "reinstall wrote on a non-pmcp install"
     fresh_unit
 
     echo "[55] v1.7.1 release card 6ab6432c (v1.7.x payload) -> 2 already installed, 4 replaces the JARs in place, 3 the AA set"

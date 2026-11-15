@@ -409,7 +409,8 @@ java_parts() {
         _p_f=${_p_jars%% *}
         if [ "$_p_f" = "$_p_jars" ]; then _p_jars=""; else _p_jars=${_p_jars#* }; fi
         _p_n=${_p_part%-*}; _p_8=${_p_part##*-}
-        [ -n "$_p_n" ] && [ "$_p_n" != "$_p_part" ] && [ -n "$_p_8" ] || return 1
+        [ -n "$_p_n" ] && [ "$_p_n" != "$_p_part" ] || return 1
+        case "$_p_8" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;; *) return 1 ;; esac
         case "$_p_f" in ""|.*|*[!A-Za-z0-9._-]*) return 1 ;; esac
         case "$_p_seen" in *" $_p_f "*) return 1 ;; esac
         case "$_p_names" in *" $_p_n "*) return 1 ;; esac
@@ -424,7 +425,11 @@ java_parts() {
             _p_s=`java_successor "$_p_n"`
             [ -n "$_p_s" ] || return 1
             case "$_p_f" in pmcp-*.jar) ;; *) return 1 ;; esac
-            [ "$_p_f" != "`java_jarfile "$_p_s"`" ] || return 1
+            # never any of this card's file names (review A189): java-update stages this card's JARs under those names
+            # while the old set is still active
+            _p_cat=`java_catalog | while read _p_a _p_b; do echo $_p_b; done`
+            _p_cat=`echo $_p_cat`
+            case " $_p_cat " in *" $_p_f "*) return 1 ;; esac
             _p_out="$_p_out$_p_n $_p_8 $_p_f old $_p_s
 "
         fi
@@ -500,7 +505,10 @@ detect_state() {
     set -- `manifest_get WRAPPER`; W_SHA=$1; W_SIZE=$2
     set -- `manifest_get LSD_JAVA`; LJ_SHA=$1; LJ_SIZE=$2
     present=`our_jars_present`
-    if [ ! -e "$ROOT" ] && [ -z "$present" ] && [ ! -e "$JARS/CarPlayNavigationPatch.jar" ] && [ ! -e "$JARS/CarPlayClusterControls.jar" ]; then
+    # STOCK looks for this card's JAR names only: a stray pmcp-*.jar of unknown origin without carplaymaps (the factory
+    # lsd.sh never loads it) must not make the unit UNKNOWN, where restore and install would both refuse (review A189)
+    _d_cat=`java_catalog | while read _d_n _d_f; do [ -e "$JARS/$_d_f" ] && echo "$_d_f"; done`
+    if [ ! -e "$ROOT" ] && [ -z "$_d_cat" ] && [ ! -e "$JARS/CarPlayNavigationPatch.jar" ] && [ ! -e "$JARS/CarPlayClusterControls.jar" ]; then
         if matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" && matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" \
             && matches "$DRV" "$STOCK_DRV_SHA" "$STOCK_DRV_SIZE" && matches "$CFG" "$STOCK_CFG_SHA" "$STOCK_CFG_SIZE" \
             && matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE"; then
@@ -652,8 +660,8 @@ aa_state() {
             return 0
         fi
     fi
-    # an earlier card's set (or one half-replaced by an interrupted aa-on): everything around it is ours and verified
-    # above (wrapper, factory gal copy, dmdt_flush), so its four files are replaced whatever their version
+    # an earlier card's set: everything around it is ours and verified above (wrapper, factory gal copy, dmdt_flush), so
+    # its four files are replaced whatever their version (an interrupted in-place update empties AA_BOOT first: unknown)
     case "$_a_boot" in
         *[!a-z0-9-]*) return 0 ;;
         [a-z]*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
@@ -1312,6 +1320,13 @@ do_install() {
     # Leftovers of an interrupted earlier attempt (never active files: those are covered by detect_state).
     remove_stale
     rm -f "$DIO.pmcp-new" "$LSD.pmcp-new" "$DIO.pmcp-rb" "$LSD.pmcp-rb" "$DIO.pmcp-restore" "$LSD.pmcp-restore" 2>/dev/null
+    # Stray JARs of our name space (STOCK: no carplaymaps, factory lsd.sh, so nothing loads them; review A189): gone, or the
+    # new install would see a mixed Java part
+    for _i_p in "$JARS"/pmcp-*.jar "$JARS"/pmcp-*.jar.pmcp-new; do
+        [ -f "$_i_p" ] || continue
+        say "  removing a leftover JAR of ours: ${_i_p##*/}"
+        rm -f "$_i_p" || fail "STRAY_JAR_REMOVE_FAILED"
+    done
     # Old trial/ok markers must not carry over to a new install (they are per JAR hash, a set could skip its trial).
     rm -rf "$PERSIST" 2>/dev/null
     [ ! -e "$PERSIST" ] || fail "OLD_TRIAL_MARKERS_NOT_REMOVED"
@@ -2051,7 +2066,10 @@ do_reinstall_plan() {
     selftest
     firmware_identity
     detect_state
-    case "$STATE" in STOCK) fail "REINSTALL_NOTHING_INSTALLED_USE_2_3_4" ;; esac
+    case "$STATE" in
+        STOCK) fail "REINSTALL_NOTHING_INSTALLED_USE_2_3_4" ;;
+        UNKNOWN) [ -n "$STATE_WHY" ] && say "  $STATE_WHY"; fail "REINSTALL_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" ;;
+    esac
     _v=`cat "$ROOT/VARIANT" 2>/dev/null`
     [ -n "$_v" ] && [ -n "`variant_key "$_v"`" ] || _v=$ARG
     say "PMCP_PLAN map-install $_v"
