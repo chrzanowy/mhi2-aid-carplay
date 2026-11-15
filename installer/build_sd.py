@@ -483,7 +483,8 @@ exit 0
 def menu_entries():
     # (file name, pmcp arguments, GEM label). ASCII only: GEM fonts and the esd parser are not tested with other letters.
     # Main screen pmcp_stream_map_aid: one button per part, stable versions only; each replaces a version this card
-    # does not support. Everything else is under pmcp_advanced (features_advanced, rg_features, aa_advanced).
+    # does not support. Everything else is under pmcp_advanced (diagnostics, features, aa_advanced).
+    # Screen names diagnostics and features, one line per screen on pmcp_advanced (A199, user 2026-11-15).
     # Menu cleanup (A198-AA, user 2026-11-15): no map layout screen (the layouts stay in the repo and on the card: 2 and
     # 10 use them), no RG/Java update buttons (main 4 and 10 do it), on/off of single parts on their own screen.
     top = [("verify", "verify", "1. Check card and unit (read-only)"),
@@ -573,12 +574,13 @@ def esd_block(version, top, feat, onoff, aa):
     for n, _, l in top:
         out += sc(n, l)
     out += ['screen pmcp_advanced pmcp_stream_map_aid', '']
-    out += kv("1. features_advanced: diagnostics, CarPlay log, speed limit status (all read-only or logs).")
-    out += kv("2. rg_features: route guidance system and single packages on/off.  3. aa_advanced: Android Auto details and logs.")
-    out += ['screen features_advanced pmcp_advanced', '']
+    out += kv("1. diagnostics: checks, CarPlay log, speed limit status (all read-only or logs).")
+    out += kv("2. features: route guidance system and single packages on/off.")
+    out += kv("3. aa_advanced: Android Auto details and logs.")
+    out += ['screen diagnostics pmcp_advanced', '']
     for n, _, l in feat:
         out += sc(n, l)
-    out += ['screen rg_features pmcp_advanced', '']
+    out += ['screen features pmcp_advanced', '']
     out += kv("The first start after a change is a trial: if everything works, press 5. Confirm in that start.")
     out += kv("Without Confirm the next start is the factory one (then: 6. Try again).")
     out += kv("Black screen: hold the volume knob ~10 s, the next start loads none of our JARs.")

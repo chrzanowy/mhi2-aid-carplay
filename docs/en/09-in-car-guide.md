@@ -43,13 +43,13 @@ always slot **SD1**.
 2. **"1. Check card and unit (read-only)"**. Takes a few seconds (hashes are computed by the unit's factory `sha1sum`).
 3. Expected result: **`PMCP_VERIFY_OK state=STOCK`**. Nothing on the unit changes. On any other firmware the check stops here.
 
-Read-only buttons in `pmcp_advanced` → `features_advanced`, all of them change nothing: "Start timeline" (seconds from
+Read-only buttons in `pmcp_advanced` → `diagnostics`, all of them change nothing: "Start timeline" (seconds from
 unit start to CarPlay, MOST, navigation), "RG last maneuver" (what the iPhone last sent for guidance and which VW arrow the strict mapping gives;
 where it says main 0 the guidance package may still show a fallback arrow, e.g. at the start of a route or at a roundabout)
 and "Navigation diagnostics" (why the VW navigation does not start).
 
 If anything is unclear, **"Diagnostics (read-only, photograph the screen)"** (submenu `pmcp_advanced` →
-`features_advanced`) shows the unit's state and changes nothing.
+`diagnostics`) shows the unit's state and changes nothing.
 
 ## Step 2. Install the map (stage A)
 
@@ -192,7 +192,7 @@ ours (M.I.B. 3.6.0 is installed again on the way). Re-arm it afterwards with opt
 | No picture on the AID | iPhone: "Forget This Car", reconnect; then report it with "Diagnostics" and logs (step 2) |
 | Black screen / boot logo looping in the trial start | knob ~10 s; the next start is factory |
 | A feature misbehaves | restart without Confirm (factory), then enable features one at a time ([advanced](#advanced-one-feature-at-a-time)) |
-| CarPlay does not connect after step 3 | `pmcp_advanced` → `rg_features` → "Route guidance system off (factory iAP2 driver and iap2.cfg)", restart |
+| CarPlay does not connect after step 3 | `pmcp_advanced` → `features` → "Route guidance system off (factory iAP2 driver and iap2.cfg)", restart |
 | Black screen after Confirm | **card 2** (emergency above), then card 1 → "8. Remove everything (back to factory files)" |
 | Roll back everything | "8. Remove everything (back to factory files)" → `PMCP_RESTORE_OK` → restart (factory unit) |
 | Start again with this card (an older or unknown install, or something mixed) | "10. Reinstall: remove everything, then this card's versions of what was on" → `PMCP_REINSTALL_OK` → restart, then "5. Confirm" in that start; set the speed-limit mode again afterwards |
@@ -204,7 +204,7 @@ The only allowed firmware update is the official K4525. Never cross-flash firmwa
 
 # Advanced: one feature at a time
 
-Instead of step 3, the features can be enabled one by one in **`pmcp_advanced` → `rg_features`**. Every "On ..."
+Instead of step 3, the features can be enabled one by one in **`pmcp_advanced` → `features`**. Every "On ..."
 makes a new set → restart → trial start → test → "5. Confirm". "Off ..." goes back to the set without that package: if that set was confirmed before, it loads straight away; if not, it is a trial too. After a restart "Status" shows
 `This boot: set=... use=trial` (trial, Confirm needed) or `use=yes` (confirmed).
 
@@ -227,7 +227,7 @@ makes a new set → restart → trial start → test → "5. Confirm". "Off ..."
 6. Optional, only here (button 4 does not install it): **"On sl: native VW map speed limit in the AID road text (optional,
    output off until enabled)"**, see [16-native-speed-limits.md](16-native-speed-limits.md).
 
-`features_advanced` has the log button for support: **"CP save log: copy this start's CarPlay log to the unit (for
+`diagnostics` has the log button for support: **"CP save log: copy this start's CarPlay log to the unit (for
 the log card)"**. After the log card (card 3) copied the logs, delete them on the main screen with **"9. Delete saved logs:
 CarPlay and Android Auto (after the log card copied them)"**.
 

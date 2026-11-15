@@ -26,7 +26,7 @@ README = """CARD 3 - LOGS: copy the saved Android Auto and CarPlay logs to this 
 ======================================================================================================
 
 Before: in GEM -> pmcp_stream_map_aid -> pmcp_advanced -> aa_advanced, "AA save log: copy this start's AA log to the
-unit (for the log card)", and/or -> features_advanced, "CP save log: copy this start's CarPlay log to the unit (for the
+unit (for the log card)", and/or -> diagnostics, "CP save log: copy this start's CarPlay log to the unit (for the
 log card)", in the same start as the problem (the logs live in RAM until the next start). The unit keeps up to 5 saved
 logs of each kind in /mnt/app/carplaymaps/logs.
 

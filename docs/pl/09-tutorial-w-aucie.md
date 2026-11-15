@@ -44,7 +44,7 @@ zawsze slot **SD1**.
 3. Oczekiwany wynik: **`PMCP_VERIFY_OK state=STOCK`**. W radiu nic się nie zmienia. Przy innym firmware zatrzyma się tutaj.
 
 Gdy coś jest niejasne: **„Diagnostics (read-only, photograph the screen)”** (podmenu `pmcp_advanced` →
-`features_advanced`) pokazuje stan radia i niczego nie zmienia. „RG last maneuver” (też tylko odczyt) pokazuje, co iPhone ostatnio wysłał i jaką strzałkę VW
+`diagnostics`) pokazuje stan radia i niczego nie zmienia. „RG last maneuver” (też tylko odczyt) pokazuje, co iPhone ostatnio wysłał i jaką strzałkę VW
 daje ścisłe mapowanie; gdzie jest main 0, paczka prowadzenia może jeszcze pokazać strzałkę zastępczą (np. na starcie trasy
 albo na rondzie).
 
@@ -190,7 +190,7 @@ naszego (po drodze ponownie instaluje się M.I.B. 3.6.0). Potem uzbrój ją opcj
 | Brak obrazu na AID | iPhone: „Zapomnij to auto”, podłącz ponownie; potem inny układ (krok 2) |
 | Czarny ekran / logo w kółko w starcie próbnym | pokrętło ~10 s; następny start jest fabryczny |
 | Któraś funkcja źle działa | restart bez potwierdzenia (fabryczny), potem funkcje po jednej ([zaawansowane](#zaawansowane-funkcje-po-jednej)) |
-| CarPlay nie łączy się po kroku 3 | `pmcp_advanced` → `rg_features` → „Route guidance system off (factory iAP2 driver and iap2.cfg)”, restart |
+| CarPlay nie łączy się po kroku 3 | `pmcp_advanced` → `features` → „Route guidance system off (factory iAP2 driver and iap2.cfg)”, restart |
 | Czarny ekran po potwierdzeniu | **karta 2** (awaria wyżej), potem karta 1 → „8. Remove everything (back to factory files)” |
 | Wycofanie wszystkiego | „8. Remove everything (back to factory files)” → `PMCP_RESTORE_OK` → restart (radio fabryczne) |
 | Zacząć od nowa z tą kartą (starsza albo nieznana instalacja, coś pomieszanego) | „10. Reinstall: remove everything, then this card's versions of what was on” → `PMCP_REINSTALL_OK` → restart, potem „5. Confirm” w tym starcie; tryb ograniczenia prędkości ustaw ponownie po nim |
@@ -202,7 +202,7 @@ Jedyna dozwolona aktualizacja firmware to oficjalna K4525. Nigdy cross-flash z i
 
 # Zaawansowane: funkcje po jednej
 
-Zamiast kroku 3 funkcje można włączać po jednej w **`pmcp_advanced` → `rg_features`**. Każde „On ...” tworzy
+Zamiast kroku 3 funkcje można włączać po jednej w **`pmcp_advanced` → `features`**. Każde „On ...” tworzy
 nowy zestaw → restart → start próbny → test → „5. Confirm”. „Off ...” wraca do zestawu bez tej paczki: jeśli ten zestaw był
 wcześniej potwierdzony, ładuje się od razu; jeśli nie, też jest próbny. Po restarcie „Status” pokazuje
 `This boot: set=... use=trial` (próbny, potrzebne Confirm) albo `use=yes` (potwierdzony).
@@ -225,7 +225,7 @@ wcześniej potwierdzony, ładuje się od razu; jeśli nie, też jest próbny. Po
 6. Opcjonalnie, tylko tutaj (przycisk 4 jej nie instaluje): **„On sl: native VW map speed limit in the AID road text
    (optional, output off until enabled)”**, zob. [16-native-speed-limits.md](../en/16-native-speed-limits.md).
 
-W `features_advanced` jest przycisk logów do wsparcia: **„CP save log: copy this start's CarPlay log to the unit (for
+W `diagnostics` jest przycisk logów do wsparcia: **„CP save log: copy this start's CarPlay log to the unit (for
 the log card)”**. Gdy karta logów (karta 3) już je skopiowała, usuń je na głównym ekranie przyciskiem **„9. Delete saved logs:
 CarPlay and Android Auto (after the log card copied them)”**.
 

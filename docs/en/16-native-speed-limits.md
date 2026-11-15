@@ -37,10 +37,10 @@ later). The normal installation and Java recovery mechanism are
 described in the [in-car guide](09-in-car-guide.md). GEM button texts are quoted exactly; the action is in brackets.
 
 1. "1. Check card and unit (read-only)" (`verify`).
-2. `pmcp_advanced` → `rg_features`: "On sl: native VW map speed limit in the AID road text (optional, output off
+2. `pmcp_advanced` → `features`: "On sl: native VW map speed limit in the AID road text (optional, output off
    until enabled)" (`java-on sl`). Its output mode starts off. Main menu 4 never installs this package.
 3. Restart the unit (hold the volume knob ~10 s). This start is the Java trial for the new set.
-4. Check that menus, audio, CarPlay, map and guidance work. `features_advanced`: "Speed limit status: mode and native VW limit data
+4. Check that menus, audio, CarPlay, map and guidance work. `diagnostics`: "Speed limit status: mode and native VW limit data
    (read-only)" (`speedlimit-status`) should show `status=valid` and a `speed_limit_raw` value while driving.
 5. In that same start: "5. Confirm: everything works (in the first start after 3 or 4)" (`confirm`), or on the unit
    App-Connect > Settings > AID navigation configuration > Changes > "Save: everything works".

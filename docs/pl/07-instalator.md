@@ -194,12 +194,12 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
      jest tylko zgłaszany: wymaga potwierdzonego zestawu, więc ustawia się go ponownie po 5. Confirm. Na fabrycznym radiu
      niczego nie zmienia (`REINSTALL_NOTHING_INSTALLED_USE_2_3_4`), a gdy `restore` odmawia, nic więcej się nie wykonuje;
    - podekran `pmcp_advanced` („Advanced” na ekranie, pod 10) z trzema podekranami:
-     `features_advanced` (tylko odczyt i logi): „Diagnostics (read-only, photograph the screen)” (działa nawet wtedy, gdy `pmcp.sh`
+     `diagnostics` (tylko odczyt i logi): „Diagnostics (read-only, photograph the screen)” (działa nawet wtedy, gdy `pmcp.sh`
      zatrzyma się na self teście), „Start timeline: …”, „RG last maneuver: …” (co wysłał iPhone i jaką strzałkę VW daje
      ścisłe mapowanie; gdzie pokazuje main 0, paczka `rg` może jeszcze pokazać strzałkę zastępczą), „Navigation
      diagnostics: …”, „CP save log: copy this start's CarPlay log to the unit (for the log card)” (`cp-log-save`),
      oraz „Speed limit status: …”;
-     `rg_features` (pierwszy start po zmianie jest próbny): „Route guidance system on (iAP2 driver, iap2.cfg, reader)”,
+     `features` (pierwszy start po zmianie jest próbny): „Route guidance system on (iAP2 driver, iap2.cfg, reader)”,
      „Route guidance system off (factory iAP2 driver and iap2.cfg)”, potem „On …” i „Off …” dla każdej paczki (nai, np,
      rg, zoom, dn i opcjonalnej `sl`, którą instaluje tylko ten ekran). Akcje `rg-update` i `java-update` nie mają
      przycisku: główne „4. Install additional features” aktualizuje w miejscu sterownik, reader i paczki Javy z

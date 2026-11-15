@@ -196,11 +196,11 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
      only reported: it needs a confirmed set, so it is set again after 5. Confirm. On a factory unit it changes nothing
      (`REINSTALL_NOTHING_INSTALLED_USE_2_3_4`), and when `restore` refuses, nothing else runs;
    - sub-screen `pmcp_advanced` ("Advanced" on the screen, below 10) with three sub-screens:
-     `features_advanced` (read-only and log buttons only): "Diagnostics (read-only, photograph the screen)" (works even when `pmcp.sh` stops at its
+     `diagnostics` (read-only and log buttons only): "Diagnostics (read-only, photograph the screen)" (works even when `pmcp.sh` stops at its
      self test), "Start timeline: …", "RG last maneuver: …" (what the iPhone sent and which VW arrow the strict mapping
      gives; where it shows main 0 the `rg` package may still show a fallback arrow), "Navigation diagnostics: …", "CP save
      log: copy this start's CarPlay log to the unit (for the log card)" (`cp-log-save`) and "Speed limit status: …";
-     `rg_features` (the first start after a change is a trial): "Route guidance system on (iAP2 driver, iap2.cfg,
+     `features` (the first start after a change is a trial): "Route guidance system on (iAP2 driver, iap2.cfg,
      reader)", "Route guidance system off (factory iAP2 driver and iap2.cfg)", then "On …" and "Off …" for each package
      (nai, np, rg, zoom, dn, and the optional `sl`, which only this screen installs). The `rg-update` and `java-update`
      actions have no button: main "4. Install additional features" updates an earlier card's driver, reader and Java

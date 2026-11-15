@@ -151,14 +151,14 @@ EMERGENCY - CARD 2 (RESCUE)
   unit without our files. Re-arm it afterwards with the copy helper, option 3.
 
   Single features, Android Auto details and the log buttons are in the
-  submenu  pmcp_advanced  (screens features_advanced, rg_features, aa_advanced;
+  submenu  pmcp_advanced  (screens diagnostics, features, aa_advanced;
   explained in docs/in-car-guide.md).
 
 ------------------------------------------------------------------------------------------
 CARD 3 (LOGS) - only for problem reports (Android Auto or CarPlay)
 ------------------------------------------------------------------------------------------
   Not in this package and not made by install.sh. It copies the logs saved with "AA save log"
-  (aa_advanced) and "CP save log" (features_advanced) to the card. Its result file ends with
+  (aa_advanced) and "CP save log" (diagnostics) to the card. Its result file ends with
   RESULT=OK copied=N aa_logs=A cp_logs=C (or RESULT=NO_LOGS: nothing was saved first).
   Build it on a computer from the repository (needs the M.I.B. 3.6.0 zip in mib/downloads/,
   as for the rescue card):

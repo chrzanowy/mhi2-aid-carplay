@@ -76,7 +76,7 @@ instaluje wersję stabilną.
 3. **„7. Status (read-only)”** na ekranie głównym: też zdjęcie (zestaw Java, prowadzenie, Android Auto).
 4. Potem odłącz i podłącz telefon.
 
-Przy problemie z CarPlay: `features_advanced` → **„CP save log: copy this start's CarPlay log to the unit (for the log
+Przy problemie z CarPlay: `diagnostics` → **„CP save log: copy this start's CarPlay log to the unit (for the log
 card)”** → `PMCP_CP_LOG_SAVED file=logs/cp-log-N.txt`.
 
 W domu: karta 3 (logi) w trybie aktualizacji kopiuje logi Android Auto i CarPlay do `PMCP_LOGS/` na tej karcie (radio

@@ -77,7 +77,7 @@ and came back: plug the phone in again (known issue).
 3. **"7. Status (read-only)"** on the main screen: photograph it too (Java set, route guidance, Android Auto).
 4. Then unplug and plug in the phone.
 
-For a CarPlay problem: `features_advanced` → **"CP save log: copy this start's CarPlay log to the unit (for the log
+For a CarPlay problem: `diagnostics` → **"CP save log: copy this start's CarPlay log to the unit (for the log
 card)"** → `PMCP_CP_LOG_SAVED file=logs/cp-log-N.txt`.
 
 At home: card 3 (logs) in update mode copies the Android Auto and CarPlay logs to `PMCP_LOGS/` on that card (it only

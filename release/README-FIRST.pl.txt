@@ -156,14 +156,14 @@ AWARIA - KARTA 2 (RATUNKOWA)
   opcja 3.
 
   Pojedyncze funkcje, szczegóły Android Auto i przyciski logów są w podmenu
-  pmcp_advanced  (ekrany features_advanced, rg_features, aa_advanced; napisy po
+  pmcp_advanced  (ekrany diagnostics, features, aa_advanced; napisy po
   angielsku, opisane w docs/tutorial-w-aucie.pl.md).
 
 ------------------------------------------------------------------------------------------
 KARTA 3 (LOGI) - tylko do zgłoszeń problemów (Android Auto albo CarPlay)
 ------------------------------------------------------------------------------------------
   Nie ma jej w tej paczce i install.sh jej nie robi. Kopiuje na kartę logi zapisane przez
-  "AA save log" (aa_advanced) i "CP save log" (features_advanced). Plik wyniku kończy się
+  "AA save log" (aa_advanced) i "CP save log" (diagnostics). Plik wyniku kończy się
   RESULT=OK copied=N aa_logs=A cp_logs=C (albo RESULT=NO_LOGS: nic wcześniej nie zapisano).
   Zbuduj ją na komputerze z repozytorium (potrzebny zip M.I.B. 3.6.0 w mib/downloads/,
   jak dla karty ratunkowej):

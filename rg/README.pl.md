@@ -53,7 +53,7 @@ bajt w bajt bazowy `717fb53c`.
 ## Instalacja (przyciski GEM)
 
 Wszystko to robi przycisk „4. Install additional features: route guidance, zoom, day/night, song title, settings page (needs 2)” na
-ekranie głównym. Pojedyncze kroki w `pmcp_advanced` → `rg_features`:
+ekranie głównym. Pojedyncze kroki w `pmcp_advanced` → `features`:
 
 1. „Route guidance system on (iAP2 driver, iap2.cfg, reader)”: zapisuje fabryczny sterownik i cfg w `carplaymaps/rollback/`
    (hash), podmienia sterownik i cfg (remount `/mnt/app` i `/mnt/system`), instaluje czytnik, na końcu znacznik
