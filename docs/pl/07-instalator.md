@@ -249,7 +249,7 @@ i kodu: jej `pmcp.sh` i id buildu są takie same jak bez tej zmiany). Tło: `bri
   0> since_ms=0 kind=proxy` i `wired.session` (`v=1 state=start gen=<ten sam> pid=<ten sam> ts_ms=0 reason=start`) do
   `/ramdisk/most-src/` (tmp + rename). `exec` zachowuje pid, więc właściciel żyje tyle co dio_manager. Powłoka radia nie
   ma zegara w milisekundach, więc czasy to 0 (reguła 10 s z kontraktu wtedy nie obowiązuje).
-- GEM `aa_advanced`: „Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)” i
+- GEM `pmcp_advanced` → `experimental` (tylko karty eksperymentalne): „Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)” i
   „Bridge: use mathsls (default MOST bridge; from the next phone connection)” (`pmcp.sh bridge pmcp-most|mathsls`).
   Bez triala i bez Confirm. Supervisor mathsls uruchamia `/mnt/app/carplaymaps/altscreen-most-bridge` (stała ścieżka,
   bez argumentów) przy każdym starcie strumienia mapy; przycisk wstawia tam wybraną, sprawdzoną binarkę jednym rename,
@@ -266,6 +266,9 @@ i kodu: jej `pmcp.sh` i id buildu są takie same jak bez tej zmiany). Tło: `bri
 - Utrata zasilania w trakcie przełączania: na ścieżce supervisora zawsze jest jeden z dwóch sprawdzonych mostów,
   a dio_manager to jeden z dwóch sprawdzonych wrapperów (`fault_inject.sh`, `PMCP_FAULT_SCOPE=bridge`); ten sam przycisk
   naciśnięty jeszcze raz kończy przełączenie.
+- „Bridge status: which bridge, owner, last lines of its log (read-only)” (`pmcp.sh bridge-status`) na tym samym
+  ekranie: linie mostu z „7. Status”, `owner` i `wired.session` tego startu oraz 15 ostatnich linii
+  `pmcp-most/bridge.log`. Niczego nie zmienia. Na tym ekranie jest też „AA record” (przeniesione z `aa_advanced`).
 - Testy: `run_tests.sh` sekcja [57] (karta wydania: nic z tego; karta eksperymentalna: przełączenie w obie strony,
   linie wrappera, log CP, dokładny powrót do fabryki).
 

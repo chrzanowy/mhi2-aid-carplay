@@ -251,7 +251,7 @@ its `pmcp.sh` and build id are the same as without it). Background: `bridge/READ
   skipped> since_ms=0 kind=proxy` and `wired.session` (`v=1 state=start gen=<same> pid=<same> ts_ms=0 reason=start`)
   to `/ramdisk/most-src/` (tmp + rename). The `exec` keeps the pid, so the owner lives as long as dio_manager. The
   unit shell has no millisecond clock, so the times are 0 (the contract's 10 s age rule then does not apply).
-- GEM `aa_advanced`: "Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)" and
+- GEM `pmcp_advanced` → `experimental` (experimental cards only): "Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)" and
   "Bridge: use mathsls (default MOST bridge; from the next phone connection)" (`pmcp.sh bridge pmcp-most|mathsls`).
   No trial, no Confirm. The mathsls supervisor starts `/mnt/app/carplaymaps/altscreen-most-bridge` (fixed path, no
   arguments) at each start of the map stream; the button puts the chosen verified binary there with one rename, so it
@@ -267,6 +267,9 @@ its `pmcp.sh` and build id are the same as without it). Background: `bridge/READ
   everything and installs again): press "Bridge: use mathsls" before going back to a release card.
 - Power loss during a switch: the supervisor's path always holds one of the two verified bridges, dio_manager one of
   the two verified wrappers (`fault_inject.sh`, `PMCP_FAULT_SCOPE=bridge`); the same button again finishes it.
+- "Bridge status: which bridge, owner, last lines of its log (read-only)" (`pmcp.sh bridge-status`), on the same
+  screen: the bridge lines of "7. Status", this start's `owner` and `wired.session` and the last 15 lines of
+  `pmcp-most/bridge.log`. It changes nothing. The screen also has "AA record" (moved from `aa_advanced`).
 - Tests: `run_tests.sh` section [57] (release card: none of it; experimental card: switch both ways, wrapper lines,
   CarPlay log, restore exact).
 

@@ -38,6 +38,9 @@
 #@@EXP_BEGIN
 #   pmcp.sh bridge mathsls|pmcp-most  the MOST bridge the CarPlay supervisor starts: mathsls's (default) or our pmcp-most
 #                               (bridge/), from the next start of the bridge (next phone connection); no trial, no confirm
+#   pmcp.sh bridge-status       read-only: the bridge lines of status, this start's owner and wired.session, the end of
+#                               pmcp-most's log (GEM experimental)
+#   (on experimental cards aa-capture is on GEM experimental too, not on aa_advanced)
 #@@EXP_END
 #   pmcp.sh speedlimit-mode MODE  optional native VW limit (package sl): off (default); turnto = before the street that rg
 #                               writes to TurnToInfo (needs rg); street = trial, in CurrentPositionInfo only
@@ -2285,6 +2288,29 @@ bridge_status() {
     [ -n "$_bs_c" ] && say "  bridge status (this start): $_bs_c"
     return 0
 }
+
+# GEM experimental, "Bridge status (read-only)": the bridge lines of status, then this start's contract files and the
+# end of pmcp-most's own log (all in /ramdisk; changes nothing, only the GEM log gets the output)
+do_bridge_status() {
+    if [ ! -e "$ROOT/altscreen-most-bridge" ]; then
+        say "MOST bridge: none (no CarPlay map installed; main menu 2 installs it)"
+        return 0
+    fi
+    bridge_status
+    for _bt_f in most-src/owner most-src/wired.session; do
+        if [ -s "$RAMDISK/$_bt_f" ]; then
+            say "--- $_bt_f:"; sed 's/^/  /' "$RAMDISK/$_bt_f" 2>/dev/null
+        else
+            say "--- $_bt_f: none in this start"
+        fi
+    done
+    if [ -s "$RAMDISK/pmcp-most/bridge.log" ]; then
+        say "--- pmcp-most/bridge.log (last 15 lines):"; tail -n 15 "$RAMDISK/pmcp-most/bridge.log" 2>/dev/null | sed 's/^/  /'
+    else
+        say "--- pmcp-most/bridge.log: none in this start (mathsls writes no log)"
+    fi
+    return 0
+}
 #@@EXP_END
 say "pmcp $PMCP_VERSION: $ACTION $ARG"
 #@@NOAA_BEGIN
@@ -2342,6 +2368,7 @@ case "$ACTION" in
     aa-capture)    do_aa_capture ;;
 #@@EXP_BEGIN
     bridge)        do_bridge ;;
+    bridge-status) do_bridge_status ;;
 #@@EXP_END
     speedlimit-mode) do_speedlimit_mode ;;
     speedlimit-status) do_speedlimit_status ;;

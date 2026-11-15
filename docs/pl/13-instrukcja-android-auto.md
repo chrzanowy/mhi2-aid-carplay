@@ -10,7 +10,7 @@ i powrocie AID pokazuje ekran ładowania: podłącz telefon ponownie (znany prob
 Instaluje się własnym przyciskiem na ekranie głównym (GEM: `pmcp_stream_map_aid`), **„3. Install Android Auto: Google
 Maps on the AID + VW arrows (needs 2)”**, osobno od funkcji CarPlay: „4. Install additional features” ani go nie
 instaluje, ani nie usuwa. Szczegóły (potwierdzenie AA, logi, usuwanie) są na ekranie `pmcp_advanced` → `aa_advanced`.
-Karty eksperymentalne (nie wydania) dodają tam, i tylko tam, eksperymentalne oprogramowanie Android Auto; ekran główny
+Karty eksperymentalne (nie wydania) mają „AA record” (diagnostyka) na `pmcp_advanced` → `experimental`; ekran główny
 instaluje wersję stabilną.
 
 ## Najpierw

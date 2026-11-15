@@ -8,7 +8,7 @@ on the AID, the VW arrows from Google Maps and, since 1.1, the road name, lanes,
 from the next connection)" in `aa_advanced` switches to the CarPlay bridge (no restart, no 5). It is installed with its own button on the main screen (GEM: `pmcp_stream_map_aid`), **"3. Install
 Android Auto: Google Maps on the AID + VW arrows (needs 2)"**, separately from the CarPlay features: "4. Install
 additional features" neither installs nor removes it. The details (AA confirm, logs, removal) are on the screen
-`pmcp_advanced` → `aa_advanced`. Experimental cards (not releases) add "AA record" there (diagnostics); the main
+`pmcp_advanced` → `aa_advanced`. Experimental cards (not releases) have "AA record" (diagnostics) on `pmcp_advanced` → `experimental`; the main
 screen installs the stable version. If the AID shows its loading screen after you left Android Auto on the main screen
 and came back: plug the phone in again (known issue).
 

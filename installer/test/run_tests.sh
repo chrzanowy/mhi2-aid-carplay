@@ -510,7 +510,7 @@ PY
         case "$args" in
             verify|status|restore|confirm|retry|aa-install|cp-log-save|log-clear|"map-install map-square-fps40"|java-retry|java-confirm|java-update|aa-remove|aa-on|aa-confirm|aa-retry|aa-status|aa-log-save|rg-system-on|rg-system-off|rg-update|speedlimit-status|"speedlimit-mode turnto"|"speedlimit-mode street"|"speedlimit-mode off"|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
             "aa-output direct"|"aa-output ring") ;;
-            "aa-capture 60"|"aa-capture off"|"bridge pmcp-most"|"bridge mathsls")
+            "aa-capture 60"|"aa-capture off"|"bridge pmcp-most"|"bridge mathsls"|bridge-status)
                 case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) ;; *) bad "experimental button on a release card: $args" ;; esac ;;
             *) bad "unexpected button command in $(basename "$m"): $args" ;;
         esac
@@ -536,8 +536,9 @@ PY
     labels=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,/^screen pmcp_advanced/p' | awk '/^script/{s=1;next} s&&/^    label/{print substr($0,14,1);s=0}' | tr -d '\n')
     [ "$labels" = 1234567891 ] && ok "main screen buttons numbered 1-10" || bad "main numbering: $labels"
     scr=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_stream_map_aid/,$p' | grep '^screen' | tr '\n' '|')
-    [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen diagnostics pmcp_advanced|screen features pmcp_advanced|screen aa_advanced pmcp_advanced|" ] \
-        && ok "screens: pmcp_stream_map_aid > pmcp_advanced > diagnostics / features / aa_advanced (no map layout screen)" || bad "screens: $scr"
+    _xs=""; case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) _xs="screen experimental pmcp_advanced|" ;; esac
+    [ "$scr" = "screen pmcp_stream_map_aid =>M.I.B.<=|screen pmcp_advanced pmcp_stream_map_aid|screen diagnostics pmcp_advanced|screen features pmcp_advanced|screen aa_advanced pmcp_advanced|$_xs" ] \
+        && ok "screens: pmcp_stream_map_aid > pmcp_advanced > diagnostics / features / aa_advanced${_xs:+ / experimental} (no map layout screen)" || bad "screens: $scr"
     adv=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen pmcp_advanced/,/^screen diagnostics/p' | sed -n 's/^    label   "\([0-9]\)\. \([a-z_]*\):.*/\1 \2/p' | tr '\n' '|')
     case "$adv" in "1 diagnostics|2 features|3 aa_advanced|"|"1 diagnostics|2 features|3 aa_advanced|4 experimental|") ok "pmcp_advanced: one line per screen, in screen order" ;; *) bad "pmcp_advanced lines: $adv" ;; esac
     feat=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen diagnostics/,/^screen features/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
@@ -563,13 +564,18 @@ PY
     case "$v" in pmcp-0.7.1-$VTAG-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "version carries a build id: $v" ;;
         pmcp-0.7.1-exp-$VTAG-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ok "experimental version carries a build id: $v" ;;
         *) bad "version $v" ;; esac
-    aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen aa_advanced/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+    aa=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen aa_advanced/,$p' | sed '/^screen experimental/,$d' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
     case "$v" in
     *-exp-*)
-        _br=""; [ -e "$SDB/pmcp/payload/pmcp-most/altscreen-most-bridge" ] && _br="menu/bridge-pmcp-most.sh menu/bridge-mathsls.sh "
-        [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-remove.sh menu/aa-capture-60.sh menu/aa-capture-off.sh $_br" ] \
-            && ok "aa_advanced (experimental card): the release entries, then AA record on/off${_br:+, then the MOST bridge switch}" || bad "aa_advanced: $aa"
-        sed -n '/^screen pmcp_stream_map_aid/,/^screen aa_advanced/p' "$SDB/esd/Launcher-sda0.esd" | grep -qi 'experimental\|rg-aa' && bad "experimental outside aa_advanced" || ok "experimental entries only on aa_advanced"
+        [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-remove.sh " ] \
+            && ok "aa_advanced (experimental card): the release entries only" || bad "aa_advanced: $aa"
+        # A199 (user 2026-11-15): the MOST bridge serves CarPlay, AA and wireless, so its buttons and the AA record live on
+        # their own screen experimental
+        _br=""; [ -e "$SDB/pmcp/payload/pmcp-most/altscreen-most-bridge" ] && _br="menu/bridge-pmcp-most.sh menu/bridge-mathsls.sh menu/bridge-status.sh "
+        xp=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen experimental/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
+        [ "$xp" = "${_br}menu/aa-capture-60.sh menu/aa-capture-off.sh " ] \
+            && ok "experimental:${_br:+ MOST bridge switch and status,} AA record on/off" || bad "experimental: $xp"
+        sed '/^screen experimental/,$d' "$SDB/esd/Launcher-sda0.esd" | grep -q 'menu/bridge-\|menu/aa-capture-\|rg-aa' && bad "experimental buttons outside the experimental screen" || ok "experimental buttons only on the experimental screen"
         grep -qi 'rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says rg-aa" || ok "menu: no rg-aa" ;;
     *)
         [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-remove.sh " ] \
@@ -1557,7 +1563,7 @@ PEOF
         v17x_update 6ab6432c
     fi
 
-    # Experimental cards: the MOST bridge the mathsls supervisor starts (bridge mathsls|pmcp-most, aa_advanced), the
+    # Experimental cards: the MOST bridge the mathsls supervisor starts (bridge mathsls|pmcp-most, GEM experimental), the
     # pmcp-most dio_manager wrapper (contract owner src=wired kind=proxy + wired.session) and the bridge files in the
     # CarPlay log. Release cards: none of it (no button, no payload, no code, no action).
     echo "[57] MOST bridge switch: mathsls (default) and pmcp-most (experimental cards only)"
@@ -1574,6 +1580,7 @@ PEOF
         grep -q 'pmcp-most\|PMCP_MOST\|most-src\|BRIDGE_MARK\|do_bridge' "$SDB/pmcp/pmcp.sh" && bad "release pmcp.sh has pmcp-most code" || ok "release pmcp.sh: no pmcp-most code"
         start_unit; run map-install map-square-fps40; rc_is 0
         run bridge pmcp-most; rc_is 1; expect_out "PMCP_FAIL=UNKNOWN_ACTION_bridge" "release card: no bridge action"
+        run bridge-status; rc_is 1; expect_out "PMCP_FAIL=UNKNOWN_ACTION_bridge-status" "release card: no bridge-status action"
         run status; grep -q "MOST bridge" "$W/out" && bad "release status shows a MOST bridge line" || ok "release status: no MOST bridge line"
         restore_exact "release card: restore gives the exact factory tree"
     else
@@ -1593,6 +1600,7 @@ PEOF
         deadpid=$($SH -c 'echo $$')
         start_unit
         run bridge pmcp-most; rc_is 1; expect_out "BRIDGE_NEEDS_PMCP_MAP_STATE_STOCK" "factory unit: refused"
+        run bridge-status; rc_is 0; expect_out "^MOST bridge: none (no CarPlay map installed" "bridge-status on a factory unit: no bridge"
         [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "factory unit: nothing written" || bad "refused switch wrote files"
         run map-install map-square-fps40; rc_is 0
         [ "$(h "$AB")" = "$BR_M" ] && [ "$(h "$LDIO")" = "$WR_M" ] && [ ! -e "$MK" ] && [ ! -e "$U/carplaymaps/bridge" ] \
@@ -1664,6 +1672,14 @@ PEOF
         grep -qx "v=1 src=wired pid=123 gen=3 since_ms=0 kind=proxy" "$L56" && grep -qx "v=1 state=start gen=3 pid=123 ts_ms=0 reason=start" "$L56" \
             && grep -q "^v=1 ready=1 pid=456 " "$L56" && [ "$(tail -1 "$L56")" = "--- end" ] && ok "cp log: owner, wired.session, consumer; complete" || bad "cp log: contract files"
         run status; expect_out "bridge status (this start): v=1 ready=1 pid=456" "status: the bridge's consumer line"
+        before=$(snapshot "$W/unit")
+        run bridge-status; rc_is 0
+        expect_out "^MOST bridge: pmcp-most (${BR_P:0:8}, experimental)$" "bridge-status: pmcp-most and its sha8"
+        expect_out "bridge status (this start): v=1 ready=1 pid=456" "bridge-status: the consumer line"
+        expect_out "^  v=1 src=wired pid=123 gen=3 since_ms=0 kind=proxy$" "bridge-status: owner"
+        expect_out "^  v=1 state=start gen=3 pid=123 ts_ms=0 reason=start$" "bridge-status: wired.session"
+        [ "$(tail -1 "$W/out")" = "  bridge: newer half" ] && ok "bridge-status: ends with the newest bridge.log line" || bad "bridge-status log tail: $(tail -1 "$W/out")"
+        [ "$before" = "$(snapshot "$W/unit")" ] && ok "bridge-status is read-only" || bad "bridge-status changed files"
         run log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && [ "$(cat "$MK")" = pmcp-most ] && ok "9 deletes the CarPlay log, keeps the bridge choice (a marker)" || bad "log-clear"
 
         echo "  - back to mathsls, interrupted switch, foreign bridge file, restore"

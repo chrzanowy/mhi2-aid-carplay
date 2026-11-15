@@ -166,7 +166,7 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", 1566, "aa/feeder.conf"),
 })
 # pmcp-most (bridge/, docs 23-wlasny-most.md): our build of the MOST bridge, experimental cards only, next to mathsls's
-# BRIDGE (pmcp.sh bridge mathsls|pmcp-most, GEM aa_advanced; default mathsls). The ONE line to change after a rebuild:
+# BRIDGE (pmcp.sh bridge mathsls|pmcp-most, GEM experimental; default mathsls). The ONE line to change after a rebuild:
 # bridge/build.sh OUTDIR prints the size and sha256; OUTDIR = <this project>/build/pmcp-most-<first 8 of the sha256>.
 PMCP_MOST_PIN = ("build/pmcp-most-d818be15/altscreen-most-bridge", "d818be15b896d3c0841bd7ce7c413202f48b62b854059797e81901e3bc8b49ed", 34972)
 if IS_EXP and PROFILE_ID == "MU1161":
@@ -512,7 +512,8 @@ exit 0
 def menu_entries():
     # (file name, pmcp arguments, GEM label). ASCII only: GEM fonts and the esd parser are not tested with other letters.
     # Main screen pmcp_stream_map_aid: one button per part, stable versions only; each replaces a version this card
-    # does not support. Everything else is under pmcp_advanced (diagnostics, features, aa_advanced).
+    # does not support. Everything else is under pmcp_advanced (diagnostics, features, aa_advanced; experimental cards:
+    # experimental).
     # Screen names diagnostics and features, one line per screen on pmcp_advanced (A199, user 2026-11-15).
     # Menu cleanup (A198-AA, user 2026-11-15): no map layout screen (the layouts stay in the repo and on the card: 2 and
     # 10 use them), no RG/Java update buttons (main 4 and 10 do it), on/off of single parts on their own screen.
@@ -544,7 +545,7 @@ def menu_entries():
              if "rg" in FW["packages"] else []) + \
             [("java-on-" + n, "java-on " + n, "On " + label) for n, label in JAVA_PACKAGES_ALL] + \
             [("java-off-" + n, "java-off " + n, "Off " + label) for n, label in JAVA_PACKAGES_ALL]
-    return top, feat, onoff, AA_MENU + AA_EXP_MENU
+    return top, feat, onoff, AA_MENU, EXP_MENU
 
 
 # Android Auto details, screen aa_advanced. The stable set is installed by main menu 3 (aa-install); the main menu's
@@ -557,14 +558,16 @@ AA_MENU = [("aa-confirm", "aa-confirm", "AA Confirm: AA works (only in the start
            ("aa-status", "aa-status", "AA status and stream analysis (read-only)"),
            ("aa-log-save", "aa-log-save", "AA save log: copy this start's AA log to the unit (for the log card)"),
            ("aa-remove", "aa-remove", "AA remove (factory Android Auto back)")]
-# experimental builds only: their extra Android Auto software (empty on release cards)
-AA_EXP_MENU = [] if not IS_EXP else [
-    ("aa-capture-60", "aa-capture 60", "AA record: first 60 s of the phone video at each connection (for the log card)"),
-    ("aa-capture-off", "aa-capture off", "AA record: off")] + ([
+# experimental builds only (empty on release cards): screen experimental, the MOST bridge switch and its status, then
+# the AA video record (A199, user 2026-11-15: the bridge serves CarPlay, Android Auto and wireless, so not aa_advanced)
+EXP_MENU = [] if not IS_EXP else ([
     # the MOST bridge the CarPlay supervisor starts (also the AA output "CarPlay bridge"); no card confirm, no trial
     ("bridge-pmcp-most", "bridge pmcp-most", "Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)"),
-    ("bridge-mathsls", "bridge mathsls", "Bridge: use mathsls (default MOST bridge; from the next phone connection)")]
-    if "PMCP_MOST" in PAYLOAD else [])
+    ("bridge-mathsls", "bridge mathsls", "Bridge: use mathsls (default MOST bridge; from the next phone connection)"),
+    ("bridge-status", "bridge-status", "Bridge status: which bridge, owner, last lines of its log (read-only)")]
+    if "PMCP_MOST" in PAYLOAD else []) + [
+    ("aa-capture-60", "aa-capture 60", "AA record: first 60 s of the phone video at each connection (for the log card)"),
+    ("aa-capture-off", "aa-capture off", "AA record: off")]
 
 
 # main menu 4, in order: unsupported route guidance / Java files back to factory (features-reset), an earlier card's
@@ -594,7 +597,7 @@ def menu_script(args, label):
     return MENU_SCRIPT % dict(label=label, args=args)
 
 
-def esd_block(version, top, feat, onoff, aa):
+def esd_block(version, top, feat, onoff, aa, exp):
     def kv(text):
         return ['keyValue', '    value   String sys 0x00000000 0', '    label   "%s"' % text, '    poll    0', '']
     def sc(name, label):
@@ -610,6 +613,8 @@ def esd_block(version, top, feat, onoff, aa):
     out += kv("1. diagnostics: checks, CarPlay log, speed limit status (all read-only or logs).")
     out += kv("2. features: route guidance system and single packages on/off.")
     out += kv("3. aa_advanced: Android Auto details and logs.")
+    if exp:
+        out += kv("4. experimental: MOST bridge switch and status, AA video record (experimental cards only).")
     out += ['screen diagnostics pmcp_advanced', '']
     for n, _, l in feat:
         out += sc(n, l)
@@ -624,6 +629,11 @@ def esd_block(version, top, feat, onoff, aa):
     out += kv("VW arrows from Google Maps: rg (main menu 4). Lost picture: AA status, then AA save log.")
     for n, _, l in aa:
         out += sc(n, l)
+    if exp:
+        out += ['screen experimental pmcp_advanced', '']
+        out += kv("Experimental card only. A release card has none of this: before it, press Bridge: use mathsls.")
+        for n, _, l in exp:
+            out += sc(n, l)
     return "\r\n".join(out) + "\r\n"
 
 

@@ -6,12 +6,15 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 ## Unreleased (experimental)
 
 - **Own MOST bridge, switchable (experimental cards only):** the pmcp-most build of the CarPlay MOST bridge (`bridge/`)
-  ships next to mathsls's bridge. GEM `aa_advanced`: "Bridge: use pmcp-most (experimental, new MOST bridge; from the
+  ships next to mathsls's bridge. GEM `pmcp_advanced` → `experimental` (new screen, experimental cards only): "Bridge: use pmcp-most (experimental, new MOST bridge; from the
   next phone connection)" and "Bridge: use mathsls (default MOST bridge; from the next phone connection)"; no card
   confirm, the mathsls supervisor starts the chosen binary at the next phone connection. With pmcp-most the dio_manager
   wrapper also writes the MOST contract owner (`src=wired kind=proxy`) and `wired.session` (from the next unit start).
   "7. Status" shows the active bridge and its sha8; "CP save log" adds the bridge log and the contract files. Default and
   "8. Remove everything" unchanged. Release cards: no change (same `pmcp.sh` and build id).
+  "Bridge status: which bridge, owner, last lines of its log (read-only)" (`pmcp.sh bridge-status`) shows the bridge
+  lines of status, this start's owner and `wired.session` and the last 15 lines of the bridge log. "AA record" moved
+  from `aa_advanced` to `experimental` too; `aa_advanced` has the release card's buttons only.
   Details: docs/en/07-installer.md, "Experimental: own MOST bridge".
 
 ## Unreleased (release-candidate)
