@@ -75,7 +75,7 @@ UNSUPPORTED = [n for n, _ in JAVA_PACKAGES_ALL if n not in FW["packages"]]
 # connection 3 it reads the AA hook's mailbox /ramdisk/pmcp-aa-rg, CarPlay unchanged) and, since v1.7.0, tomasz-twardzicki's
 # MU1367 v1.4.5/v1.4.6 CarPlay guidance fixes (rg/build.sh lanes-uturn-asf-m-aa-r: + rg/lanes/v146.py: reroute with
 # CALC_ROUTE, placeholder arrow, U-turn side, Apple Maps names). The rg and rglu of v1.3, v1.4.x's and v1.5.0-v1.6.0's rg
-# and the experimental cards' rg-aa are replaced by java-update (JAVA_OLD below).
+# and the experimental cards' rg-aa are replaced by java-update (recognised by name, history.json "java_renamed").
 # Tried and not shipped (docs/en/14-fast-start-audit.md): day/night v2 and the cluster day/night module (no effect on
 # Google Maps), AID fast start kf..kf4.
 # No two packages replace the same class (checked in main).
@@ -112,16 +112,15 @@ PAYLOAD_BY_PROFILE["MU1161"] = {
     "JAR_nai": (PROJ / "build/nai-mu1161-v2/NavActiveIgnore.jar",
             "dbd031ecb28a2ec91c4704e133f4e2126cf1fe11498f673bc2e07fc0b1aaa7ab", 13285, "jars/NavActiveIgnore.jar"),
     # nowplaying/build.sh; since v1.7.0 (AA 1.1, A171): + Android Auto title (AndroidAutoTarget hook). A185: + the AA
-    # track event log /ramdisk/pmcp-aa-np.log (lengths and flags only; aa-log-save copies it). Own file name
-    # pmcp-np3.jar: v1.x's pmcp-np.jar (6b638868) and v1.7.x's pmcp-np2.jar (1f3b0dc0) keep their one content (JAVA_OLD)
+    # track event log /ramdisk/pmcp-aa-np.log (lengths and flags only; aa-log-save copies it). Earlier
+    # cards had pmcp-np.jar (v1.x, 6b638868) and pmcp-np2.jar (v1.7.x, 1f3b0dc0); java-update replaces them by name
     "JAR_np": (PROJ / "build/np-mu1161-aa12/pmcp-np.jar",
                "ab2b27e8fbe695c0212a02802e89a158bbf4853c3b87358facb1ad4d6e8ece53", 26579, "jars/pmcp-np-ab2b27e8.jar"),
     # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa-r (RC's rg 70f714fb = v1.6.0's rg 4e32e7f7 plus rg/lanes/v146.py,
     # tomasz-twardzicki MU1367 v1.4.5/v1.4.6) + com.pmcp.kv.KombiView (A166: which view the AID shows,
     # /ramdisk/pmcp-kombi-view.log) + rg/lanes/aa11.py (AA 1.1, A171: AA road name, lanes, destination only while the AID
-    # does not show the AA map; KombiView.mapShown() = datapool 1110045). Own file name pmcp-guidance7.jar: pmcp-guidance5.jar
-    # (RC test cards) and pmcp-guidance6.jar (experimental card b542b2d4) are in JAVA_OLD. The same file as experimental card
-    # 9c0c4493 (tested in the car 2026-11-12, A174).
+    # does not show the AA map; KombiView.mapShown() = datapool 1110045). v1.7.x had the same file as
+    # pmcp-guidance7.jar (experimental card 9c0c4493, in the car 2026-11-12, A174); earlier ones pmcp-guidance*.jar.
     "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11/pmcp-rg.jar",
                "308714b29b1e7350f98771e78e34abd776cdb710123b2e9beb5c135bd3a8c04b", 64481, "jars/pmcp-rg-308714b2.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
@@ -129,9 +128,8 @@ PAYLOAD_BY_PROFILE["MU1161"] = {
     "JAR_dn": (PROJ / "build/extras-mu1161-v2/pmcp-dn.jar",
                "aabe871e87510177a333f1a76d69015f8bdeb994fba4ad1251e1b7f2b5afbd70", 11421, "jars/pmcp-dn-aabe871e.jar"),
     # Optional native-map limit reader, output is enabled separately after confirming the Java set.
-    # (amjad-alarori's PR #3; since v1.4.1 without TurnToInfo, which rg owns: rg asks sl for the prefix by name). File
-    # pmcp-sl2.jar: the PR's own card used pmcp-sl.jar for its sl with TurnToInfo (a unit with that set: Remove
-    # everything first; its hashes are not known here, so it is not in JAVA_OLD)
+    # (amjad-alarori's PR #3; since v1.4.1 without TurnToInfo, which rg owns: rg asks sl for the prefix by name). v1.4.1-v1.7.x
+    # had it as pmcp-sl2.jar; the PR's own card's pmcp-sl.jar (sl with TurnToInfo) is replaced by name like any earlier sl
     "JAR_sl": (PROJ / "build/sl-mu1161/pmcp-sl.jar",
                "37b5d9488b818e4a4de58dc9541b6618de364e5a46d81439c1f3206762e5249f", 16527, "jars/pmcp-sl-37b5d948.jar"),
     # Optional settings page (ui/build.sh): the factory AbstractViewHandler with five guarded hooks + com.pmcp.ui. Its
@@ -155,7 +153,7 @@ PAYLOAD_BY_PROFILE["MU1161"] = {
 PAYLOAD_BY_PROFILE["MU1161"].update({
     "AA_WRAPPER": (PROJ / "aa/unit/gal.wrapper.sh", "57b63037a7d82d45f47773ec76e99ad659490f6d29d540f20de90930f0d65137", 3259, "aa/gal.wrapper.sh"),
     # v1.7.0: hook g2 + raw dump of the navigation messages (/ramdisk/pmcp-aa-rg-raw.txt, A166) + road name, lanes and
-    # destination into the rg mailbox (AA 1.1, A171); v1.7.0/v1.7.1 had cbf2e388 (AA_OLD). Since A185: file writes
+    # destination into the rg mailbox (AA 1.1, A171); v1.7.0/v1.7.1 had cbf2e388 (an earlier set, "old"). Since A185: file writes
     # outside the rg mutex, the raw dump no longer rewrites latest.bin, 0x8006 dedupe over the whole message (review A176)
     "AA_HOOK": (PROJ / "aa/prebuilt/libgal_hook.so", "dedd6452a086cd8f04f8dede4f9c74707483af5854f4a5f7cbb487452abbf2fe", 141514, "aa/libgal_hook.so"),
     "AA_DMDT_FLUSH": (PROJ / "aa/prebuilt/libdmdt_flush.so", "4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f", 5328, "aa/libdmdt_flush.so"),

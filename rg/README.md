@@ -17,7 +17,7 @@ Android Auto phone is connected (connection type 3) it reads the AA hook's mailb
 route is held 10 s instead of 180 s (the hook repeats the route every 2.5 s while Google Maps navigates); with CarPlay
 or no phone it behaves exactly like the v1.4.3 `rg` (the same test suites with the same results, plus `TestAa`).
 The v1.3 packages `rg` (no lanes) and `rglu` are gone; `java-update` (main menu 4) replaces them, v1.4.x's `rg`, the
-experimental cards' `rg-aa` and `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma` by this `rg` (`pmcp-guidance7.jar`; v1.5.0-v1.6.0: `pmcp-guidance4.jar`).
+experimental cards' `rg-aa` and `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma` by this `rg` (on the unit `pmcp-rg-<sha8>.jar`; v1.7.x `pmcp-guidance7.jar`; v1.5.0-v1.6.0: `pmcp-guidance4.jar`).
 
 What it gives on the AID:
 - arrows and distance to the manoeuvre in the "arrows" view and on the HUD (also at the start of a route and at roundabout
@@ -143,7 +143,7 @@ publishes them with Android Auto only while `com.pmcp.kv.KombiView.mapShown()` i
 map (datapool 1110045, which followed every view switch on the 2026-11-11 drive; an unknown view hides them). Hidden:
 TurnToInfo empty, no lanes, DistanceToDestination / TimeToDestination invalid; the arrow and the distance to the turn
 stay. A view change re-sends the four functions at the next 250 ms tick. LiveBridge compiles against KombiView, which
-the AA block packages into the same jar. Test: `rg/lanes/TestAa11.java` (`AA11_PASS`). Card file `pmcp-guidance7.jar`.
+the AA block packages into the same jar. Test: `rg/lanes/TestAa11.java` (`AA11_PASS`). Card file `pmcp-rg-<sha8>.jar` (v1.7.x: `pmcp-guidance7.jar`).
 
 - **Reroute.** A reroute arrives as route states 1, 5, 0, 3, 1 within about half a second, then the new list starts at a
   start-of-route step with 0 m. Before, that was a new trip: distance, bar, street and arrival were lost. Now the VW

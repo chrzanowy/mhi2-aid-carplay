@@ -29,8 +29,8 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 - **Android Auto title: event log:** the now-playing package writes Android Auto track events to
   `/ramdisk/pmcp-aa-np.log` (valid flag, title length, whether the cluster shows our title, DSI callbacks; never the
   title text), and "AA save log" copies it into the AA log. Purpose: find out whether the radio reports the end of an AA
-  session before the AA title is cleared between sessions. New file `pmcp-np3.jar` (`ab2b27e8…`); main menu 4 replaces
-  v1.7.x's `pmcp-np2.jar` in place, without resetting the other features. RAM only, so nothing new for the log card or
+  session before the AA title is cleared between sessions. np `ab2b27e8…` (file `pmcp-np-ab2b27e8.jar`, see the
+  JAR names below); main menu 4 replaces v1.7.x's `pmcp-np2.jar` in place, without resetting the other features. RAM only, so nothing new for the log card or
   "9. Delete saved logs".
 - **"CP save log" includes the AID view log:** the saved CarPlay log now also carries `pmcp-kombi-view.log(.1)` (which view
   the AID showed and when), as the Android Auto log already did. No new file: the log card and "9. Delete saved logs" are

@@ -76,7 +76,7 @@ The installer exposes these actions.
 
 | Action | Effect |
 |---|---|
-| `java-on sl` | Add `pmcp-sl.jar` (on the unit: `pmcp-sl2.jar`) through the standard Java trial mechanism |
+| `java-on sl` | Add `pmcp-sl.jar` (on the unit: `pmcp-sl-<sha8>.jar`; v1.4.1-v1.7.x `pmcp-sl2.jar`) through the standard Java trial mechanism |
 | `speedlimit-mode turnto` | Enable the prefix in `rg`'s TurnToInfo text across restarts (needs `rg`) |
 | `speedlimit-mode street` | Trial: the prefix in CurrentPositionInfo only, across restarts |
 | `speedlimit-mode off` | Disable the prefix across restarts |

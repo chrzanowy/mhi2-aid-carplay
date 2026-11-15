@@ -2,7 +2,7 @@
 
 [Polska wersja: README.pl.md](README.pl.md)
 
-Status: **works in the car (MU1161 + AID 791, October 2026).** JAR: `build/np-mu1161-aa12/pmcp-np.jar` (26,579 B, `ab2b27e8…`, installed as `pmcp-np3.jar`; since v1.7.0 also the Android Auto title, since A185 the AA track event log below;
+Status: **works in the car (MU1161 + AID 791, October 2026).** JAR: `build/np-mu1161-aa12/pmcp-np.jar` (26,579 B, `ab2b27e8…`, installed as `pmcp-np-ab2b27e8.jar`; since v1.7.0 also the Android Auto title, since A185 the AA track event log below;
 v1.7.0/v1.7.1: `build/np-mu1161-aa11/pmcp-np.jar`, 25,007 B, `1f3b0dc0…`, as `pmcp-np2.jar`;
 v1.x before v1.7.0: `build/np-mu1161-v2/pmcp-np.jar`, 17,928 B, `6b638868…dc23`;
 v2 2026-10-22: all 4 helper calls guarded by `buildtools/Guard.java`, J9 API check `RefCheck`;
