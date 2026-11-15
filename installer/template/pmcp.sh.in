@@ -14,7 +14,7 @@
 #   pmcp.sh rg-system-off       factory iAP2 driver and iap2.cfg back
 #   pmcp.sh rg-update           RG on with an older pmcp driver/reader (RG_KNOWN): replace them in place by this card's
 #                               ones; the factory copies are checked, kept and stay the way back (rg-system-off)
-#   pmcp.sh java-update         Java set with packages of an earlier card (JAVA_OLD): one new set with this card's
+#   pmcp.sh java-update         Java set with earlier versions of this card's packages: one new set with this card's
 #                               packages (rglu, rg-aa and the other earlier rg variants become rg), one trial boot
 #   pmcp.sh aa-remove           Android Auto off: factory gal back (only from a copy with the factory hash), its files and
 #                               markers removed
@@ -41,6 +41,8 @@
 #   pmcp.sh restore             back to the exact factory files
 # Main menu (GEM pmcp_stream_map_aid), each repairs its own part and replaces versions this card does not support:
 #   pmcp.sh map-install VARIANT 2: factory -> install; ours -> layout VARIANT; mixed map files -> restore, then install
+#   pmcp.sh reinstall-plan VARIANT  10 (read-only first step): what is on now, as the actions that put this card's
+#                               versions of it back after restore ("PMCP_PLAN action arg" lines; VARIANT if none known)
 #   pmcp.sh aa-install          3: this card's Android Auto; an unsupported AA set is removed first (aa_off)
 #   pmcp.sh features-reset      4 (first step): unsupported route guidance / Java files -> factory, then 4 installs
 #   pmcp.sh confirm             5: confirm the Java set and/or the AA set, whichever is in its trial now
@@ -83,13 +85,11 @@ HASHMAP='
 RG_KNOWN='
 @@RG_KNOWN@@
 '
-# Java packages of earlier cards that java-update replaces ("name sha256 size jarfile newname" per line).
-JAVA_OLD='
-@@JAVA_OLD@@
-'
-# AA sets of earlier cards ("mode hook-sha size feeder-sha size hookconf-sha size feederconf-sha size" per line, aa_state)
-AA_OLD='
-@@AA_OLD@@
+# Java package names of earlier cards that are another package of this card now ("old new" per line: rg's variants).
+# Any earlier version of one of this card's packages is recognised by its name alone (java_parts, A188), never by a
+# list of hashes.
+JAVA_RENAMED='
+@@JAVA_RENAMED@@
 '
 GAWK_SIZE=487088
 
@@ -265,15 +265,16 @@ java_catalog() {
     done
 }
 
-# java_old NAME SHA8 -> "sha size jarfile newname" of an earlier card's package, or nothing
-java_old() {
-    echo "$JAVA_OLD" | while read _o_n _o_h _o_s _o_f _o_t; do
-        [ "$_o_n" = "$1" ] && [ "`first8 $_o_h`" = "$2" ] && echo "$_o_h $_o_s $_o_f $_o_t"
-    done
-}
-
 java_jarfile() {
     java_catalog | while read _w_n _w_f; do [ "$_w_n" = "$1" ] && echo "$_w_f"; done
+}
+
+# java_successor NAME -> this card's package that replaces NAME (NAME itself, or its JAVA_RENAMED line), or nothing
+java_successor() {
+    [ -n "`java_jarfile "$1"`" ] && { echo "$1"; return 0; }
+    echo "$JAVA_RENAMED" | while read _s_o _s_n; do
+        [ "$_s_o" = "$1" ] && [ -n "`java_jarfile "$_s_n"`" ] && echo "$_s_n"
+    done
 }
 
 # first8 SHA -> first 8 characters, with shell builtins only (no cut on the unit)
@@ -351,11 +352,19 @@ firmware_identity() {
     say "  ok lsd.jxe size $STOCK_JXE_SIZE (@@PROFILE_ID@@)"
 }
 
-# Our JAR files (this card's and earlier cards') present in the HMI jars directory, one file name per line
+# Our JAR files present in the HMI jars directory, one file name per line: this card's (catalog) and every pmcp-*.jar
+# (our name space: earlier cards' JARs, whatever their version; A188, no list of earlier file names)
 our_jars_present() {
-    { java_catalog | while read _o_n _o_f; do echo "$_o_f"; done
-      echo "$JAVA_OLD" | while read _o_n _o_h _o_s _o_f _o_t; do [ -n "$_o_f" ] && echo "$_o_f"; done
-    } | while read _o_f; do [ -e "$JARS/$_o_f" ] && echo "$_o_f"; done
+    _o_all=" "
+    for _o_f in `java_catalog | while read _o_n _o_f; do echo "$_o_f"; done`; do
+        case "$_o_all" in *" $_o_f "*) ;; *) _o_all="$_o_all$_o_f " ;; esac
+    done
+    for _o_p in "$JARS"/pmcp-*.jar; do
+        _o_f=${_o_p##*/}
+        case "$_o_f" in *[!A-Za-z0-9._-]*) continue ;; esac
+        case "$_o_all" in *" $_o_f "*) ;; *) _o_all="$_o_all$_o_f " ;; esac
+    done
+    for _o_f in $_o_all; do [ -f "$JARS/$_o_f" ] && echo "$_o_f"; done
 }
 
 # carplaymaps/HMI_BOOT: one line "SET_ID JAR JAR ...", the only file lsd.sh reads. SET_ID is name-sha8 joined by "+",
@@ -380,36 +389,70 @@ current_set() {
     echo "$_n_out"
 }
 
-# Every part "name-sha8" of the set id is a package of this card (manifest) or of an earlier card (JAVA_OLD), its JAR is
-# present with that hash, and HMI_BOOT is exactly "id jars". Only then: JAVA_OLD_SET = the names of earlier cards'
-# packages in the set (java-update replaces them), JAVA_STRAY = JAR files of ours the set does not list (left by an
-# interrupted java-on/java-update; never loaded, since the lsd.sh block loads only the HMI_BOOT list; java-update and
-# restore remove them).
+# java_parts -> one line per part of the set in HMI_BOOT, in set order: "name sha8 jarfile cur|old successor".
+#   cur: this card's package, its JAR intact under this card's file name
+#   old: an earlier version of one of this card's packages, or the same content under an earlier card's file name
+#        (A188: no list of hashes). The name, or its JAVA_RENAMED line, says which package; the JAR is a plain file of
+#        ours (pmcp-*.jar) and not this card's file name for it, so java-update stages the new JAR next to it and the old
+#        set stays intact until HMI_BOOT switches. This card's names carry the content (pmcp-<package>-<sha8>.jar).
+# Anything else (a malformed line, a name this card does not know, a JAR of another name space, a damaged JAR under this
+# card's name, a JAR twice): status 1 and nothing printed; the set is then "mixed" and 4 resets it (verified factory).
+java_parts() {
+    _p_line=`cat "$ROOT/HMI_BOOT" 2>/dev/null`
+    _p_id=${_p_line%% *}
+    _p_jars=${_p_line#* }
+    [ -n "$_p_id" ] && [ "$_p_jars" != "$_p_line" ] || return 1
+    case "$_p_id" in *[!A-Za-z0-9+-]*) return 1 ;; esac
+    _p_x=$_p_id; _p_out=""; _p_seen=" "; _p_names=" "
+    while :; do
+        _p_part=${_p_x%%+*}
+        _p_f=${_p_jars%% *}
+        if [ "$_p_f" = "$_p_jars" ]; then _p_jars=""; else _p_jars=${_p_jars#* }; fi
+        _p_n=${_p_part%-*}; _p_8=${_p_part##*-}
+        [ -n "$_p_n" ] && [ "$_p_n" != "$_p_part" ] && [ -n "$_p_8" ] || return 1
+        case "$_p_f" in ""|.*|*[!A-Za-z0-9._-]*) return 1 ;; esac
+        case "$_p_seen" in *" $_p_f "*) return 1 ;; esac
+        case "$_p_names" in *" $_p_n "*) return 1 ;; esac
+        _p_seen="$_p_seen$_p_f "; _p_names="$_p_names$_p_n "
+        [ -f "$JARS/$_p_f" ] && [ ! -h "$JARS/$_p_f" ] || return 1
+        set -- `manifest_get "JAR_$_p_n"`
+        if [ -n "$1" ] && [ "`first8 $1`" = "$_p_8" ] && [ "${3##*/}" = "$_p_f" ]; then
+            matches "$JARS/$_p_f" "$1" "$2" || return 1
+            _p_out="$_p_out$_p_n $_p_8 $_p_f cur $_p_n
+"
+        else
+            _p_s=`java_successor "$_p_n"`
+            [ -n "$_p_s" ] || return 1
+            case "$_p_f" in pmcp-*.jar) ;; *) return 1 ;; esac
+            [ "$_p_f" != "`java_jarfile "$_p_s"`" ] || return 1
+            _p_out="$_p_out$_p_n $_p_8 $_p_f old $_p_s
+"
+        fi
+        [ "$_p_part" = "$_p_x" ] && break
+        _p_x=${_p_x#*+}
+    done
+    [ -z "$_p_jars" ] || return 1
+    echo "$_p_out"
+}
+
+# The set in HMI_BOOT is made of this card's packages and earlier versions of them (java_parts). Only then:
+# JAVA_OLD_SET = the names of the earlier versions in the set (java-update replaces them), JAVA_STRAY = JAR files of ours
+# the set does not list (left by an interrupted java-on/java-update; never loaded, since the lsd.sh block loads only the
+# HMI_BOOT list; java-update and restore remove them).
 java_set_consistent() {
     JAVA_OLD_SET=""; JAVA_STRAY=""
-    _j_id=`boot_set_id`
-    [ -n "$_j_id" ] || return 1
-    _j_x=$_j_id; _j_jars=""; _j_old=""
-    while :; do
-        _j_part=${_j_x%%+*}
-        _j_n=${_j_part%-*}; _j_8=${_j_part##*-}
-        set -- `manifest_get "JAR_$_j_n"`
-        if [ -n "$1" ] && [ "`first8 $1`" = "$_j_8" ]; then
-            _j_f=${3##*/}
-        else
-            set -- `java_old "$_j_n" "$_j_8"`
-            [ -n "$1" ] || return 1
-            _j_f=$3; _j_old="$_j_old${_j_old:+ }$_j_n"
-        fi
-        matches "$JARS/$_j_f" "$1" "$2" || return 1
-        _j_jars="$_j_jars${_j_jars:+ }$_j_f"
-        [ "$_j_part" = "$_j_x" ] && break
-        _j_x=${_j_x#*+}
-    done
-    [ "`cat "$ROOT/HMI_BOOT" 2>/dev/null`" = "$_j_id $_j_jars" ] || return 1
+    _j_parts=`java_parts` || return 1
+    _j_old=""; _j_jars=" "
+    while read _j_n _j_8 _j_f _j_k _j_s; do
+        [ -n "$_j_n" ] || continue
+        _j_jars="$_j_jars$_j_f "
+        [ "$_j_k" = old ] && _j_old="$_j_old${_j_old:+ }$_j_n"
+    done <<EOF
+$_j_parts
+EOF
     _j_stray=""
     for _j_f in `our_jars_present`; do
-        case " $_j_jars " in *" $_j_f "*) ;; *) _j_stray="$_j_stray${_j_stray:+ }$_j_f" ;; esac
+        case "$_j_jars" in *" $_j_f "*) ;; *) _j_stray="$_j_stray${_j_stray:+ }$_j_f" ;; esac
     done
     JAVA_OLD_SET=$_j_old; JAVA_STRAY=$_j_stray
     return 0
@@ -425,7 +468,7 @@ java_part_tolerable() {
     set -- `manifest_get LSD_JAVA`
     matches "$LSD" "$1" "$2" || return 1
     _t_line=`cat "$ROOT/HMI_BOOT" 2>/dev/null`
-    _t_known=`java_catalog | while read _t_a _t_f; do echo "$_t_f"; done; echo "$JAVA_OLD" | while read _t_a _t_b _t_c _t_f _t_d; do echo "$_t_f"; done`
+    _t_known=`java_catalog | while read _t_a _t_f; do echo "$_t_f"; done`
     set -f
     set -- $_t_line
     _t_id=$1
@@ -571,8 +614,9 @@ aa_set_id() {
 }
 
 # AASYS -> off (factory gal, no aa/, no leftovers) | on (wrapper active, factory gal copy, hook, feeder, settings and
-# AA_BOOT of this card; AAMODE = gamma) | old (the same, but the whole set of one AA_OLD line with its own AA_BOOT: an
-# earlier card's set, also of its other modes; aa-on replaces it) | unknown
+# AA_BOOT of this card; AAMODE = gamma) | old (the same wrapper, factory gal copy and dmdt_flush, but a set of other
+# versions: an earlier card's set, whatever its version (A188, no list of hashes): AA_BOOT "mode-xxxxxxxx-xxxxxxxx-xxxxxxxx"
+# and the four set files plain files in aa/; aa-on replaces them) | unknown
 aa_state() {
     AASYS=unknown; AAMODE=""
     if [ ! -e "$AADIR" ] && [ ! -e "$ROOT/.aa-new" ] && [ ! -e "$GAL.pmcp-new" ] && [ ! -e "$GAL.pmcp-restore" ] \
@@ -608,19 +652,17 @@ aa_state() {
             return 0
         fi
     fi
-    # an earlier card's set, whole (never a mix of files from different sets), with that set's own AA_BOOT
-    while read _o_m _o_hs _o_hz _o_fs _o_fz _o_cs _o_cz _o_ms _o_mz; do
-        [ -n "$_o_mz" ] || continue
-        [ "$_a_boot" = "$_o_m-`first8 $_o_hs`-`first8 $_o_fs`-`first8 $_o_cs`" ] || continue
-        matches "$AADIR/libgal_hook.so" "$_o_hs" "$_o_hz" || continue
-        matches "$AADIR/aa-most-feeder" "$_o_fs" "$_o_fz" || continue
-        matches "$AADIR/gal-hook.conf" "$_o_cs" "$_o_cz" || continue
-        matches "$AADIR/feeder.conf" "$_o_ms" "$_o_mz" || continue
-        AASYS=old; AAMODE=$_o_m
-        break
-    done <<EOF
-$AA_OLD
-EOF
+    # an earlier card's set (or one half-replaced by an interrupted aa-on): everything around it is ours and verified
+    # above (wrapper, factory gal copy, dmdt_flush), so its four files are replaced whatever their version
+    case "$_a_boot" in
+        *[!a-z0-9-]*) return 0 ;;
+        [a-z]*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+        *) return 0 ;;
+    esac
+    for _a_f in libgal_hook.so aa-most-feeder gal-hook.conf feeder.conf; do
+        [ -f "$AADIR/$_a_f" ] && [ ! -h "$AADIR/$_a_f" ] || return 0
+    done
+    AASYS=old; AAMODE=${_a_boot%%-*}
     return 0
 }
 
@@ -774,7 +816,7 @@ do_aa_on() {
 # Main menu 3: this card's (stable) Android Auto set. Android Auto files of a version this card does not support (an
 # experimental card's set, an interrupted install) are removed first with aa_off (factory gal back, only from a copy
 # with the factory hash; nothing is written otherwise), then the stable set is installed. An earlier card's whole set
-# (AA_OLD) is brought up to date in place, as aa-on does.
+# (any version of ours, aa_state "old") is brought up to date in place, as aa-on does.
 do_aa_install() {    # [gammax]: aa-on-exp, the experimental set of an experimental card (aa_advanced)
     _n_t=${1:-gamma}
     [ $_n_t = gamma ] || [ -n "`manifest_get AAX_FEEDER`" ] || fail "AA_EXPERIMENTAL_NOT_ON_THIS_CARD"
@@ -1454,9 +1496,10 @@ java_reset() {
         check "$LSD.pmcp-rb" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" STAGED_FACTORY_LSD
         mv "$LSD.pmcp-rb" "$LSD" || fail "LSD_RESTORE_FAILED_RUN_RESTORE"
     fi
-    # JAR files (the lsd.sh block is off now, nothing loads them), then the set file: until it goes, its names are known: every name this card knows (its own and earlier cards'), and the pmcp-*.jar names the old set listed
-    _z_files=`java_catalog | while read _z_n _z_f; do echo "$_z_f"; done; echo "$JAVA_OLD" | while read _z_a _z_b _z_c _z_f _z_d; do [ -n "$_z_f" ] && echo "$_z_f"; done`
-    _z_files="$_z_files `listed_pmcp_jars "$_z_line"`"
+    # JAR files (the lsd.sh block is off now, nothing loads them), then the set file: until it goes, its names are known:
+    # this card's JARs, every pmcp-*.jar present (our name space) and the pmcp-*.jar names the old set listed
+    _z_files="`java_catalog | while read _z_n _z_f; do echo "$_z_f"; done` `our_jars_present` `listed_pmcp_jars "$_z_line"`"
+    for _z_p in "$JARS"/pmcp-*.jar.pmcp-new; do [ -f "$_z_p" ] && { rm -f "$_z_p" || fail "JAR_REMOVE_FAILED_RUN_RESTORE"; }; done
     set -f   # names are data: no file name expansion
     for _z_f in $_z_files; do
         rm -f "$JARS/$_z_f" "$JARS/$_z_f.pmcp-new" || { set +f; fail "JAR_REMOVE_FAILED_RUN_RESTORE"; }
@@ -1707,7 +1750,7 @@ do_java_retry() {
     say "PMCP_JAVA_RETRY_OK set=$set_id (the next boot is a new trial)"
 }
 
-# java-update: the set holds packages of an earlier card (JAVA_OLD). One new set with this card's packages: each old one
+# java-update: the set holds earlier versions of this card's packages (java_parts). One new set with this card's packages: each old one
 # becomes its successor (rg, rglu, rg-aa and the other earlier rg variants -> rg), the others stay. New JARs have file names no
 # earlier card used, so the old set stays intact until HMI_BOOT switches (one mv); old JARs are removed after it.
 do_java_update() {
@@ -1731,18 +1774,14 @@ do_java_update() {
         exit 0
     fi
     cur=`current_set`; want=""; oldfiles=""
-    _u_x=`boot_set_id`
-    while :; do
-        _u_part=${_u_x%%+*}; _u_n=${_u_part%-*}
-        set -- `java_old "$_u_n" "${_u_part##*-}"`
-        if [ -n "$1" ]; then
-            want="$want $4"; oldfiles="$oldfiles $3"
-        else
-            want="$want $_u_n"
-        fi
-        [ "$_u_part" = "$_u_x" ] && break
-        _u_x=${_u_x#*+}
-    done
+    _u_parts=`java_parts` || fail "JAVA_UPDATE_SET_CHANGED_RUN_AGAIN"
+    while read _u_n _u_8 _u_f _u_k _u_s; do
+        [ -n "$_u_n" ] || continue
+        want="$want $_u_s"
+        [ "$_u_k" = old ] && oldfiles="$oldfiles $_u_f"
+    done <<EOF
+$_u_parts
+EOF
     case " $want " in *" rg "*) [ "$RGSYS" = on ] || fail "JAVA_UPDATE_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
     new=""
     for n in `java_catalog | while read a b; do echo $a; done`; do
@@ -1981,8 +2020,10 @@ do_restore() {
         mv "$DIO.pmcp-restore" "$DIO" || fail "DIO_RESTORE_FAILED"
     fi
     _r_set=`cat "$ROOT/HMI_BOOT" 2>/dev/null`
-    for f in `java_catalog | while read n j; do echo $j; done` `echo "$JAVA_OLD" | while read a b c j d; do echo $j; done` \
-             `listed_pmcp_jars "$_r_set"`; do
+    # this card's JAR names whether present or not (an interrupted java-on leaves only NAME.pmcp-new), every pmcp-*.jar
+    # present, the set's names, and staged pmcp-*.jar.pmcp-new of any name
+    for _r_p in "$JARS"/pmcp-*.jar.pmcp-new; do [ -f "$_r_p" ] && { rm -f "$_r_p" || fail "JAR_REMOVE_FAILED"; }; done
+    for f in `java_catalog | while read n j; do echo $j; done` `our_jars_present` `listed_pmcp_jars "$_r_set"`; do
         rm -f "$JARS/$f" "$JARS/$f.pmcp-new" || fail "JAR_REMOVE_FAILED"
     done
     rm -f "$LSD.pmcp-new" "$DIO.pmcp-new" "$LSD.pmcp-rb" "$DIO.pmcp-rb" 2>/dev/null
@@ -2000,6 +2041,46 @@ do_restore() {
     flush
     say "PMCP_RESTORE_OK (factory lsd.sh and dio_manager verified)"
     say "A full unit reboot is required."
+}
+
+# Main menu 10 "Reinstall" (A188), first step, read-only: what the unit has now, as this card's actions in install order.
+# The menu script keeps the plan in memory, runs restore (factory files), then the plan. Settings that need a confirmed
+# set (the speed-limit mode) are only reported: the user sets them again after 5. Confirm.
+do_reinstall_plan() {
+    variant_key "$ARG" > /dev/null && [ -n "`variant_key "$ARG"`" ] || fail "UNKNOWN_VARIANT_$ARG"
+    selftest
+    firmware_identity
+    detect_state
+    case "$STATE" in STOCK) fail "REINSTALL_NOTHING_INSTALLED_USE_2_3_4" ;; esac
+    _v=`cat "$ROOT/VARIANT" 2>/dev/null`
+    [ -n "$_v" ] && [ -n "`variant_key "$_v"`" ] || _v=$ARG
+    say "PMCP_PLAN map-install $_v"
+    _pk=""
+    if [ -s "$ROOT/HMI_BOOT" ]; then
+        _parts=`java_parts`
+        if [ -n "$_parts" ]; then
+            while read _a _b _c _d _e; do [ -n "$_a" ] && _pk="$_pk $_e"; done <<EOF
+$_parts
+EOF
+        else
+            # a set this card cannot read: this card's main menu 4 packages instead
+            _pk=" `java_catalog | while read _a _b; do [ "$_a" = sl ] || echo $_a; done`"
+            say "PMCP_NOTE the Java set on the unit is not readable by this card: main menu 4's packages instead"
+        fi
+    fi
+    case "$RGSYS" in on|old) say "PMCP_PLAN rg-system-on" ;;
+        *) case " $_pk " in *" rg "*) say "PMCP_PLAN rg-system-on" ;; esac ;; esac
+    for _n in `java_catalog | while read _a _b; do echo $_a; done`; do
+        case " $_pk " in *" $_n "*) say "PMCP_PLAN java-on $_n" ;; esac
+    done
+    if [ "$AASYS" != off ]; then
+        say "PMCP_PLAN aa-install"
+        _o=`sed -n 's/^PMCP_AA_OUTPUT=\([a-z]*\)[[:space:]]*$/\1/p' "$PERSIST/aa-extra.conf" 2>/dev/null`
+        case "$_o" in direct|ring) say "PMCP_PLAN aa-output $_o" ;; esac
+    fi
+    _m=`cat "$SL_MODE" 2>/dev/null`
+    case "$_m" in street|turnto) say "PMCP_NOTE speed-limit mode now: $_m (set it again after 5. Confirm, on the settings page)" ;; esac
+    say "PMCP_REINSTALL_PLAN_OK"
 }
 
 do_status() {
@@ -2082,6 +2163,7 @@ case "$ACTION" in
     speedlimit-mode) do_speedlimit_mode ;;
     speedlimit-status) do_speedlimit_status ;;
     restore)    do_restore ;;
+    reinstall-plan) do_reinstall_plan ;;
     status)     do_status ;;
     *) fail "UNKNOWN_ACTION_$ACTION" ;;
 esac

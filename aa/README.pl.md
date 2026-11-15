@@ -56,8 +56,8 @@ CarPlay `CP save log`).
 - **Nic na karcie SD nie wpływa na `gal`:** `hook/patch_no_sd.py` usuwa przed buildem ścieżki hooka do kart SD i `/tmp`.
 - Feeder czyta z `feeder.conf` tylko swoje klucze ustawień, nigdy ścieżek.
 - `AA remove` i „8. Remove everything” przywracają fabryczny `gal`, tylko z kopii z fabrycznym hashem.
-- Zestawy AA z wcześniejszych kart eksperymentalnych są rozpoznawane (`AA_OLD`): status `old`, przycisk 3 ekranu głównego je aktualizuje
-  bez wcześniejszego usuwania. Nieznany zestaw (status `unknown`) najpierw jest usuwany, tylko z kopii fabrycznego `gal`
+- Zestawy AA z wcześniejszych kart są rozpoznawane w dowolnej wersji (nasz wrapper, sprawdzona kopia fabrycznego `gal`
+  i poprawny `AA_BOOT`; od A188 bez listy hashy): status `old`, przycisk 3 ekranu głównego je aktualizuje bez wcześniejszego usuwania. Nieznany zestaw (status `unknown`) najpierw jest usuwany, tylko z kopii fabrycznego `gal`
   z fabrycznym hashem; inaczej zatrzymuje się i niczego nie zmienia.
 
 ## Czego się dowiedzieliśmy (szczegóły: audyt A-AA1..A-AA30 w notatkach projektu)

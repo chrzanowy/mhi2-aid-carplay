@@ -120,7 +120,7 @@ public issue, and remove or replace the addresses.
 
 - **on**: this card's Android Auto set (also the one installed by v1.5.0, which is the same set). "AA status" also
   says whether it is confirmed or in its trial.
-- **old**: the Android Auto files of an earlier experimental card that this card knows (`AA_OLD`); main screen
-  "3. Install Android Auto" updates them.
+- **old**: the Android Auto files of an earlier card, whatever their version; main screen "3. Install Android Auto"
+  updates them.
 - **unknown** makes the unit state PARTIAL (files from different sets, an interrupted action, an experimental card's
   set this card does not know): main screen "3. Install Android Auto" removes them first (factory `gal` back) and installs this card's set.

@@ -54,27 +54,9 @@ mode_digest() {
     _mode_file="$W/unit/mnt/persist/pmcp/native-speedlimit-mode"
     if [ -e "$_mode_file" ]; then shasum -a 256 < "$_mode_file" | cut -d' ' -f1; else echo absent; fi
 }
-# "v13:ACTION": the v1.3.0 release card (an earlier install that rg-update / java-update bring to this card); not a target
-V13="${PMCP_V13_SD:-$SDB/../sd-v1.3.0}/pmcp/pmcp.sh"
-# "exp:ACTION": an earlier experimental card (ab9fb348, Android Auto AA 3 / gamma), likewise only to prepare a unit
-EXP="${PMCP_EXP_SD:-$SDB/../sd-ab9fb348}/pmcp/pmcp.sh"
-# "x143:ACTION": the experimental card 84472aa9 (v1.4.3 + Android Auto, rg-aa in pmcp-guidance-aa2.jar), likewise
-EXP143="${PMCP_EXP143_SD:-$SDB/../sd-84472aa9}/pmcp/pmcp.sh"
-# "v151:ACTION": the v1.5.1 release card (ui e11bd8d3 in pmcp-ui.jar, which this card replaces with pmcp-ui2.jar)
-V151="${PMCP_V151_SD:-$SDB/../sd-754c9d82}/pmcp/pmcp.sh"
-# Earlier cards only prepare units for the update chains. Missing (a build from install.sh): those chains are skipped
-# and named; PMCP_REQUIRE_OLD_CARDS=1 (release runs) makes a missing earlier card an error.
-OLDCARDS=yes
-for c in "$V13" "$EXP" "$EXP143" "$V151"; do
-    [ -f "$c" ] && continue
-    [ "${PMCP_REQUIRE_OLD_CARDS:-0}" = 1 ] && { echo "earlier card missing: $c"; exit 99; }
-    echo "skip: earlier card not present ($c): the update chains with earlier cards are skipped"; OLDCARDS=no
-done
-run() { case "$1" in v13:*) _a=${1#v13:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$V13" $_a "$@" > "$W/out" 2>&1 ;;
-                     exp:*) _a=${1#exp:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP" $_a "$@" > "$W/out" 2>&1 ;;
-                     x143:*) _a=${1#x143:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$EXP143" $_a "$@" > "$W/out" 2>&1 ;;
-                     v151:*) _a=${1#v151:}; shift; PMCP_TEST_ROOT="$W/unit" $SH "$V151" $_a "$@" > "$W/out" 2>&1 ;;
-                     fx:*) fx "${1#fx:}" > "$W/out" 2>&1 ;;
+# Earlier versions are made from this card (fx:java-old, fx:aa-unknown; A188): pmcp.sh recognises earlier versions of
+# its own packages and AA sets by name, so no earlier card is needed.
+run() { case "$1" in fx:*) fx "${1#fx:}" > "$W/out" 2>&1 ;;
                      *) PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp.sh" "$@" > "$W/out" 2>&1 ;; esac; }
 runfi() { rm -f "$W/cnt"; PMCP_KILL_AT=$1 PMCP_FI_CNT=$W/cnt PMCP_FI_LOG=$W/filog PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp-fi.sh" "${@:2}" > "$W/outfi" 2>&1; }
 # states the main menu's 2, 3 and 4 replace: files of a version this card does not support (another card's set)
@@ -83,6 +65,18 @@ fx() {
         aa-unknown) printf 'X' >> "$U/carplaymaps/aa/aa-most-feeder"; echo "gamma-11111111-22222222-33333333" > "$U/carplaymaps/aa/AA_BOOT" ;;
         java-unknown) echo X > "$U/eso/hmi/lsd/jars/pmcp-zz.jar"; read _s _j < "$U/carplaymaps/HMI_BOOT"
                       echo "$_s+zz-0479f0fa $_j pmcp-zz.jar" > "$U/carplaymaps/HMI_BOOT" ;;
+        # A188: an earlier version of this card's np (other content, other file name, sha8 0a1b2c3d) and rg renamed to an
+        # earlier card's name (rgluasfm), the set still confirmed; java-update / 4 replace them in place
+        java-old) read _s _j < "$U/carplaymaps/HMI_BOOT"; _ns=$_s; _nj=" $_j "
+                  for _p in np:np rg:rgluasfm; do
+                      _n=${_p%%:*}; _o=${_p#*:}; _f=$(sed -n "s#^JAR_$_n [0-9a-f]* [0-9]* jars/##p" "$W/sd/pmcp.sh")
+                      _8=$(sed -n "s/^JAR_$_n \([0-9a-f]\{8\}\).*/\1/p" "$W/sd/pmcp.sh")
+                      case "$_ns" in *"$_n-$_8"*) ;; *) continue ;; esac
+                      mv "$U/eso/hmi/lsd/jars/$_f" "$U/eso/hmi/lsd/jars/pmcp-$_o-old.jar"; printf x >> "$U/eso/hmi/lsd/jars/pmcp-$_o-old.jar"
+                      _ns=${_ns/$_n-$_8/$_o-0a1b2c3d}; _nj=${_nj/ $_f / pmcp-$_o-old.jar }
+                  done
+                  _nj=${_nj# }; _nj=${_nj% }; echo "$_ns $_nj" > "$U/carplaymaps/HMI_BOOT"
+                  for _m in ok trial; do [ -e "$W/unit/mnt/persist/pmcp/$_m.$_s" ] && mv "$W/unit/mnt/persist/pmcp/$_m.$_s" "$W/unit/mnt/persist/pmcp/$_m.$_ns"; done ;;
         rg-unknown) printf 'Z' >> "$U/carplaymaps/rg/rgi-observer" ;;
         dio-mixed) echo junk > "$U/eso/bin/apps/dio_manager" ;;
         *) echo "PMCP_FAIL=FX_$1"; return 1 ;;
@@ -141,21 +135,11 @@ case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) XAA+=("map-install map-s
 grep -q '^AAX_FEEDER ' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && \
     XAA+=("map-install map-square-fps40" "aa-install" "aa-on-exp" "aa-output direct" "aa-install" "aa-on-exp" "aa-remove" "aa-on-exp" "restore")
 OWN+=("${XAA[@]}")
-if [ "$OLDCARDS" = yes ]; then
-CHAIN=("v13:install map-clean" "v13:java-on nai" "v13:rg-system-on" "v13:java-on rglu" "rg-update" "java-update" "java-on np" \
-       "switch map-clean-l40" "java-off np" "java-off rg" "rg-system-off" "java-off nai" "restore" \
-       "install map-square-fps40" "rg-system-on" "java-on rg" "java-on sl" "java-on ui" \
-       "speedlimit-mode turnto" "speedlimit-mode street" "speedlimit-mode off" "java-off sl" "java-off ui" "java-on zoom" "restore" \
-       "exp:install map-clean" "exp:aa-on gamma" "aa-remove" "exp:aa-on most" "restore" \
-       "install map-square-fps40" "aa-on" "rg-system-on" "java-on rg" "java-on nai" "aa-remove" "aa-on" "restore" \
-       "exp:install map-clean" "exp:aa-on gamma" "aa-on" "restore" \
-       "x143:install map-square-fps40" "x143:rg-system-on" "x143:java-on nai" "x143:java-on rg-aa" "x143:aa-on" "java-update" "aa-on" "restore" \
-       "v151:map-install map-square-fps40" "v151:rg-system-on" "v151:java-on nai" "v151:java-on sl" "v151:java-on ui" \
-       "java-update" "restore" \
-       "${MAIN[@]}" "${XAA[@]}")
-else
-CHAIN=("${OWN[@]}")
-fi
+# earlier versions made from this card (A188): java-update and 4 over an earlier np and a renamed rg, 3 over an earlier
+# AA set (fx:aa-unknown is "old" now: our wrapper, the factory gal copy, a well-formed AA_BOOT)
+OLDV=("install map-square-fps40" "rg-system-on" "java-on nai" "java-on np" "java-on rg" "java-on sl" "speedlimit-mode turnto" \
+      "fx:java-old" "java-update" "aa-on" "fx:aa-unknown" "aa-install" "restore")
+CHAIN=("${OWN[@]}" "${OLDV[@]}")
 # quick mode (daily work): the card's own actions only; the full run (earlier cards, replay cross-check) before RC
 [ "${PMCP_FAULT_QUICK:-0}" = 1 ] && CHAIN=("${OWN[@]}")
 if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
@@ -286,7 +270,7 @@ one_target() {
 
 # targets of this run (the earlier cards' actions and fx: only prepare units)
 is_target() {
-    case "${CHAIN[$1]}" in v13:*|exp:*|x143:*|v151:*|fx:*) return 1 ;; esac
+    case "${CHAIN[$1]}" in fx:*) return 1 ;; esac
     if [ "${PMCP_FAULT_SCOPE:-all}" = speedlimit ]; then
         case "${CHAIN[$1]}" in "java-on sl"|"java-off sl"|"speedlimit-mode "*) ;; *) return 1 ;; esac
     fi

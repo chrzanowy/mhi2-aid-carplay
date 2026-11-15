@@ -197,6 +197,7 @@ naszego (po drodze ponownie instaluje się M.I.B. 3.6.0). Potem uzbrój ją opcj
 | CarPlay nie łączy się po kroku 3 | `pmcp_advanced` → `features_advanced` → „Route guidance system off (factory iAP2 driver and iap2.cfg)”, restart |
 | Czarny ekran po potwierdzeniu | **karta 2** (awaria wyżej), potem karta 1 → „8. Remove everything (back to factory files)” |
 | Wycofanie wszystkiego | „8. Remove everything (back to factory files)” → `PMCP_RESTORE_OK` → restart (radio fabryczne) |
+| Zacząć od nowa z tą kartą (starsza albo nieznana instalacja, coś pomieszanego) | „10. Reinstall: remove everything, then this card's versions of what was on” → `PMCP_REINSTALL_OK` → restart, potem „5. Confirm” w tym starcie; tryb ograniczenia prędkości ustaw ponownie po nim |
 | Każdy `PMCP_FAIL` albo coś niejasnego | nic więcej nie naciskaj, zdjęcie ekranu, „0. Diagnostics” (tylko odczyt) |
 
 Jedyna dozwolona aktualizacja firmware to oficjalna K4525. Nigdy cross-flash z innego modelu.

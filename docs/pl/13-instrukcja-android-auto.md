@@ -119,7 +119,7 @@ i usuń albo zamień adresy.
 
 - **on**: zestaw Android Auto tej karty (także ten zainstalowany przez v1.5.0, to ten sam zestaw). „AA status” mówi
   też, czy jest potwierdzony, czy w próbie.
-- **old**: pliki Android Auto z wcześniejszej karty eksperymentalnej, znane tej karcie (`AA_OLD`); „3. Install Android
-  Auto” na ekranie głównym je aktualizuje.
+- **old**: pliki Android Auto z wcześniejszej karty, w dowolnej wersji; „3. Install Android Auto” na ekranie głównym
+  je aktualizuje.
 - **unknown** daje stan radia PARTIAL (pliki z różnych zestawów, przerwana akcja, nieznany zestaw karty eksperymentalnej):
   „3. Install Android Auto” na ekranie głównym najpierw je usuwa (wraca fabryczny `gal`) i instaluje zestaw tej karty.

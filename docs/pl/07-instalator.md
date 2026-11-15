@@ -6,8 +6,9 @@ w GEM `pmcp-0.7.1-mu1161-791-<id buildu>`, gdzie ID to pierwsze 8 znaków SHA-25
 Kartę instalacyjną składa `installer/build_card_install.py`, kartę ratunkową `installer/build_rescue.py`.
 
 **Profile firmware (od v1.7.1).** Wszystko, co instalator wie o firmware radia, to dane w `profiles/<ID>/`:
-`profile.json` (train, MU, przypięte pliki fabryczne, hashe `lsd.jxe`/`lsd.jar`, paczki) i `history.json` (pliki
-wcześniejszych kart, które ten instalator nadal zastępuje). `install.sh` wybiera profil z `version.txt` backupu
+`profile.json` (train, MU, przypięte pliki fabryczne, hashe `lsd.jxe`/`lsd.jar`, paczki) i `history.json` (zmienione
+nazwy paczek i pliki sterownika iAP2 wcześniejszych kart, które ten instalator nadal zastępuje; wcześniejsze paczki Javy
+i zestawy AA od A188 nie potrzebują listy). `install.sh` wybiera profil z `version.txt` backupu
 (train i MU muszą pasować do dokładnie jednego profilu; dziś tylko `MU1161`), inaczej się zatrzymuje;
 `./install.sh --check-backup` tylko rozpoznaje profil i sprawdza backup. `build_sd.py` bierze go z `PMCP_PROFILE`
 (domyślnie `MU1161`). Karty MU1161 są bajt w bajt takie jak w v1.7.0, poza identyfikatorem buildu.
@@ -90,10 +91,14 @@ Warianty `core.so` (`switch` zmienia tylko ten plik, potem restart, bez „5. Co
      Tylko w tym stanie wolno `install`. Pozostałość `.carplaymaps-old-*` po przerwanym `restore` nie przeszkadza (sprząta ją `install`).
    - `VIDEO` (etap A): wrapper aktywny, `lsd.sh` fabryczny, brak naszych JAR-ów.
    - `JAVA` (etap B+): jak `VIDEO` plus blok w `lsd.sh` i spójny zestaw JAR-ów (każdy z hashem z manifestu, `HMI_BOOT` dokładnie zgodny).
-     Zestaw może też zawierać paczki wcześniejszej karty (`JAVA_OLD`: `rg` `717fb53c` i `rglu` `72ab7221` z v1.2/v1.3,
-     eksperymentalne `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma`); wtedy `java-on` i `java-off` odmawiają
-     (`JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST`), dopóki `java-update` ich nie zastąpi, a „Status” pokazuje
-     „packages of an earlier card: …”.
+     Zestaw może też zawierać wcześniejsze wersje paczek tej karty (od A188 bez żadnej listy hashy: nazwa paczki mówi,
+     która to paczka, albo `java_renamed` w `history.json` dla wariantów rg: `rg-aa`, `rglu`, `rglua`, `rgluasf`, `rgluasfa`,
+     `rgluasfm`, `rgluasfma`; JAR to zwykły plik `pmcp-*.jar` o nazwie innej niż nazwa tej karty). Wtedy `java-on`
+     i `java-off` odmawiają (`JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST`), dopóki `java-update` nie zastąpi ich na
+     miejscu, a „Status” pokazuje „packages of an earlier card: …”. Nazwy JAR-ów tej karty niosą ich treść
+     (`pmcp-<paczka>-<sha8>.jar`), więc nowa treść zawsze dostaje nową nazwę pliku. Cokolwiek innego w zestawie (nazwa,
+     której nie ma żadna paczka, JAR spoza `pmcp-*.jar`, inna treść pod nazwą pliku tej karty, uszkodzony JAR) daje
+     pomieszaną część Javy (`PARTIAL`): 4 cofa ją do sprawdzonych plików fabrycznych, potem instaluje.
    - System prowadzenia (`RGSYS`, pokazuje go „Status”): `off`, `on`, `old` (włączony, ale ze sterownikiem i/lub czytnikiem
      wcześniejszej karty, `RG_KNOWN`: sterownik v1.0–v1.3 `76926bde…`, czytnik Tomasza `b683cef7…`; zastępuje je `rg-update`)
      albo `unknown`.
@@ -103,8 +108,9 @@ Warianty `core.so` (`switch` zmienia tylko ten plik, potem restart, bez „5. Co
      prowadzenia lub Javy: powrót do sprawdzonych plików fabrycznych, potem 4 instaluje).
    - `UNKNOWN`: cokolwiek innego, np. inny mod albo zmieniony `lsd.sh`. **Wszystko jest odrzucane.**
    - Android Auto (`AASYS`, od v1.5.0, pokazuje go „Status”): `off`, `on` (zestaw tej karty), `old` (cały zestaw
-     wcześniejszej karty eksperymentalnej, `AA_OLD`; przycisk 3 ekranu głównego / `aa-install` aktualizuje go na miejscu) albo `unknown`
-     (mieszanka, przerwana akcja albo nieznany jej zestaw karty eksperymentalnej: stan radia to wtedy `PARTIAL`; `aa-install` najpierw
+     wcześniejszej karty w dowolnej wersji: nasz wrapper, sprawdzona kopia fabrycznego `gal`, `libdmdt_flush.so` i poprawny
+     `AA_BOOT`, od A188 bez listy hashy; przycisk 3 ekranu głównego / `aa-install` aktualizuje go na miejscu) albo `unknown`
+     (zły `AA_BOOT`, brakujące pliki, przerwane usuwanie: stan radia to wtedy `PARTIAL`; `aa-install` najpierw
      go usuwa, tak jak `aa-remove`, potem instaluje zestaw tej karty). Przycisk 4 nigdy go nie zmienia (przy `unknown`
      zatrzymuje się z `FEATURES_NEED_ANDROID_AUTO_REPLACED_FIRST_PRESS_3`). `aa-remove` („AA remove”, też pierwszy krok `restore`)
      zapisuje tylko na instalacji pmcp i tylko gdy `gal` jest fabryczny albo `carplaymaps/aa/gal.real` ma fabryczny hash:
@@ -160,7 +166,7 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
      i/lub 4); pliki innego moda: nic nie jest zmieniane;
    - „3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)” → `aa-install` (`PMCP_AA_ON_OK mode=gamma`):
      nieobsługiwany zestaw AA najpierw jest usuwany (tylko z `gal.real` z fabrycznym hashem, inaczej zatrzymuje się
-     i niczego nie zmienia), znany jej zestaw z wcześniejszej karty eksperymentalnej (`AA_OLD`) jest aktualizowany na
+     i niczego nie zmienia), zestaw wcześniejszej karty (`old`, dowolna nasza wersja) jest aktualizowany na
      miejscu; zestaw tej karty, który już jest (także ten zainstalowany przez v1.5.0), daje `PMCP_AA_INSTALL_OK (already
      installed: ..., nothing changed)`. Gdy jednocześnie są nieobsługiwane pliki Android Auto i nieobsługiwane pliki
      prowadzenia / Javy, 3 zatrzymuje się z `AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3`: wtedy 4
@@ -181,6 +187,12 @@ z `MIB_V3.6.0.zip` (`22739f72…9121`); test sprawdza, że oryginalna treść je
    - „9. Delete saved logs: CarPlay and Android Auto (after the log card copied them)” (`log-clear`), jedyny przycisk
      kasowania: logi AA i CarPlay, nagrane wideo z telefonu, niedokończony plik przełącznika AA, `boot.log` i `boot.log.1`,
      starsza połowa `gem.log`; wybrane wyjście AA i wszystkie znaczniki instalacji zostają;
+   - „10. Reinstall: remove everything, then this card's versions of what was on” (A188): najpierw `reinstall-plan`
+     (tylko odczyt: układ mapy, system prowadzenia, te same paczki Javy, Android Auto i jego wyjście, jako linie
+     `PMCP_PLAN`), potem `restore`, potem każda zaplanowana akcja. Plan żyje w pamięci skryptu przycisku, więc przerwanie
+     zostawia pliki fabryczne albo kroki zrobione do tej pory (2, 3 i 4 obsługują oba stany). Tryb ograniczenia prędkości
+     jest tylko zgłaszany: wymaga potwierdzonego zestawu, więc ustawia się go ponownie po 5. Confirm. Na fabrycznym radiu
+     niczego nie zmienia (`REINSTALL_NOTHING_INSTALLED_USE_2_3_4`), a gdy `restore` odmawia, nic więcej się nie wykonuje;
    - podekran `pmcp_advanced` („Advanced” na ekranie, pod 9) z trzema podekranami:
      `features_advanced`: „0. Diagnostics (read-only, photograph the screen)” (działa nawet wtedy, gdy `pmcp.sh`
      zatrzyma się na self teście), „Start timeline: …”, „RG last maneuver: …” (co wysłał iPhone i jaką strzałkę VW daje

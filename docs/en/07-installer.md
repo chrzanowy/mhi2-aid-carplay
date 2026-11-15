@@ -8,7 +8,7 @@ manifest and the `pmcp.sh` template). The install card is assembled by `installe
 
 **Firmware profiles (since v1.7.1).** Everything the installer knows about the unit firmware is data in
 `profiles/<ID>/`: `profile.json` (train, MU, the pinned stock files, the `lsd.jxe`/`lsd.jar` hashes, the packages)
-and `history.json` (files of earlier cards that this installer still replaces). `install.sh` picks the profile from
+and `history.json` (renamed packages and the earlier iAP2 driver files this installer still replaces; earlier Java packages and AA sets need no list since A188). `install.sh` picks the profile from
 the backup's `version.txt` (train and MU must match exactly one profile; today only `MU1161`) and stops otherwise;
 `./install.sh --check-backup` only identifies the profile and checks the backup. `build_sd.py` takes it from
 `PMCP_PROFILE` (default `MU1161`). The MU1161 cards are byte-identical to v1.7.0 apart from the build id.
@@ -93,10 +93,14 @@ Safe area = x / y / width / height on the 800×480 stream:
      (`install` cleans it up).
    - `VIDEO` (stage A): wrapper active, stock `lsd.sh`, none of our JARs.
    - `JAVA` (stage B+): as `VIDEO`, plus the block in `lsd.sh` and a consistent JAR set (each with its manifest hash, `HMI_BOOT`
-     matching exactly). A set may also hold packages of an earlier card (`JAVA_OLD`: v1.2/v1.3 `rg` `717fb53c` and `rglu`
-     `72ab7221`, the experimental `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma`); then `java-on` and `java-off`
-     refuse (`JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST`) until `java-update` replaces them, and "Status" shows
-     "packages of an earlier card: …".
+     matching exactly). A set may also hold earlier versions of this card's packages (since A188 without any list of
+     hashes: the package name says which package, or `java_renamed` in `history.json` for rg's variants `rg-aa`, `rglu`,
+     `rglua`, `rgluasf`, `rgluasfa`, `rgluasfm`, `rgluasfma`; the JAR is a plain `pmcp-*.jar` with a file name other than
+     this card's). Then `java-on` and `java-off` refuse (`JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST`) until
+     `java-update` replaces them in place, and "Status" shows "packages of an earlier card: …". This card's JAR file names
+     carry their content (`pmcp-<package>-<sha8>.jar`), so new content always gets a new file name. Anything else in the
+     set (a name no package has, a JAR outside `pmcp-*.jar`, other content under this card's file name, a damaged JAR)
+     makes the Java part mixed (`PARTIAL`): 4 resets it with the verified factory files, then installs.
    - Route guidance system (`RGSYS`, shown by "Status"): `off`, `on`, `old` (on, but with the driver and/or reader of an
      earlier card, `RG_KNOWN`: v1.0-v1.3 driver `76926bde…`, Tomasz's reader `b683cef7…`; `rg-update` replaces them) or `unknown`.
    - `PARTIAL`: an interrupted action or files of a version this card does not support, stock copies intact. Allowed:
@@ -105,8 +109,9 @@ Safe area = x / y / width / height on the 800×480 stream:
      guidance or Java files: back to the verified factory files, then 4 installs).
    - `UNKNOWN`: anything else, e.g. another mod or a modified `lsd.sh`. **Everything is refused.**
    - Android Auto (`AASYS`, since v1.5.0, shown by "Status"): `off`, `on` (this card's set), `old` (a whole set of an
-     earlier experimental card, `AA_OLD`; main-screen button 3 / `aa-install` updates it in place) or `unknown` (a mix, an interrupted
-     action or an experimental card's set it does not know: the unit state is then `PARTIAL`; `aa-install` removes it first, as
+     earlier card, whatever its version: our wrapper, the verified factory `gal` copy, `libdmdt_flush.so` and a well-formed
+     `AA_BOOT`, since A188 without a list of hashes; main-screen button 3 / `aa-install` updates it in place) or `unknown`
+     (a malformed `AA_BOOT`, missing files, an interrupted removal: the unit state is then `PARTIAL`; `aa-install` removes it first, as
      `aa-remove` does, then installs this card's set). Button 4 never changes it (it stops with
      `FEATURES_NEED_ANDROID_AUTO_REPLACED_FIRST_PRESS_3` while it is `unknown`). `aa-remove` ("AA remove", also the first step of `restore`) writes only
      on a pmcp install and only when `gal` is factory or `carplaymaps/aa/gal.real` has the factory hash: the factory `gal`
@@ -163,7 +168,7 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
      another mod's files: nothing is changed;
    - "3. Install Android Auto: Google Maps on the AID + VW arrows (needs 2)" → `aa-install` (`PMCP_AA_ON_OK mode=gamma`):
      an unsupported AA set is removed first (`aa_off`, only from a `gal.real` with the factory hash, otherwise it stops and
-     changes nothing), an earlier experimental card's set it knows (`AA_OLD`) is updated in place; this card's set
+     changes nothing), an earlier card's set (`old`, any version of ours) is updated in place; this card's set
      already there (also the one v1.5.0 installed) answers `PMCP_AA_INSTALL_OK (already installed: ..., nothing
      changed)`. If unsupported Android Auto files and unsupported route guidance / Java files are present at the same
      time, 3 stops with `AA_INSTALL_NEEDS_THE_FEATURES_REPAIRED_FIRST_PRESS_4_THEN_3`: 4 then resets the Java files and
@@ -184,6 +189,12 @@ file on the card. Nothing changes on the unit. The base file is exactly `esd/Lau
    - "9. Delete saved logs: CarPlay and Android Auto (after the log card copied them)" (`log-clear`), the only delete
      button: the AA and CarPlay logs, the recorded phone video, a half-written AA switch file, `boot.log` and
      `boot.log.1`, the older half of `gem.log`; the chosen AA output and every install marker stay;
+   - "10. Reinstall: remove everything, then this card's versions of what was on" (A188): first `reinstall-plan`
+     (read-only: the map layout, the route guidance system, the same Java packages, Android Auto and its output, as
+     `PMCP_PLAN` lines), then `restore`, then each planned action. The plan lives in the button script's memory, so an
+     interruption leaves the factory files or the steps done so far (2, 3 and 4 handle both). A speed-limit mode is
+     only reported: it needs a confirmed set, so it is set again after 5. Confirm. On a factory unit it changes nothing
+     (`REINSTALL_NOTHING_INSTALLED_USE_2_3_4`), and when `restore` refuses, nothing else runs;
    - sub-screen `pmcp_advanced` ("Advanced" on the screen, below 9) with three sub-screens:
      `features_advanced`: "0. Diagnostics (read-only, photograph the screen)" (works even when `pmcp.sh` stops at its
      self test), "Start timeline: …", "RG last maneuver: …" (what the iPhone sent and which VW arrow the strict mapping

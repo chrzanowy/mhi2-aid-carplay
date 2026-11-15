@@ -63,7 +63,8 @@ CarPlay).
 - **Nothing on an SD card affects `gal`:** `hook/patch_no_sd.py` removes the hook's SD card and `/tmp` paths before the build.
 - The feeder reads only its settings keys from `feeder.conf`, never paths.
 - `AA remove` and "8. Remove everything" put the factory `gal` back, only from a copy with the factory hash.
-- AA sets of earlier experimental cards are recognised (`AA_OLD`): status `old`, main menu 3 brings them up to date without removing
+- AA sets of earlier cards are recognised whatever their version (our wrapper, the verified factory `gal` copy and a
+  well-formed `AA_BOOT`; no list of hashes since A188): status `old`, main menu 3 brings them up to date without removing
   anything first. A set it does not know (status `unknown`) is removed first, only from the factory `gal` copy with the
   factory hash, otherwise it stops and changes nothing.
 

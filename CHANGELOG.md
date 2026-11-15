@@ -5,6 +5,22 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (release-candidate)
 
+- **Earlier versions recognised by name, no lists (A188):** `pmcp.sh` recognises an earlier version of each of its
+  Java packages by the package name (rg's earlier variants through a short `java_renamed` table) and an earlier AA set by
+  our wrapper, the verified factory `gal` copy and a well-formed `AA_BOOT`. The hash lists of earlier JARs and AA sets
+  (`JAVA_OLD`, `AA_OLD`) are gone from `history.json` and the card; main menu 3 and 4 update any earlier version of ours
+  in place, and anything that is not ours (a name no package has, a JAR outside `pmcp-*.jar`, other content under this
+  card's file name) is still reset with the verified factory files. The iAP2 driver list (`rg_known`, factory file
+  location) stays.
+- **JAR file names carry their content:** this card's JARs are `pmcp-<package>-<sha8>.jar` (`NavActiveIgnore.jar` stays),
+  so new content always gets a new file name; the build refuses any other name. Main menu 4 moves an installed set to
+  these names once (one trial start), keeping the packages, `sl` and its mode.
+- **"10. Reinstall" on the main screen:** remove everything, then this card's versions of what was on (map layout, route
+  guidance system, the same Java packages, Android Auto and its output). The plan is read before anything changes; a
+  speed-limit mode is set again after "5. Confirm".
+- **Tests: update tests only from the last two releases (v1.6.0, v1.7.1).** Every other earlier version is made from this
+  card in the test (`old_java`, synthetic AA sets, `fx:java-old` in the power-loss chains), so no earlier experimental
+  card is needed. About half the installer test runs.
 - **Android Auto hook: review fixes (no visible change):** the route guidance part of the hook now writes its files
   (`latest.bin`, the raw navigation dump, the status) with its lock released, so gal's message thread never waits for a
   file; a raw-dump line no longer rewrites `latest.bin`; repeated 0x8006 messages are recognised over the whole message,

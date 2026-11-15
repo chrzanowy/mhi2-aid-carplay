@@ -115,7 +115,7 @@ PAYLOAD_BY_PROFILE["MU1161"] = {
     # track event log /ramdisk/pmcp-aa-np.log (lengths and flags only; aa-log-save copies it). Own file name
     # pmcp-np3.jar: v1.x's pmcp-np.jar (6b638868) and v1.7.x's pmcp-np2.jar (1f3b0dc0) keep their one content (JAVA_OLD)
     "JAR_np": (PROJ / "build/np-mu1161-aa12/pmcp-np.jar",
-               "ab2b27e8fbe695c0212a02802e89a158bbf4853c3b87358facb1ad4d6e8ece53", 26579, "jars/pmcp-np3.jar"),
+               "ab2b27e8fbe695c0212a02802e89a158bbf4853c3b87358facb1ad4d6e8ece53", 26579, "jars/pmcp-np-ab2b27e8.jar"),
     # rg/build.sh <lsd> <dir> lanes-uturn-asf-m-aa-r (RC's rg 70f714fb = v1.6.0's rg 4e32e7f7 plus rg/lanes/v146.py,
     # tomasz-twardzicki MU1367 v1.4.5/v1.4.6) + com.pmcp.kv.KombiView (A166: which view the AID shows,
     # /ramdisk/pmcp-kombi-view.log) + rg/lanes/aa11.py (AA 1.1, A171: AA road name, lanes, destination only while the AID
@@ -123,21 +123,21 @@ PAYLOAD_BY_PROFILE["MU1161"] = {
     # (RC test cards) and pmcp-guidance6.jar (experimental card b542b2d4) are in JAVA_OLD. The same file as experimental card
     # 9c0c4493 (tested in the car 2026-11-12, A174).
     "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11/pmcp-rg.jar",
-               "308714b29b1e7350f98771e78e34abd776cdb710123b2e9beb5c135bd3a8c04b", 64481, "jars/pmcp-guidance7.jar"),
+               "308714b29b1e7350f98771e78e34abd776cdb710123b2e9beb5c135bd3a8c04b", 64481, "jars/pmcp-rg-308714b2.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
-                 "046f48210dbee3177fbaa2a25f69154b56055f59b074fced1a0202700dd78d7b", 4740, "jars/pmcp-zoom.jar"),
+                 "046f48210dbee3177fbaa2a25f69154b56055f59b074fced1a0202700dd78d7b", 4740, "jars/pmcp-zoom-046f4821.jar"),
     "JAR_dn": (PROJ / "build/extras-mu1161-v2/pmcp-dn.jar",
-               "aabe871e87510177a333f1a76d69015f8bdeb994fba4ad1251e1b7f2b5afbd70", 11421, "jars/pmcp-dn.jar"),
+               "aabe871e87510177a333f1a76d69015f8bdeb994fba4ad1251e1b7f2b5afbd70", 11421, "jars/pmcp-dn-aabe871e.jar"),
     # Optional native-map limit reader, output is enabled separately after confirming the Java set.
     # (amjad-alarori's PR #3; since v1.4.1 without TurnToInfo, which rg owns: rg asks sl for the prefix by name). File
     # pmcp-sl2.jar: the PR's own card used pmcp-sl.jar for its sl with TurnToInfo (a unit with that set: Remove
     # everything first; its hashes are not known here, so it is not in JAVA_OLD)
     "JAR_sl": (PROJ / "build/sl-mu1161/pmcp-sl.jar",
-               "37b5d9488b818e4a4de58dc9541b6618de364e5a46d81439c1f3206762e5249f", 16527, "jars/pmcp-sl2.jar"),
+               "37b5d9488b818e4a4de58dc9541b6618de364e5a46d81439c1f3206762e5249f", 16527, "jars/pmcp-sl-37b5d948.jar"),
     # Optional settings page (ui/build.sh): the factory AbstractViewHandler with five guarded hooks + com.pmcp.ui. Its
     # speed-limit row writes the same mode file as speedlimit-mode, under the same lock and rules.
     "JAR_ui": (PROJ / "build/ui-mu1161/pmcp-ui.jar",
-               "5fea8d94bdb45b6556e3a7eec660326a88aa485b4539408f75796e4d814bc395", 29485, "jars/pmcp-ui2.jar"),
+               "5fea8d94bdb45b6556e3a7eec660326a88aa485b4539408f75796e4d814bc395", 29485, "jars/pmcp-ui-5fea8d94.jar"),
     # Tomasz's driver patch + our log gate: his RGI receive log only with /dev/shmem/pmcp-rgi-debug (rg/driver/)
     "RG_DRIVER": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11/ipod-drvr-iap2-gated.so",
                   "519ea3c5ba08427ea20d62817747af390ac7256bad447da5fcfda388d10b9ed3", 743272, "rg/ipod-drvr-iap2.so"),
@@ -169,18 +169,14 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
 # Experimental AA set (AAX_FEEDER: an experimental feeder next to the stable one, pmcp.sh aa-on-exp, set id
 # gamma-<hook>-<that feeder>-<hook settings>): none since AA 1.0, whose stable set has the v13/v14 feeder. pmcp.sh keeps
 # the mechanism for the next experimental feeder: add the key here again (experimental builds only, own feeder file).
-# AA sets of earlier (experimental) cards: whole tuples of (sha256, sha1, size) for hook, feeder, hook settings, feeder
-# settings, as they were on that card. pmcp.sh aa_state reports them as "old" with that card's AA_BOOT; aa-install (main menu 3) and aa-on
-# brings them up to date. Only the hashes go to the card, so no earlier build is needed here.
-# (profiles/<ID>/history.json, "aa_old": mode + the 4 files as [sha256, sha1, size], with a "note" per set)
-AA_OLD = [(e["mode"], [tuple(f) for f in e["files"]]) for e in HIST["aa_old"]]
+# Earlier cards' Java packages and AA sets need no list (A188): pmcp.sh recognises an earlier version of one of this
+# card's packages by its name (java_parts) and an earlier AA set by our wrapper, the verified factory gal copy and a
+# well-formed AA_BOOT (aa_state "old"). Only renamed packages are listed, by name: history.json "java_renamed".
+JAVA_RENAMED = sorted(HIST["java_renamed"].items())
 
 # Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): (kind, sha256, sha1, size), only their
 # hashes go to the card, so no earlier build is needed here. List and notes: history.json "rg_known".
 RG_KNOWN = [(e["kind"], e["sha256"], e["sha1"], e["size"]) for e in HIST["rg_known"]]
-# Java packages of earlier cards that java-update replaces (pmcp.sh JAVA_OLD): (name, sha256, sha1, size, jar file on the
-# unit, successor); only their hashes go to the card. List and notes: history.json "java_old".
-JAVA_OLD = [tuple(e[k] for k in fwprofile.JAVA_OLD_KEYS) for e in HIST["java_old"]]
 if PROFILE_ID not in PAYLOAD_BY_PROFILE:
     sys.exit("no PAYLOAD pins for profile %s in build_sd.py (PAYLOAD_BY_PROFILE)" % PROFILE_ID)
 PAYLOAD = {k: v for k, v in PAYLOAD_BY_PROFILE[PROFILE_ID].items()
@@ -428,6 +424,63 @@ trap 2
 exit 0
 """
 
+# Main menu 10 "Reinstall" (A188, user 2026-11-15): remove everything (8), then put back this card's versions of what was
+# on: the map layout, the route guidance system, the same Java packages, Android Auto with its output. The plan is read
+# (read-only) before restore and kept in this script's memory. Each step is one pmcp.sh action, so an interruption leaves
+# the unit factory or with the steps done so far, both states 2, 3 and 4 handle.
+REINSTALL = "reinstall"
+REINSTALL_SCRIPT = """#!/bin/ksh
+# pmcp GEM button: %(label)s (generated by build_sd.py)
+if [ -f /net/rcc/dev/shmem/backup.mib ] || [ -f /net/rcc/dev/shmem/reboot.mib ] || [ -f /net/rcc/dev/shmem/flash.mib ]; then
+    echo "M.I.B. is busy with another task, try again later."
+    exit 0
+fi
+trap '' 2
+echo "pmcp: %(label)s"
+echo "Do not press Back and do not remove the SD card until PMCP_REINSTALL_OK or PMCP_FAIL is shown."
+PMCP=/net/mmx/fs/sda0/pmcp/pmcp.sh
+PLAN=`/bin/ksh $PMCP reinstall-plan %(variant)s 2>&1`
+echo "$PLAN" | while read L; do case "$L" in PMCP_PLAN*|PMCP_NOTE*|PMCP_FAIL*) echo "$L" ;; esac; done
+case "$PLAN" in
+    *PMCP_REINSTALL_PLAN_OK*) ;;
+    *) echo "PMCP_FAIL=REINSTALL_NO_PLAN (nothing was changed)"; trap 2; exit 0 ;;
+esac
+echo "- restore"
+OUT=`/bin/ksh $PMCP restore 2>&1`
+echo "$OUT" | while read L; do case "$L" in PMCP_WARN*) ;; PMCP_*) echo "  $L" ;; esac; done
+case "$OUT" in
+    *PMCP_RESTORE_OK*) ;;
+    *) echo "PMCP_FAIL=REINSTALL_STOPPED_AT_restore"
+       echo "Remove everything did not finish: take a photo, then 7. Status and 8. Remove everything."
+       trap 2; exit 0 ;;
+esac
+STEPS=`echo "$PLAN" | sed -n 's/^PMCP_PLAN //p'`
+STOP=0
+while read A B; do
+    [ -n "$A" ] || continue
+    echo "- $A $B"
+    OUT=`/bin/ksh $PMCP $A $B 2>&1`
+    echo "$OUT" | while read L; do case "$L" in PMCP_WARN*) ;; PMCP_*) echo "  $L" ;; esac; done
+    case "$OUT" in
+        *PMCP_FAIL=*_ALREADY_*) echo "  (already on)" ;;
+        *PMCP_FAIL*) echo "PMCP_FAIL=REINSTALL_STOPPED_AT_${A}_$B"
+                     echo "The unit has the factory files plus the steps before this one. Take a photo; then 2, 3 or 4."
+                     STOP=1; break ;;
+        *PMCP_*_OK*) ;;
+        *) echo "PMCP_FAIL=REINSTALL_NO_RESULT_FROM_${A}_$B"; STOP=1; break ;;
+    esac
+done <<EOF
+$STEPS
+EOF
+[ $STOP = 0 ] || { trap 2; exit 0; }
+echo "PMCP_REINSTALL_OK"
+echo "Restart the unit (hold the volume knob ~10 s). That first start is a TRIAL."
+echo "If everything works: open this menu again and press 5. Confirm, in that same start."
+echo "A speed-limit mode (if one was on) is set again after the Confirm."
+trap 2
+exit 0
+"""
+
 
 def menu_entries():
     # (file name, pmcp arguments, GEM label). ASCII only: GEM fonts and the esd parser are not tested with other letters.
@@ -442,7 +495,9 @@ def menu_entries():
            ("status", "status", "7. Status (read-only)"),
            ("restore", "restore", "8. Remove everything (back to factory files)"),
            # the one button that deletes what pmcp saved for the log card, CarPlay and Android Auto alike (user, 2026-11-13)
-           ("log-clear", "log-clear", "9. Delete saved logs: CarPlay and Android Auto (after the log card copied them)")]
+           ("log-clear", "log-clear", "9. Delete saved logs: CarPlay and Android Auto (after the log card copied them)"),
+           # A188 (user 2026-11-15): one button for "start again" instead of updating an install this card does not know
+           ("reinstall", REINSTALL, "10. Reinstall: remove everything, then this card's versions of what was on")]
     feat = [("diag", None, "0. Diagnostics (read-only, photograph the screen)"),
             ("timeline", TIMELINE, "Start timeline: seconds from unit start to CarPlay, MOST, navigation (read-only)"),
             ("rglast", RGLAST, "RG last maneuver: what the iPhone sent and which VW arrow it gives (read-only)"),
@@ -501,6 +556,8 @@ def menu_script(args, label):
         return NAVDIAG_SCRIPT
     if args is RGLAST:
         return RGLAST_SCRIPT
+    if args is REINSTALL:
+        return REINSTALL_SCRIPT % dict(label=label, variant=START_VARIANT)
     if args is FEATURES:
         return FEATURES_SCRIPT % dict(label=label, actions=" ".join(a if "_" in a else a + "_" for a in args), note=FEATURES_NOTE)
     return MENU_SCRIPT % dict(label=label, args=args)
@@ -572,17 +629,20 @@ def main():
                         owner[n] = key
     if {k for k in PAYLOAD if k.startswith("JAR_")} != {"JAR_" + n for n, _ in JAVA_PACKAGES}:
         sys.exit("JAVA_PACKAGES and JAR_* payload entries differ")
-    # java-update relies on new file names: an earlier card's JAR file is never overwritten while its set is active
-    ours = {rel.rsplit("/", 1)[-1] for k, (src, h, size, rel) in PAYLOAD.items() if k.startswith("JAR_")}
-    cur = {(k[4:], h[:8]) for k, (src, h, size, rel) in PAYLOAD.items() if k.startswith("JAR_")}
-    olds = [(name, h[:8]) for name, h, h1, size, jar, succ in JAVA_OLD]
-    if len(set(olds)) != len(olds) or set(olds) & cur or len({o[4] for o in JAVA_OLD}) != len(JAVA_OLD):
-        sys.exit("JAVA_OLD: a (name, sha8) twice or equal to this card's package, or a JAR file name twice")
-    for name, h, h1, size, jar, succ in JAVA_OLD:
-        if len(h1) != 40 or len(h) != 64:
-            sys.exit("JAVA_OLD entry %s: bad hash length" % name)
-        if jar in ours or not jar.startswith("pmcp-") or ("JAR_" + succ) not in PAYLOAD:
-            sys.exit("JAVA_OLD entry %s: file %s reused, outside pmcp-*.jar (rescue card) or no successor" % (name, jar))
+    # java-update relies on new file names: an earlier card's JAR file is never overwritten while its set is active.
+    # A188: the file name carries the content (pmcp-<package>-<sha8>.jar), so new content always gets a new name and no
+    # list of earlier names is needed. NavActiveIgnore.jar keeps its stock-mod name; its content may not change under it.
+    for k, (src, h, size, rel) in PAYLOAD.items():
+        if not k.startswith("JAR_"):
+            continue
+        want = "jars/NavActiveIgnore.jar" if k == "JAR_nai" else "jars/pmcp-%s-%s.jar" % (k[4:], h[:8])
+        if rel != want:
+            sys.exit("%s: the unit file must be %s (got %s)" % (k, want, rel))
+        if k == "JAR_nai" and h[:8] != "dbd031ec":
+            sys.exit("JAR_nai: new content needs a new file name (NavActiveIgnore.jar is dbd031ec on every earlier card)")
+    for old, new in JAVA_RENAMED:
+        if ("JAR_" + new) not in PAYLOAD or ("JAR_" + old) in PAYLOAD or not old.replace("-", "").isalnum():
+            sys.exit("java_renamed %s -> %s: the new name must be a package of this card, the old one not" % (old, new))
 
     lsd_patched = patch_lsd(stock["LSD"])
     (pm / "payload/lsd/lsd.sh").parent.mkdir(parents=True, exist_ok=True)
@@ -606,32 +666,7 @@ def main():
     for kind, h, h1, size in RG_KNOWN:
         pairs[h] = h1
         known.append("%s %s %d" % (kind, h, size))
-    old = []
-    for name, h, h1, size, jar, succ in JAVA_OLD:
-        pairs[h] = h1
-        old.append("%s %s %d %s %s" % (name, h, size, jar, succ))
-    aa_old = []
-    cur_aa = [PAYLOAD[k][1:3] for k in ("AA_HOOK", "AA_FEEDER", "AA_HOOK_CONF", "AA_MODE")] if HAS_AA else []
-    for mode, files in AA_OLD:
-        hs = []
-        for h, h1, size in files:
-            pairs[h] = h1
-            hs.append("%s %d" % (h, size))
-        assert [(f[0], f[2]) for f in files] != cur_aa, "AA_OLD tuple equals this card's AA set"
-        if "AAX_FEEDER" in PAYLOAD:
-            assert [(f[0], f[2]) for f in files] != [cur_aa[0], PAYLOAD["AAX_FEEDER"][1:3]] + cur_aa[2:], \
-                "AA_OLD tuple equals this card's experimental AA set"
-        # the set id (mode + hook, feeder, hook settings) does not cover feeder.conf: pmcp.sh aa-on drops the markers of
-        # such a set, so its confirmation does not carry over to this card's settings (card 030b7df2: same id, 2 Mbit/s)
-        if mode == "gamma" and [f[0][:8] for f in files[:3]] == [c[0][:8] for c in cur_aa[:3]]:
-            print("WARNING: AA_OLD set %s (feeder.conf %s) has this card's AA set id: AA 1 removes its confirmation, the "
-                  "next AA connection is a trial" % ("-".join([mode] + [f[0][:8] for f in files[:3]]), files[3][0][:8]))
-        if "AAX_FEEDER" in PAYLOAD and mode == "gamma" and \
-                [f[0][:8] for f in files[:3]] == [cur_aa[0][0][:8], PAYLOAD["AAX_FEEDER"][1][:8], cur_aa[2][0][:8]]:
-            print("WARNING: AA_OLD set %s (feeder.conf %s) has this card's EXPERIMENTAL AA set id: aa-on-exp removes its "
-                  "confirmation, the next AA connection is a trial" % ("-".join([mode] + [f[0][:8] for f in files[:3]]),
-                                                                       files[3][0][:8]))
-        aa_old.append(mode + " " + " ".join(hs))
+    renamed = "\n".join("%s %s" % kv for kv in JAVA_RENAMED)
     for key, h, size, rel in rows:
         data = (pm / "payload" / rel).read_bytes()
         assert sha(data) == h and len(data) == size, key
@@ -641,8 +676,7 @@ def main():
     menus = menu_entries()
     menu_text = esd_block("@@VERSION@@", *menus) + "".join(n + "\n" + menu_script(a, l) for scr in menus for n, a, l in scr)
     global PMCP_VERSION
-    PMCP_VERSION = PMCP_BASE_VERSION + "-" + sha((manifest + "\n" + "\n".join(known) + "\n" + "\n".join(old) + "\n"
-                                                   + "\n".join(aa_old) + "\n"
+    PMCP_VERSION = PMCP_BASE_VERSION + "-" + sha((manifest + "\n" + "\n".join(known) + "\n" + renamed + "\n"
                                                    + (HERE / "template/pmcp.sh.in").read_text() + menu_text).encode())[:8]
     tpl = render_template((HERE / "template/pmcp.sh.in").read_text())
     # @@UNSUP_PKGS@@ only lives in the UNSUP block, which render_template keeps only for a profile with unsupported packages
@@ -650,7 +684,7 @@ def main():
     for k, v in {**unsup_values,
         "@@PMCP_VERSION@@": PMCP_VERSION, "@@MANIFEST@@": manifest,
         "@@SELFTEST_SHA@@": sha(selftest), "@@SELFTEST_SIZE@@": str(len(selftest)),
-        "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_OLD@@": "\n".join(old), "@@AA_OLD@@": "\n".join(aa_old),
+        "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_RENAMED@@": renamed,
         "@@STOCK_JXE_SIZE@@": str(FW["lsd_jxe"]["size"]), "@@PROFILE_ID@@": FW["id"], "@@PROFILE_CLUSTER@@": FW["cluster"],
         "@@STOCK_GAL_SHA@@": STOCK["GAL"][1], "@@STOCK_GAL_SIZE@@": str(STOCK["GAL"][2]),
         "@@STOCK_LSD_SHA@@": STOCK["LSD"][1], "@@STOCK_LSD_SIZE@@": str(STOCK["LSD"][2]),

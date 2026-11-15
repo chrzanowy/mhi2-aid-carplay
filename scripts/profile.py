@@ -141,8 +141,7 @@ def validate(p, pid):
 
 
 HEX40 = re.compile(r"^[0-9a-f]{40}\Z")
-HISTORY_KEYS = {"schema", "aa_old_note", "aa_old", "rg_known_note", "rg_known", "java_old_note", "java_old"}
-JAVA_OLD_KEYS = ("name", "sha256", "sha1", "size", "jar", "successor")
+HISTORY_KEYS = {"schema", "java_renamed_note", "java_renamed", "rg_known_note", "rg_known"}
 
 
 def _hist_hashes(h, h1, size, what):
@@ -153,43 +152,31 @@ def _hist_hashes(h, h1, size, what):
 
 
 def validate_history(h, pid):
-    """history.json = what older cards of this profile left on a unit (aa_old, rg_known, java_old); only hashes."""
+    """history.json = what older cards of this profile left on a unit that this card must still recognise: renamed
+    Java packages (by name) and the earlier pmcp route guidance files that replaced factory files (rg_known, hashes).
+    Earlier Java packages and AA sets need no list since A188 (pmcp.sh recognises them by name / our wrapper)."""
     if not isinstance(h, dict) or set(h) != HISTORY_KEYS:
         fail("%s history: keys differ from the schema %s" % (pid, sorted(HISTORY_KEYS)))
-    if h["schema"] != 1:
+    if h["schema"] != 2:
         fail("%s history: schema %r" % (pid, h["schema"]))
-    for k in ("aa_old_note", "rg_known_note", "java_old_note"):
+    for k in ("java_renamed_note", "rg_known_note"):
         if not isinstance(h[k], str):
             fail("%s history: %s is not a string" % (pid, k))
-    for k in ("aa_old", "rg_known", "java_old"):
-        if not isinstance(h[k], list) or not all(isinstance(e, dict) for e in h[k]):
-            fail("%s history: %s is not a list of objects" % (pid, k))
-    for e in h["aa_old"]:
-        if set(e) - {"note"} != {"mode", "files"} or not isinstance(e["mode"], str) or not isinstance(e["files"], list) \
-                or len(e["files"]) != 4 or not all(isinstance(f, list) and len(f) == 3 for f in e["files"]):
-            fail("%s history: aa_old entry needs mode and 4 files [sha256, sha1, size]: %r" % (pid, e))
-        for f in e["files"]:
-            _hist_hashes(f[0], f[1], f[2], pid + " history aa_old")
+    if not isinstance(h["java_renamed"], dict):
+        fail("%s history: java_renamed is not an object" % pid)
+    for old, new in h["java_renamed"].items():
+        if not re.match(r"^[a-z0-9-]+\Z", old) or new not in PACKAGES or old in PACKAGES:
+            fail("%s history: java_renamed %r -> %r (old: a name no package has, new: a package)" % (pid, old, new))
+    if not isinstance(h["rg_known"], list) or not all(isinstance(e, dict) for e in h["rg_known"]):
+        fail("%s history: rg_known is not a list of objects" % pid)
     for e in h["rg_known"]:
         if set(e) - {"note"} != {"kind", "sha256", "sha1", "size"} or e["kind"] not in ("DRIVER", "READER"):
             fail("%s history: rg_known entry needs kind DRIVER|READER, sha256, sha1, size: %r" % (pid, e))
         _hist_hashes(e["sha256"], e["sha1"], e["size"], pid + " history rg_known")
-    for e in h["java_old"]:
-        if set(e) - {"note"} != set(JAVA_OLD_KEYS) or not all(isinstance(e[k], str) for k in ("name", "jar", "successor")):
-            fail("%s history: java_old entry needs %s: %r" % (pid, ", ".join(JAVA_OLD_KEYS), e))
-        _hist_hashes(e["sha256"], e["sha1"], e["size"], pid + " history java_old")
-        if not re.match(r"^[a-z0-9-]+\Z", e["name"]) or e["successor"] not in PACKAGES \
-                or not re.match(r"^[A-Za-z0-9_.-]+\.jar\Z", e["jar"]):
-            fail("%s history: java_old name/jar/successor: %r" % (pid, e))
-    for e in h["aa_old"]:
-        if not re.match(r"^[a-z0-9]+\Z", e["mode"]):
-            fail("%s history: aa_old mode %r" % (pid, e["mode"]))
-    for k in ("aa_old", "rg_known", "java_old"):
-        for e in h[k]:
-            if "note" in e and not isinstance(e["note"], str):
-                fail("%s history: %s note is not a string" % (pid, k))
-        _unique([json.dumps({x: y for x, y in e.items() if x != "note"}, sort_keys=True) for e in h[k]],
-                "%s history %s" % (pid, k))
+        if "note" in e and not isinstance(e["note"], str):
+            fail("%s history: rg_known note is not a string" % pid)
+    _unique([json.dumps({x: y for x, y in e.items() if x != "note"}, sort_keys=True) for e in h["rg_known"]],
+            "%s history rg_known" % pid)
     return h
 
 
