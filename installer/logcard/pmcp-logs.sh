@@ -27,6 +27,12 @@ PERSIST="$N/mnt/persist/pmcp"
 [ -n "${PMCP_LOGCARD_TEST_ROOT:-}" ] || mount -uw "$MED" 2>/dev/null
 mkdir -p "$OUT" 2>/dev/null
 RES="$OUT/PMCP_LOGS_RESULT.txt"
+# flush: the card and the unit's files sit on MMX (/net/mmx...), and update mode runs this script on RCC, which has no
+# sync (car 2026-11-16, WL session): sync on MMX first; the local sync only as the fallback (and in the host tests)
+flush() {
+    if [ -z "${PMCP_LOGCARD_TEST_ROOT:-}" ]; then on -f mmx sync >/dev/null 2>&1 && return 0; fi
+    sync >/dev/null 2>&1
+}
 
 log() { echo "$*" >> "$RES" 2>/dev/null; }
 
@@ -84,7 +90,7 @@ done
 [ -f "$PERSIST/aa-stream.h264" ] && copy_one "$PERSIST/aa-stream.h264" aa-stream.h264
 [ -f "$PERSIST/aa-stream.h264.idx" ] && copy_one "$PERSIST/aa-stream.h264.idx" aa-stream.h264.idx
 log "markers in /mnt/persist/pmcp: `ls "$PERSIST" 2>&1`"
-sync 2>/dev/null
+flush
 if [ $FAILED -gt 0 ]; then
     log "RESULT=FAILED copied=$COPIED failed=$FAILED aa_logs=$AA cp_logs=$CP"
 elif [ $((AA + CP)) -eq 0 ]; then
@@ -93,5 +99,5 @@ else
     log "RESULT=OK copied=$COPIED aa_logs=$AA cp_logs=$CP"
 fi
 log "=== PMCP LOGS end"
-sync 2>/dev/null
+flush
 exit 0

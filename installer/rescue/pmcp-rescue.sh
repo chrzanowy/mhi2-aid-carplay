@@ -54,13 +54,19 @@ FACTORY_CFG_SIZE=5951
 OUR_CFG_SIZE=6079
 
 log() { echo "$*" >> "$RAM" 2>/dev/null; }
+# flush: the card and the unit's files sit on MMX (/net/mmx...), and update mode runs this script on RCC, which has no
+# sync (car 2026-11-16, WL session): sync on MMX first; the local sync only as the fallback (and in the host tests)
+flush() {
+    if [ -z "${PMCP_RESCUE_TEST_ROOT:-}" ]; then on -f mmx sync >/dev/null 2>&1 && return 0; fi
+    sync >/dev/null 2>&1
+}
 
 save_log() {
     if [ ! -s "$RAM" ]; then rm -f "$RAM" 2>/dev/null; return 0; fi
     [ -n "${PMCP_RESCUE_TEST_ROOT:-}" ] || mount -uw "$MED" 2>/dev/null
     if cat "$RAM" >> "$LOGFILE" 2>/dev/null; then
         rm -f "$RAM" 2>/dev/null
-        sync 2>/dev/null
+        flush
     fi
     return 0
 }
@@ -134,7 +140,7 @@ attempt() {
     fi
     rm -f "$JARS/NavActiveIgnore.jar" 2>/dev/null
     for j in "$JARS"/pmcp-*.jar; do [ -e "$j" ] && rm -f "$j" 2>/dev/null; done
-    sync 2>/dev/null
+    flush
 }
 
 # Done when MMX is reachable and the HMI start is factory as far as we are concerned.
@@ -152,7 +158,7 @@ done_ok() {
 log "=== PMCP RESCUE start ==="
 log "`date 2>&1`"
 log "medium=$MED hw=$1"
-for t in rm cp mv cat mount ls sync sleep mkdir touch chmod; do log "`type "$t" 2>&1`"; done
+for t in rm cp mv cat mount ls sync on sleep mkdir touch chmod; do log "`type "$t" 2>&1`"; done
 [ -n "${PMCP_RESCUE_TEST_ROOT:-}" ] || mount -uw "$MED" 2>/dev/null
 log "--- BEFORE:"
 state

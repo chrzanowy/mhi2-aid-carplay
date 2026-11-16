@@ -22,8 +22,19 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
   of this start with `boot_ms`/`up_ms`: MOST open, error and reclaim, latency reset with the queue size, IDR request
   and resume, frame gaps of 250 ms and more, owner cut, exit. "CP save log" and "Bridge status" include it. The
   consumer status reports the full QNX pid (MOST contract v1.2).
+- **One MOST output code for CarPlay and Android Auto (pmcp-most stage 2, binary 175eee71):** the experimental cards'
+  pmcp-most is now `bridge/src/pmcp_most_lib.c`. It reads the same AltScreen ring, contract and event files as stage 1c,
+  and builds the TS and writes isoTX2 with Android Auto's MOST library (`aa/most` ts_mux + most_writer, used as it is).
+  Over 2048 queued packets or after a gap in the phone's frame chain, no frame is queued until the next keyframe and
+  the backlog drains (nothing is cut). The PTS is set when the frame's first packet is built. The ENOMEM reclaim after
+  boot works as before. While Android Auto holds the MOST channel (its guardian's pid file), the bridge does not open
+  it and exits; the event file gets `most-busy`. The Android Auto feeder is unchanged.
 
 ## Unreleased (release-candidate)
+
+- **Rescue card and log card flush the files on MMX:** both run in update mode on the RCC node, which has no `sync`
+  (found in the car on 2026-11-16). They now run `on -f mmx sync`, falling back to a local `sync`. The card and the
+  unit's files both live on MMX.
 
 - **Earlier versions recognised by name, no lists (A188):** `pmcp.sh` recognises an earlier version of each of its
   Java packages by the package name (rg's earlier variants through a short `java_renamed` table) and an earlier AA set by

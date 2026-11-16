@@ -647,6 +647,16 @@ PY
     rm -f "$B/persist/pmcp/DISABLED"
 
     echo "[16] rescue card script (pmcp-rescue.sh) against the fake unit"
+    # update mode runs the rescue and log card scripts on RCC, which has no sync (car 2026-11-16): every flush goes through
+    # flush(), which runs sync on MMX first (on -f mmx); the host runs below only reach its local fallback
+    _us=0
+    for _uf in "$PROJ/installer/rescue/pmcp-rescue.sh" "$PROJ/installer/logcard/pmcp-logs.sh"; do
+        grep -q '^    if \[ -z "${PMCP_[A-Z]*_TEST_ROOT:-}" \]; then on -f mmx sync >/dev/null 2>&1 && return 0; fi$' "$_uf" || { bad "flush() without on -f mmx sync: $(basename "$_uf")"; _us=1; }
+        _ub=$(grep -n 'sync' "$_uf" | grep -v '^[0-9]*: *#' | grep -v 'on -f mmx sync >/dev/null 2>&1 && return 0' \
+            | grep -v '^[0-9]*:    sync >/dev/null 2>&1$' | grep -v 'for t in .* sync ')
+        [ -z "$_ub" ] || { bad "bare sync in $(basename "$_uf"): $_ub"; _us=1; }
+    done
+    [ $_us = 0 ] && ok "update-mode scripts (rescue, log card): sync only through flush(), on MMX first (RCC has no sync)"
     RS="${PMCP_RESCUE_SD:-$SDB/../sd-rescue-v3}/pmcp-rescue/pmcp-rescue.sh"
     rescue() { # rescue -> runs the rescue as stuff.sh would, then the log step; medium = $W/med
         rm -rf "$W/rr" "$W/med"; mkdir -p "$W/rr/net/rcc/dev/shmem" "$W/med"; ln -s "$W/unit" "$W/rr/net/mmx"
