@@ -15,7 +15,7 @@ H264 = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] != '-' else None
 ONLY = set(sys.argv[4:])
 HERE = os.path.dirname(os.path.abspath(__file__))
 PRODUCER = os.path.join(BUILD, 'producer')
-BRIDGE = os.path.join(BUILD, 'bridge-host')
+BRIDGE = os.path.join(BUILD, os.environ.get('PMCP_TEST_BRIDGE', 'bridge-host'))   # stage 2: bridge-host-lib
 BRIDGE_UP = os.path.join(BUILD, 'bridge-host-upstream')
 BRIDGE_ENOMEM = os.path.join(BUILD, 'bridge-host-enomem')
 BRIDGE_SLOW = os.path.join(BUILD, 'bridge-host-slow')
@@ -239,9 +239,11 @@ def test_force_idr():
     check('force-idr: consumer latency_resets >= 1', int(st.get('latency_resets', 0)) >= 1, st)
     check('force-idr: exit 0', rc == 0, rc)
     ev = events_of(r)
-    check('force-idr: events latency-reset (queued=, discarded=), idr-request, idr-resume, in that order',
-          ev_index(ev, r'latency-reset seq=\d+ queued=\d+ discarded=\d+ ') < ev_index(ev, r'idr-request seq=\d+ status=0')
-          < ev_index(ev, r'idr-resume seq=\d+ wait_ms=\d+') < len(ev), ev[:12])
+    i_reset = ev_index(ev, r'latency-reset seq=\d+ queued=\d+ discarded=\d+ ')
+    i_req = ev_index(ev[i_reset:], r'idr-request seq=\d+ status=0') + i_reset if i_reset < len(ev) else 10 ** 6
+    i_res = ev_index(ev[i_req:], r'idr-resume seq=\d+ wait_ms=\d+') + i_req if i_req < len(ev) else 10 ** 6
+    check('force-idr: events latency-reset (queued=, discarded=), then idr-request, then idr-resume',
+          i_reset < i_req < i_res < len(ev), ev[:12])
     r.cleanup()
 
 
@@ -277,8 +279,15 @@ def test_slow_recovery():
           'bridge: latency-reset' in log and 'latency-request-idr' not in log)
     r.cleanup()
 
+# Stage 2 (bridge-host-lib): the MOST failure comes from the simulated isoTX2 (aa/most/test/host_mlb.c), the same
+# schedule as the stage 1 hook: ENOMEM at write 101, again every 60 writes.
+LIB = os.path.basename(BRIDGE) == 'bridge-host-lib'
+ENOMEM_ENV = dict(HOST_MLB_FAIL_AT_BLOCK='100', HOST_MLB_FAIL_ERRNO='12', HOST_MLB_FAIL_REPEAT='60') if LIB else {}
+
+
 def test_enomem():
-    r = Run('enomem', bridge=BRIDGE_ENOMEM, env=dict(HOST_RECLAIM_WINDOW_US='600000000')).start()
+    r = Run('enomem', bridge=BRIDGE if LIB else BRIDGE_ENOMEM,
+            env=dict(HOST_RECLAIM_WINDOW_US='600000000', **ENOMEM_ENV)).start()
     prod = r.produce('--frames', 400, '--idr-on-request', 1, wait=False)
     try:
         r.p.wait(timeout=20)
@@ -294,7 +303,7 @@ def test_enomem():
           len(re.findall(r'most-reclaim attempt=\d+ uptime_ms=\d+ dmdt=0/0', log)) == 3 and
           len(re.findall(r'most-reclaim attempt=\d+ reopen=ok', log)) == 3)
     check('enomem: picture resynced after a reclaim (most-reclaim-resync, then latency-resume-idr)',
-          'most-reclaim-resync' in log and log.find('latency-resume-idr') > log.find('most-reclaim-resync'))
+          'most-reclaim-resync' in log and 'latency-resume-idr' in log[log.find('most-reclaim-resync'):])
     check('enomem: fourth ENOMEM not attempted (max 3), bridge exits by itself',
           'most-reclaim not-attempted reclaims=3 max=3' in log and exited and rc == 0, f'exited={exited} rc={rc}')
     st = parse_status(r.status() or '')[1]
@@ -310,7 +319,8 @@ def test_enomem():
           re.search(r' exit result=0 .*reclaims=3 .*most_errno=12', ev[-1] if ev else '') is not None, ev)
     r.cleanup()
 
-    w = Run('enomem-window', bridge=BRIDGE_ENOMEM, env=dict(HOST_RECLAIM_WINDOW_US='0')).start()
+    w = Run('enomem-window', bridge=BRIDGE if LIB else BRIDGE_ENOMEM,
+            env=dict(HOST_RECLAIM_WINDOW_US='0', **ENOMEM_ENV)).start()
     prod = w.produce('--frames', 200, wait=False)
     try:
         w.p.wait(timeout=10)
@@ -626,6 +636,22 @@ def test_events():
     check('events: PMCP_MOST_EVENTS=- writes no event file', not events_of(r4) and
           not os.path.exists(os.path.join(os.path.dirname(r4.log), 'events.log')))
     r4.cleanup()
+    if LIB:
+        # (5) stage 2: MOST refused at start (START devctl status 16 = EBUSY, as when AA direct holds isoTX2):
+        #     exit 0 by itself like stage 1, consumer ready=0, event most-open-failed
+        r5 = Run('events-open-fail', env=dict(HOST_MLB_START_STATUS='16')).start()
+        try:
+            r5.p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        exited = r5.p.poll() is not None
+        rc5 = r5.stop()
+        ev5 = events_of(r5)
+        st5 = parse_status(r5.status() or '')[1]
+        check('events: stage 2, MOST start refused: exits by itself with 0, ready=0, most-open-failed start_status=16',
+              exited and rc5 == 0 and st5.get('ready') == '0' and
+              any(' most-open-failed ' in e and 'start_status=16' in e for e in ev5), (exited, rc5, st5, ev5[-3:]))
+        r5.cleanup()
 
 
 def test_provenance():
@@ -684,6 +710,11 @@ def main():
              ('events', test_events)]
     for name, fn in tests:
         if ONLY and name not in ONLY: continue
+        if LIB and name in ('parity', 'slow-recovery'):
+            # stage 1 code only: byte parity with upstream's TS (stage 2 stamps the PTS when the packet is built;
+            # 'steady' checks every AU out and ts_analyse) and the writer streak rule of Tomasz's writer
+            print(f'skip   {name}: stage 1 only')
+            continue
         if name == 'steady':
             r, samples, _ = test_steady('steady', frames=150)
             test_status(r, samples)

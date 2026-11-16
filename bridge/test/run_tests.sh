@@ -46,6 +46,12 @@ build bridge-host-events $HOST -DPMCP_MOST_EVENTS_LIMIT=1024U -DPMCP_STATUS_PID=
 # the Android Auto variant must keep compiling (not run here; CP is the default)
 build bridge-host-aa-flag $HOST -DALTSCREEN_AA_SINGLE_IDR -I "$ROOT/src" -I "$ROOT/contract" -o "$B/bridge-host-aa" \
     "$ROOT/src/altscreen_most_bridge.c" "$KIT" "$HERE/shim/host_shim.c"
+# stage 2: the same ring/contract consumer on the AA MOST output library (aa/most ts_mux + most_writer, compiled,
+# never edited), with the simulated isoTX2 of aa/most/test/host_mlb.c
+AAM="$ROOT/../aa/most"
+build bridge-host-lib $CF -DMOST_HOST_SIM -include $HERE/shim/host_shim.h -I "$ROOT/src" -I "$ROOT/contract" -I "$AAM" \
+    -o "$B/bridge-host-lib" "$ROOT/src/pmcp_most_lib.c" "$KIT" "$HERE/shim/host_shim.c" "$AAM/ts_mux.c" \
+    "$AAM/most_writer.c" "$AAM/test/host_mlb.c"
 build producer -std=gnu99 -O2 -Wall -Wextra -Werror -o "$B/producer" "$HERE/producer.c"
 chmod +x "$HERE/fake_dmdt.sh"
 
@@ -56,4 +62,11 @@ if grep -q FAILED "$B/build-results.txt"; then
     echo "BRIDGE TESTS: $n_ok ok, $n_bad failed"
     exit 1
 fi
-exec python3 -I "$HERE/harness.py" "$B" "$TOOLS" "$H264" "$@"
+# AA's condition for stage 2 (2026-11-16): aa/ is used, never changed (the feeder binary is pinned)
+AA_DIFF=$(cd "$ROOT/.." && git diff --stat origin/release-candidate -- aa 2>/dev/null; git status --porcelain -- aa 2>/dev/null)
+python3 -I "$HERE/harness.py" "$B" "$TOOLS" "$H264" "$@"; rc1=$?
+echo "== stage 2 (bridge-host-lib, AA MOST output library)"
+PMCP_TEST_BRIDGE=bridge-host-lib python3 -I "$HERE/harness.py" "$B" "$TOOLS" "$H264" "$@"; rc2=$?
+if [ -z "$AA_DIFF" ]; then echo "ok     aa/ unchanged against origin/release-candidate"; rc3=0
+else echo "FAILED aa/ differs from origin/release-candidate:"; echo "$AA_DIFF"; rc3=1; fi
+[ $rc1 = 0 ] && [ $rc2 = 0 ] && [ $rc3 = 0 ]

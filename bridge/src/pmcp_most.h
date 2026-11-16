@@ -68,6 +68,13 @@
 #ifndef PMCP_MOST_SRC_DIR
 #define PMCP_MOST_SRC_DIR "/ramdisk/most-src"
 #endif
+/* Stage labels of the start line (log) and the start event; the defaults keep the stage 1c binary as built. */
+#ifndef PMCP_MOST_STAGE
+#define PMCP_MOST_STAGE "1c"
+#endif
+#ifndef PMCP_MOST_LOG_STAGE
+#define PMCP_MOST_LOG_STAGE "1b"
+#endif
 #define PMCP_MOST_STATUS_PERIOD_MS 1000U
 #ifndef PMCP_STATUS_PID
 #define PMCP_STATUS_PID getpid() /* host tests may set a large constant */
@@ -290,11 +297,11 @@ static void pmcp_most_init(void)
     pmcp_gate_init(&g_pmcp_gate);
     pmcp_mkdirs(g_pmcp.dir, 1);
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
-            "bridge: pmcp-most stage1b pid=%ld log=%s limit=%u src_dir=%s\n",
+            "bridge: pmcp-most stage" PMCP_MOST_LOG_STAGE " pid=%ld log=%s limit=%u src_dir=%s\n",
             (long)getpid(), g_pmcp.log_active ? g_pmcp.log_path : "stderr",
             (unsigned)PMCP_MOST_LOG_LIMIT, g_pmcp.dir);
     pmcp_event_init();
-    pmcp_event("start stage=1c log=%s events=%s limit=%u",
+    pmcp_event("start stage=" PMCP_MOST_STAGE " log=%s events=%s limit=%u",
             g_pmcp.log_active ? g_pmcp.log_path : "stderr", g_pmcp.event_path,
             (unsigned)PMCP_MOST_EVENTS_LIMIT);
 }
