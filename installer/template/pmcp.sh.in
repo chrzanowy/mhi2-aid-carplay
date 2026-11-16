@@ -1633,7 +1633,7 @@ do_cp_log_save() {
 #@@EXP_BEGIN
            # MOST bridge (experimental): which one, pmcp-most's own log (64 KB + one older .1, written by the bridge) and
            # the contract files (owner, wired.session, the bridge's consumer status), all in /ramdisk of this start
-           echo "--- MOST bridge: ${_l_br:-not this card's file} (chosen: ${_l_bm:-mathsls, default})"
+           echo "--- MOST bridge: ${_l_br:-not a file of this card} (chosen: ${_l_bm:-mathsls, default})"
            for _l_x in pmcp-most/bridge.log.1 pmcp-most/bridge.log most-src/owner most-src/wired.session most-src/consumer; do
                [ -s "$RAMDISK/$_l_x" ] || continue
                echo "--- $_l_x (first 2000 lines)"; sed -n '1,2000p' "$RAMDISK/$_l_x" 2>/dev/null

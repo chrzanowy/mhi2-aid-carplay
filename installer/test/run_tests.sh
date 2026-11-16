@@ -524,6 +524,15 @@ PY
     done
     # build-time template blocks (NOAA / UNSUP) are fully resolved: no marker or placeholder left in pmcp.sh
     ! grep -q '#@@\|UNSUP_PKGS\|NOT_YET_SUPPORTED' "$SDB/pmcp/pmcp.sh" || [ -n "$UNSUP_PKGS" ] && ok "pmcp.sh: no template block marker left" || bad "pmcp.sh: template block marker or unsupported-package text in a full-set profile"
+    # strict parse, as the unit's ksh reads it: bash 3.2 --posix fails where the unit does (an apostrophe in
+    # "${x:-word}" opens a quote there; ksh93 and mksh accept it). Card 5606b961: every button died at pmcp.sh[1844].
+    if [ -x /bin/bash ]; then
+        _sp=0; for m in "$SDB"/pmcp/pmcp.sh "$SDB"/pmcp/bin/*.sh "$SDB"/pmcp/menu/*.sh; do
+            [ -f "$m" ] || continue
+            /bin/bash --posix -n "$m" 2>/dev/null || { bad "strict parse (unit ksh): $(basename "$m")"; _sp=1; }
+        done
+        [ $_sp = 0 ] && ok "strict parse (bash --posix, as the unit's ksh): pmcp.sh, bin, menu"
+    fi
     nmenu=$(ls "$SDB"/pmcp/menu/*.sh | wc -l | tr -d ' ')
     nref=$(grep -c '/net/mmx/fs/sda0/pmcp/menu/' "$SDB/esd/Launcher-sda0.esd")
     [ "$nmenu" -gt 20 ] && [ "$nmenu" = "$nref" ] && ok "menu scripts: $nmenu, menu entries: $nref" || bad "menu scripts $nmenu vs entries $nref"
