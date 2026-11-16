@@ -652,6 +652,59 @@ def test_events():
               exited and rc5 == 0 and st5.get('ready') == '0' and
               any(' most-open-failed ' in e and 'start_status=16' in e for e in ev5), (exited, rc5, st5, ev5[-3:]))
         r5.cleanup()
+        # (6) arbitration step (a): AA's guardian pid file with a live pid that is not our parent -> no open,
+        #     most-busy, exit 0; a dead pid or our parent as the guardian (AA ring mode) -> normal start
+        rundir = os.path.join(BUILD, 'runs', 'aa-rundir')
+        os.makedirs(rundir, exist_ok=True)
+        holder = subprocess.Popen(['sleep', '30'])
+        open(os.path.join(rundir, 'pmcp-aa-guard.pid'), 'w').write(f'{holder.pid}\n')
+        r6 = Run('events-aa-busy', env=dict(PMCP_AA_RUNDIR=rundir)).start()
+        try:
+            r6.p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        exited = r6.p.poll() is not None
+        rc6 = r6.stop()
+        ev6 = events_of(r6)
+        mlb_log = os.path.join(r6.dir, 'mlb.ts.log')
+        check('events: stage 2, live AA guardian pid: isoTX2 not opened, most-busy holder=aa, exit 0',
+              exited and rc6 == 0 and any(f'most-busy holder=aa pid={holder.pid} via=aa-guard-pid' in e for e in ev6)
+              and not os.path.exists(os.path.join(r6.dir, 'mlb.ts')), (exited, rc6, ev6[-2:], os.path.exists(mlb_log)))
+        r6.cleanup()
+        holder.kill(); holder.wait()
+        r7 = Run('events-aa-dead', env=dict(PMCP_AA_RUNDIR=rundir)).start()
+        r7.produce('--frames', 20)
+        r7.stop()
+        ev7 = events_of(r7)
+        check('events: stage 2, dead AA guardian pid: normal start (most-open ok, frames out)',
+              any(' most-open ok ' in e for e in ev7) and not any('most-busy' in e for e in ev7)
+              and re.search(r' exit result=0 frames=(\d+)', ev7[-1] if ev7 else '') is not None
+              and int(re.search(r' frames=(\d+)', ev7[-1]).group(1)) > 10, ev7[-2:])
+        r7.cleanup()
+        # AA ring mode: the guardian itself starts this bridge (its parent) -> normal start
+        open(os.path.join(rundir, 'pmcp-aa-guard.pid'), 'w').write(f'{os.getpid()}\n')
+        r9 = Run('events-aa-parent', env=dict(PMCP_AA_RUNDIR=rundir)).start()
+        r9.produce('--frames', 20)
+        r9.stop()
+        ev9 = events_of(r9)
+        check('events: stage 2, AA guardian is our parent (AA ring mode): normal start, no most-busy',
+              any(' most-open ok ' in e for e in ev9) and not any('most-busy' in e for e in ev9), ev9[-2:])
+        r9.cleanup()
+        # the isotx2 owner file (AA feeder step (b)): holder=aa with a live pid -> busy
+        holder = subprocess.Popen(['sleep', '30'])
+        r8 = Run('events-aa-file', env=dict(PMCP_AA_RUNDIR=os.path.join(BUILD, 'runs', 'no-rundir')))
+        write_contract(r8.src_dir, 'isotx2', f'v=1 holder=aa pid={holder.pid} since_ms=1\n')
+        r8.start()
+        try:
+            r8.p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        rc8 = r8.stop()
+        holder.kill(); holder.wait()
+        check('events: stage 2, isotx2 holder=aa with a live pid: most-busy via=isotx2-file, exit 0',
+              rc8 == 0 and any('most-busy holder=aa' in e and 'via=isotx2-file' in e for e in events_of(r8)),
+              events_of(r8)[-2:])
+        r8.cleanup()
 
 
 def test_provenance():

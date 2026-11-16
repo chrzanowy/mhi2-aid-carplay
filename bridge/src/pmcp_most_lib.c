@@ -28,6 +28,14 @@
  *     (most_stop, most_reopen, ts_mux_discontinuity, most_start), at most 3
  *     times; then the IDR is requested as after a latency reset. Any other
  *     writer failure ends the bridge (the supervisor restarts it).
+ *   - isoTX2 held by Android Auto (arbitration step (a), docs/23, reviewed by AA): before opening the
+ *     device the bridge reads AA's guardian pid file (<PMCP_AA_RUNDIR or /ramdisk>/pmcp-aa-guard.pid, present
+ *     from AA's MOST takeover until its dmdt restore is done) and the future owner file
+ *     /ramdisk/most-src/isotx2 (holder=aa pid=<guardian>). A live holder (kill(pid,0) == 0 or EPERM) that is
+ *     not our parent (AA's ring mode starts this binary from its guardian) means: no open, event
+ *     most-busy, exit 0, the same as a refused START. The bridge never writes the owner file: the mathsls
+ *     supervisor, not the bridge, gives MOST back to the VW map (owner file for CP only with our own
+ *     supervisor, stage 5).
  *   - stuck write: a write running longer than stall_ms + 1 s gets
  *     "flush(0)" on the debug node (as the supervisor does) and ends the bridge.
  *
@@ -183,6 +191,44 @@ static void log_devinfo(const char *what)
             what, g_wcfg.dev, g_w.dev.open_errno, g_w.dev.iface_rc, g_w.dev.iface, g_w.dev.packet_rc,
             g_w.dev.packet_size, g_w.dev.block_rc, g_w.dev.block_count, g_w.dev.flush_rc, g_w.dev.start_rc,
             TS_BLOCK_PACKETS);
+}
+
+/* ---------------------------------------------------------------- isoTX2 arbitration, step (a) */
+
+static int pid_live(long pid)
+{
+    return pid > 0 && (kill((pid_t)pid, 0) == 0 || errno == EPERM);
+}
+
+/* pid of a live Android Auto holder of isoTX2 other than our parent, else 0; *how names the source. */
+static long aa_holder(const char **how)
+{
+    char path[256], buf[PMCP_MOST_LINE_MAX + 2U], src[16];
+    const char *dir = getenv("PMCP_AA_RUNDIR");
+    unsigned long pid = 0;
+    int fd, n;
+    if (dir == NULL || dir[0] == '\0') dir = "/ramdisk";
+    snprintf(path, sizeof(path), "%s/pmcp-aa-guard.pid", dir);
+    fd = open(path, O_RDONLY);
+    if (fd >= 0) {
+        n = (int)read(fd, buf, sizeof(buf) - 1U);
+        close(fd);
+        if (n > 0) {
+            buf[n] = '\0';
+            pid = strtoul(buf, NULL, 10);
+            if (pid_live((long)pid) && (pid_t)pid != getppid()) {
+                *how = "aa-guard-pid";
+                return (long)pid;
+            }
+        }
+    }
+    if (pmcp_read_name("isotx2", buf, sizeof(buf)) > 0 && pmcp_field(buf, "holder", src, sizeof(src)) == 0 &&
+        strcmp(src, "aa") == 0 && pmcp_field_ul(buf, "pid", &pid) == 0 && pid_live((long)pid) &&
+        (pid_t)pid != getppid()) {
+        *how = "isotx2-file";
+        return (long)pid;
+    }
+    return 0;
 }
 
 /* ---------------------------------------------------------------- CarPlay policy */
@@ -565,6 +611,18 @@ int main(int argc, char **argv)
     __sync_synchronize();
     ring->magic = ALT_FRAME_RING_MAGIC;
     generation = ring->generation;
+    {
+        const char *how = "";
+        long holder = aa_holder(&how);
+        if (holder) {
+            cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
+                    "bridge: most-busy holder=aa pid=%ld via=%s: isoTX2 not opened, exit\n", holder, how);
+            pmcp_event("most-busy holder=aa pid=%ld via=%s", holder, how);
+            g_pmcp_most_errno = EBUSY;
+            result = 0; /* as a refused START */
+            goto done;
+        }
+    }
     if (most_open(&g_w, &g_wcfg) != 0) {
         log_devinfo("open failed");
         g_pmcp_most_errno = g_w.dev.open_errno ? g_w.dev.open_errno : EIO;
