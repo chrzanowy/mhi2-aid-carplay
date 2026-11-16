@@ -1631,10 +1631,11 @@ do_cp_log_save() {
            done
            echo "--- pmcp-speedlimit.state"; cat "$SL_STATE" 2>/dev/null
 #@@EXP_BEGIN
-           # MOST bridge (experimental): which one, pmcp-most's own log (64 KB + one older .1, written by the bridge) and
-           # the contract files (owner, wired.session, the bridge's consumer status), all in /ramdisk of this start
+           # MOST bridge (experimental): which one, pmcp-most's event file (never rotated, 64 KB, from the first bridge
+           # run of this start), its own log (64 KB + one older .1, written by the bridge) and the contract files
+           # (owner, wired.session, the bridge's consumer status), all in /ramdisk of this start
            echo "--- MOST bridge: ${_l_br:-not a file of this card} (chosen: ${_l_bm:-mathsls, default})"
-           for _l_x in pmcp-most/bridge.log.1 pmcp-most/bridge.log most-src/owner most-src/wired.session most-src/consumer; do
+           for _l_x in pmcp-most/events.log pmcp-most/bridge.log.1 pmcp-most/bridge.log most-src/owner most-src/wired.session most-src/consumer; do
                [ -s "$RAMDISK/$_l_x" ] || continue
                echo "--- $_l_x (first 2000 lines)"; sed -n '1,2000p' "$RAMDISK/$_l_x" 2>/dev/null
            done
@@ -2304,6 +2305,9 @@ do_bridge_status() {
             say "--- $_bt_f: none in this start"
         fi
     done
+    if [ -s "$RAMDISK/pmcp-most/events.log" ]; then
+        say "--- pmcp-most/events.log (last 15 lines):"; tail -n 15 "$RAMDISK/pmcp-most/events.log" 2>/dev/null | sed 's/^/  /'
+    fi
     if [ -s "$RAMDISK/pmcp-most/bridge.log" ]; then
         say "--- pmcp-most/bridge.log (last 15 lines):"; tail -n 15 "$RAMDISK/pmcp-most/bridge.log" 2>/dev/null | sed 's/^/  /'
     else

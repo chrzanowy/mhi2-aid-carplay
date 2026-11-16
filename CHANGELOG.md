@@ -16,6 +16,12 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
   lines of status, this start's owner and `wired.session` and the last 15 lines of the bridge log. "AA record" moved
   from `aa_advanced` to `experimental` too; `aa_advanced` has the release card's buttons only.
   Details: docs/en/07-installer.md, "Experimental: own MOST bridge".
+- **pmcp-most logging for the car (stage 1c, binary 8c104a06):** the bridge's log no longer gets an `avcC ready` line
+  before every IDR (only when the avcC changes), which had rotated the 64 KB log in about two minutes. A new event
+  file `/ramdisk/pmcp-most/events.log` is never rotated (64 KB, ends with `events-full`). It keeps every rare event
+  of this start with `boot_ms`/`up_ms`: MOST open, error and reclaim, latency reset with the queue size, IDR request
+  and resume, frame gaps of 250 ms and more, owner cut, exit. "CP save log" and "Bridge status" include it. The
+  consumer status reports the full QNX pid (MOST contract v1.2).
 
 ## Unreleased (release-candidate)
 

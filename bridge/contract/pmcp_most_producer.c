@@ -620,14 +620,14 @@ int pmcp_consumer_format(char *buf, size_t bufsz, const pmcp_consumer_status *s)
     int n;
     if (e > 99999)
         e = 99999;
-    if (e < -99999)
-        e = -99999;
+    if (e < -9999)
+        e = -9999;
     n = snprintf(buf, bufsz,
         "v=%d ready=%d pid=%lu owner_gen=%lu ring_gen=%lu seq=%lu frames=%lu "
         "drops=%lu overruns=%lu latency_resets=%lu age_ms=%lu queue_pkts=%lu "
         "queue_hi=%lu reclaims=%lu most_errno=%d up_ms=%lu",
         PMCP_MOST_CONTRACT_VERSION, s->ready ? 1 : 0,
-        s->pid > 9999999UL ? 9999999UL : s->pid,
+        s->pid > 2147483647UL ? 2147483647UL : s->pid,
         (unsigned long)s->owner_gen, (unsigned long)s->ring_gen,
         (unsigned long)s->seq, sat(s->frames, 99999999UL), sat(s->drops, 99999999UL),
         sat(s->overruns, 99999999UL), sat(s->latency_resets, 99999999UL),

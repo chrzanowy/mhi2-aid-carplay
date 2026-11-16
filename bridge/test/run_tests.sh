@@ -5,7 +5,7 @@
 # upstream bridge, an ENOMEM-injection build and the synthetic producer, then runs test/harness.py.
 # Prints "BRIDGE TESTS: N ok, M failed"; exit status non-zero on any failure.
 # Optional: PMCP_TEST_H264=<Annex-B capture> (default: the AA car capture if present, else skipped).
-#           ./run_tests.sh [test ...]   with test = steady real-h264 parity force-idr enomem session log
+#           ./run_tests.sh [test ...]   with test = steady real-h264 parity force-idr enomem session gate log events
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
@@ -40,6 +40,9 @@ build bridge-host-slow $HOST $SLOW -I "$ROOT/src" -I "$ROOT/contract" -o "$B/bri
     "$ROOT/src/altscreen_most_bridge.c" "$KIT" "$HERE/shim/host_shim.c"
 build bridge-host-slow-old $HOST $SLOW -DPMCP_RECOVERY_FAST_STREAK_REQUIRED=8U -I "$ROOT/src" -I "$ROOT/contract" \
     -o "$B/bridge-host-slow-old" "$ROOT/src/altscreen_most_bridge.c" "$KIT" "$HERE/shim/host_shim.c"
+# stage 1c: event file limit 1024 B and a 10-digit status pid (QNX pid_t), for the events test
+build bridge-host-events $HOST -DPMCP_MOST_EVENTS_LIMIT=1024U -DPMCP_STATUS_PID=2147483647L -I "$ROOT/src" \
+    -I "$ROOT/contract" -o "$B/bridge-host-events" "$ROOT/src/altscreen_most_bridge.c" "$KIT" "$HERE/shim/host_shim.c"
 # the Android Auto variant must keep compiling (not run here; CP is the default)
 build bridge-host-aa-flag $HOST -DALTSCREEN_AA_SINGLE_IDR -I "$ROOT/src" -I "$ROOT/contract" -o "$B/bridge-host-aa" \
     "$ROOT/src/altscreen_most_bridge.c" "$KIT" "$HERE/shim/host_shim.c"

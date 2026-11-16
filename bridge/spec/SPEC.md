@@ -625,7 +625,7 @@ says what the bridge does with them. "Contract directory" means `/ramdisk/most-s
   - most_errno: the errno of the last failed device open or write, 0 if none (R37, R41, R42);
   - up_ms: ms since process start.
 
-  The values are clamped as the contract header (section 2.3) specifies, which keeps the line at most 253 bytes
+  The values are clamped as the contract header (section 2.3) specifies, which keeps the line at most 255 bytes (v1.2: pid up to 2147483647, most_errno from -9999)
   including `\n`.
 - **R98** **Writing.** The file is written as `consumer.tmp.<pid>` (mode 0644), then renamed over `consumer`. The
   contract directory is created (mode 0755, with parents) if it is missing. If a write fails, the tmp file is removed.

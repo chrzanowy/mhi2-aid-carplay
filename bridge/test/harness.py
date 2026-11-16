@@ -20,6 +20,7 @@ BRIDGE_UP = os.path.join(BUILD, 'bridge-host-upstream')
 BRIDGE_ENOMEM = os.path.join(BUILD, 'bridge-host-enomem')
 BRIDGE_SLOW = os.path.join(BUILD, 'bridge-host-slow')
 BRIDGE_SLOW_OLD = os.path.join(BUILD, 'bridge-host-slow-old')
+BRIDGE_EV = os.path.join(BUILD, 'bridge-host-events')   # events limit 1024 B, status pid 2147483647
 FAKE_DMDT = os.path.join(HERE, 'fake_dmdt.sh')
 LOG_LIMIT = 64 * 1024
 STATUS_KEYS = ['v', 'ready', 'pid', 'owner_gen', 'ring_gen', 'seq', 'frames', 'drops', 'overruns',
@@ -237,6 +238,10 @@ def test_force_idr():
     st = parse_status(r.status() or '')[1]
     check('force-idr: consumer latency_resets >= 1', int(st.get('latency_resets', 0)) >= 1, st)
     check('force-idr: exit 0', rc == 0, rc)
+    ev = events_of(r)
+    check('force-idr: events latency-reset (queued=, discarded=), idr-request, idr-resume, in that order',
+          ev_index(ev, r'latency-reset seq=\d+ queued=\d+ discarded=\d+ ') < ev_index(ev, r'idr-request seq=\d+ status=0')
+          < ev_index(ev, r'idr-resume seq=\d+ wait_ms=\d+') < len(ev), ev[:12])
     r.cleanup()
 
 
@@ -295,6 +300,14 @@ def test_enomem():
     st = parse_status(r.status() or '')[1]
     check('enomem: consumer reclaims=3, most_errno=ENOMEM, ready=0',
           st.get('reclaims') == '3' and st.get('most_errno') == '12' and st.get('ready') == '0', st)
+    ev = events_of(r)
+    errs = [e for e in ev if ' most-error ' in e]
+    check('enomem: events: four most-error errno=12, reclaim attempt=1..3 reopen=ok, reclaim-not-attempted, exit',
+          len(errs) == 4 and all('errno=12' in e for e in errs) and
+          [re.search(r'reclaim attempt=(\d+) dmdt=0/0 reopen=ok', e).group(1) for e in ev
+           if re.search(r'reclaim attempt=\d+ dmdt=0/0 reopen=ok', e)] == ['1', '2', '3'] and
+          any('reclaim-not-attempted reclaims=3' in e for e in ev) and
+          re.search(r' exit result=0 .*reclaims=3 .*most_errno=12', ev[-1] if ev else '') is not None, ev)
     r.cleanup()
 
     w = Run('enomem-window', bridge=BRIDGE_ENOMEM, env=dict(HOST_RECLAIM_WINDOW_US='0')).start()
@@ -519,6 +532,102 @@ def test_log_rotation():
     r.cleanup()
 
 
+def events_of(run):
+    """Lines of the run's events.log (next to bridge.log)."""
+    p = os.path.join(os.path.dirname(run.log), 'events.log')
+    return open(p, errors='replace').read().splitlines() if os.path.exists(p) else []
+
+
+def ev_index(ev, pattern):
+    """Index of the first event matching pattern, or a large number."""
+    for i, e in enumerate(ev):
+        if re.search(pattern, e): return i
+    return 10 ** 6
+
+
+EV_HEAD = re.compile(r'^boot_ms=(\d+) up_ms=(\d+) pid=(\d+) (\S+)')
+
+
+def test_events():
+    """Stage 1c logging: avcC logged only when it changes, the unrotated event file, frame gaps."""
+    # (1) the phone repeats the avcC before every IDR (IDR every 10 frames); one frame held back 600 ms
+    r = Run('events').start()
+    r.produce('--frames', 150, '--gop', 10, '--repeat-avcc', 1, '--pause-at', 70, '--pause-ms', 600)
+    time.sleep(0.6)
+    st = parse_status(r.status() or '')[1]
+    rc = r.stop()
+    code, out, norm = r.analyse()
+    log = r.logtext()
+    man = [json.loads(l) for l in open(os.path.join(r.dir, 'input', 'frames.raw.jsonl'))]
+    n_avcc = sum(1 for m in man if m.get('event') == 'avcC')
+    check('events: producer repeated the avcC (>= 10 times)', n_avcc >= 10, n_avcc)
+    check('events: bridge.log has "avcC ready" once, avcc_repeats counts the rest',
+          log.count('avcC ready') == 1 and f'avcc_repeats={n_avcc - 1} ' in log, (log.count('avcC ready'), n_avcc))
+    nin = norm['input_frames'] if norm else -1
+    check('events: repeated avcC changes nothing in the TS: every frame out, format checks pass',
+          code == 0 and norm and not norm['missing_frame_nos'] and norm['output_aus'] == nin, out[-400:])
+    ev = events_of(r)
+    heads = [EV_HEAD.match(e) for e in ev]
+    check('events: events.log next to bridge.log, every line boot_ms= up_ms= pid=<bridge pid> <event>',
+          ev and all(h and h.group(3) == str(r.p.pid) for h in heads), ev[:3])
+    ups = [int(h.group(2)) for h in heads if h]
+    check('events: up_ms never goes back', ups == sorted(ups), ups)
+    names = [h.group(4) for h in heads if h]
+    check('events: start, most-open, avcC, video-start first; exit last',
+          names[:1] == ['start'] and 'most-open' in names and names.index('avcC') < names.index('video-start')
+          and names[-1] == 'exit' and names.count('avcC') == 1, names)
+    gaps = [e for e in ev if ' frame-gap ' in e]
+    g = re.search(r'gap_ms=(\d+) media_ms=(-?\d+) gaps=1', gaps[0]) if len(gaps) == 1 else None
+    check('events: one frame-gap, gap_ms and media_ms ~600', g and 550 <= int(g.group(1)) <= 900 and
+          550 <= int(g.group(2)) <= 900, gaps)
+    check('events: exit line frame_gaps=1, bridge.log pmcp line frame_gaps=1',
+          re.search(r' exit result=0 .*frame_gaps=1 gap_max_ms=\d+', ev[-1] if ev else '') is not None and
+          'frame_gaps=1 ' in log, ev[-1:])
+    check('events: consumer pid is still the bridge pid', st.get('pid') == str(r.p.pid), st)
+    check('events: exit 0', rc == 0, rc)
+    size1 = os.path.getsize(os.path.join(os.path.dirname(r.log), 'events.log'))
+    # (2) a second bridge run of the same start appends (never truncates)
+    r2 = Run('events')            # same directory: Run() clears it, so keep the first file aside
+    r.cleanup()
+    print(f'info   events: first run wrote {size1} bytes of events', flush=True)
+    os.makedirs(os.path.dirname(r2.log))
+    open(os.path.join(os.path.dirname(r2.log), 'events.log'), 'w').write('EARLIER RUN\n')
+    r2.start()
+    r2.produce('--frames', 20)
+    r2.stop()
+    ev2 = events_of(r2)
+    check('events: a later run appends to the file of this start', ev2[:1] == ['EARLIER RUN'] and
+          len(ev2) > 2 and ' start ' in ev2[1], ev2[:2])
+    r2.cleanup()
+    # (3) limit (build with 1024 B): the file stops at the limit with one events-full line;
+    #     the same build reports a 10-digit pid and keeps the status line <= 255 bytes
+    r3 = Run('events-limit', bridge=BRIDGE_EV)
+    os.makedirs(os.path.dirname(r3.log))
+    pre = 'boot_ms=0 up_ms=0 pid=1 filler\n' * 25   # 775 bytes
+    open(os.path.join(os.path.dirname(r3.log), 'events.log'), 'w').write(pre)
+    r3.start()
+    r3.produce('--frames', 60, '--gop', 10, '--pause-at', 20, '--pause-ms', 300)
+    time.sleep(0.3)
+    st3 = r3.status() or ''
+    r3.stop()
+    p3 = os.path.join(os.path.dirname(r3.log), 'events.log')
+    text = open(p3).read()
+    lines = text.splitlines()
+    check('events: limit kept (<= 1024 B), earlier lines kept, last line events-full, written once',
+          len(text.encode()) <= 1024 and text.startswith(pre) and lines and ' events-full limit=1024 ' in lines[-1]
+          and text.count('events-full') == 1, (len(text.encode()), lines[-3:]))
+    check('events: status line with pid=2147483647 (QNX pid_t range), <= 255 bytes, one newline',
+          ' pid=2147483647 ' in st3 and len(st3.encode()) <= 255 and st3.count('\n') == 1, st3)
+    r3.cleanup()
+    # (4) PMCP_MOST_EVENTS=- : no event file
+    r4 = Run('events-off', env=dict(PMCP_MOST_EVENTS='-')).start()
+    r4.produce('--frames', 10)
+    r4.stop()
+    check('events: PMCP_MOST_EVENTS=- writes no event file', not events_of(r4) and
+          not os.path.exists(os.path.join(os.path.dirname(r4.log), 'events.log')))
+    r4.cleanup()
+
+
 def test_provenance():
     """upstream/ is verbatim (PROVENANCE.json sha256); src/ differs only in pmcp-marked hunks."""
     import difflib
@@ -571,7 +680,8 @@ def main():
             check(name, st == 'ok')
     tests = [('provenance', test_provenance), ('steady', None), ('real-h264', None), ('parity', test_upstream_parity), ('force-idr', test_force_idr),
              ('slow-recovery', test_slow_recovery),
-             ('enomem', test_enomem), ('session', test_session_stop), ('gate', test_gate), ('log', test_log_rotation)]
+             ('enomem', test_enomem), ('session', test_session_stop), ('gate', test_gate), ('log', test_log_rotation),
+             ('events', test_events)]
     for name, fn in tests:
         if ONLY and name not in ONLY: continue
         if name == 'steady':

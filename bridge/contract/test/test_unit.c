@@ -398,6 +398,11 @@ static int run_unit(const char *dir)
     st.ready = 1; st.most_errno = -2147483647 - 1; st.pid = 2147483647UL;
     r = pmcp_consumer_format(line, sizeof line, &st);
     CHECK(r > 0 && r + 1 <= PMCP_MOST_LINE_MAX, "worst-case consumer line <= 255 B");
+    CHECK(strstr(line, " pid=2147483647 ") != NULL && strstr(line, " most_errno=-9999 ") != NULL,
+          "v1.2 clamps: the full QNX pid (pid_t range), most_errno >= -9999");
+    st.pid = 4294967295UL;
+    r = pmcp_consumer_format(line, sizeof line, &st);
+    CHECK(r > 0 && strstr(line, " pid=2147483647 ") != NULL, "pid above the pid_t range clamped to 2147483647");
     CHECK(pmcp_atomic_write(dir, "toolong",
         "v=1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

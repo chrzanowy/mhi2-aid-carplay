@@ -1669,6 +1669,7 @@ PEOF
         echo "  - CarPlay log with the bridge files"
         new_start; mkdir -p "$W/unit/ramdisk/pmcp-most" "$MSD"
         echo "bridge: older half" > "$W/unit/ramdisk/pmcp-most/bridge.log.1"; echo "bridge: newer half" > "$W/unit/ramdisk/pmcp-most/bridge.log"
+        echo "boot_ms=43001 up_ms=40002 pid=456 latency-reset seq=9 queued=2058 discarded=2050 limit=2048 resets=1" > "$W/unit/ramdisk/pmcp-most/events.log"
         echo "v=1 src=wired pid=123 gen=3 since_ms=0 kind=proxy" > "$MSD/owner"
         echo "v=1 state=start gen=3 pid=123 ts_ms=0 reason=start" > "$MSD/wired.session"
         echo "v=1 ready=1 pid=456 owner_gen=3 ring_gen=2 seq=10 frames=10 drops=0 overruns=0 latency_resets=0 age_ms=5 queue_pkts=0 queue_hi=9 reclaims=0 most_errno=0 up_ms=1000" > "$MSD/consumer"
@@ -1678,6 +1679,8 @@ PEOF
         [ "$(sed -n '/^--- pmcp-most\/bridge.log.1 /,/^--- pmcp-most\/bridge.log /p' "$L56" | sed -n 2p)" = "bridge: older half" ] \
             && [ "$(sed -n '/^--- pmcp-most\/bridge.log (/,/^--- most-src\/owner /p' "$L56" | sed -n 2p)" = "bridge: newer half" ] \
             && ok "cp log: bridge.log.1 then bridge.log" || bad "cp log: bridge logs"
+        [ "$(sed -n '/^--- pmcp-most\/events.log /,/^--- pmcp-most\/bridge.log.1 /p' "$L56" | sed -n 2p)" = "boot_ms=43001 up_ms=40002 pid=456 latency-reset seq=9 queued=2058 discarded=2050 limit=2048 resets=1" ] \
+            && ok "cp log: events.log (unrotated bridge events) before the bridge logs" || bad "cp log: events.log"
         grep -qx "v=1 src=wired pid=123 gen=3 since_ms=0 kind=proxy" "$L56" && grep -qx "v=1 state=start gen=3 pid=123 ts_ms=0 reason=start" "$L56" \
             && grep -q "^v=1 ready=1 pid=456 " "$L56" && [ "$(tail -1 "$L56")" = "--- end" ] && ok "cp log: owner, wired.session, consumer; complete" || bad "cp log: contract files"
         run status; expect_out "bridge status (this start): v=1 ready=1 pid=456" "status: the bridge's consumer line"
@@ -1687,6 +1690,7 @@ PEOF
         expect_out "bridge status (this start): v=1 ready=1 pid=456" "bridge-status: the consumer line"
         expect_out "^  v=1 src=wired pid=123 gen=3 since_ms=0 kind=proxy$" "bridge-status: owner"
         expect_out "^  v=1 state=start gen=3 pid=123 ts_ms=0 reason=start$" "bridge-status: wired.session"
+        expect_out "^  boot_ms=43001 up_ms=40002 pid=456 latency-reset seq=9 queued=2058 " "bridge-status: the event file"
         [ "$(tail -1 "$W/out")" = "  bridge: newer half" ] && ok "bridge-status: ends with the newest bridge.log line" || bad "bridge-status log tail: $(tail -1 "$W/out")"
         [ "$before" = "$(snapshot "$W/unit")" ] && ok "bridge-status is read-only" || bad "bridge-status changed files"
         run log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && [ "$(cat "$MK")" = pmcp-most ] && ok "9 deletes the CarPlay log, keeps the bridge choice (a marker)" || bad "log-clear"

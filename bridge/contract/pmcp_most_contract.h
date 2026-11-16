@@ -166,12 +166,13 @@
  *   consumer writes ready=0 (best effort). seq = last consumed sequence,
  *   age_ms = age of the last frame at consumption, most_errno is a signed
  *   int, up_ms = time since the bridge started. To keep the worst-case line
- *   within 255 bytes writers clamp the fields: pid <= 9999999;
- *   most_errno in [-99999, 99999]; age_ms, queue_pkts, queue_hi <= 999999;
+ *   within 255 bytes writers clamp the fields: pid <= 2147483647 (the
+ *   whole QNX pid_t range; v1.2, was 9999999, which hid real QNX pids);
+ *   most_errno in [-9999, 99999]; age_ms, queue_pkts, queue_hi <= 999999;
  *   frames, drops, overruns, latency_resets, reclaims <= 99999999;
  *   up_ms <= 999999999; owner_gen, ring_gen, seq are plain u32. Readers
  *   accept any u32 for the unsigned keys (a future writer may clamp
- *   differently). Worst-case line length with these clamps: 253 bytes.
+ *   differently). Worst-case line length with these clamps: 255 bytes.
  *   255 bytes. Producers only read it; they never need it to stream.
  *
  * 2.4 IDR request  --  PMCP_MOST_IDR_PATH_DEFAULT (unchanged from core.so)

@@ -168,7 +168,7 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
 # pmcp-most (bridge/, docs 23-wlasny-most.md): our build of the MOST bridge, experimental cards only, next to mathsls's
 # BRIDGE (pmcp.sh bridge mathsls|pmcp-most, GEM experimental; default mathsls). The ONE line to change after a rebuild:
 # bridge/build.sh OUTDIR prints the size and sha256; OUTDIR = <this project>/build/pmcp-most-<first 8 of the sha256>.
-PMCP_MOST_PIN = ("build/pmcp-most-d818be15/altscreen-most-bridge", "d818be15b896d3c0841bd7ce7c413202f48b62b854059797e81901e3bc8b49ed", 34972)
+PMCP_MOST_PIN = ("build/pmcp-most-8c104a06/altscreen-most-bridge", "8c104a06e9cc02ae86bf395199f63f4dde5d89182c73fea8de75f8d01c0ddb17", 39076)
 if IS_EXP and PROFILE_ID == "MU1161":
     PAYLOAD_BY_PROFILE["MU1161"].update({
         "PMCP_MOST": (PROJ / PMCP_MOST_PIN[0], PMCP_MOST_PIN[1], PMCP_MOST_PIN[2], "pmcp-most/altscreen-most-bridge"),

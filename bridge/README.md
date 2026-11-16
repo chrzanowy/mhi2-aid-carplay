@@ -57,7 +57,7 @@ the file formats.
    - Key order: `v=1 ready pid owner_gen ring_gen seq frames drops overruns latency_resets age_ms queue_pkts queue_hi
      reclaims most_errno up_ms`.
    - Written every 1000 ms by the existing 1 ms reader loop: no new thread, and nothing in the writer thread.
-   - Written with tmp + rename. Field limits are clamped as in the v0.2 clarifications (at most 253 B).
+   - Written with tmp + rename. Field limits are clamped as in contract v1.2 (at most 255 B; the pid is the full QNX pid, since stage 1c).
    - `ready=0` is written on exit.
    - Override the directory with env `PMCP_MOST_SRC_DIR`.
    - `ready` = isoTX2 open and START devctl returned 0. `most_errno` = the last MOST open/write errno.
@@ -105,7 +105,7 @@ the file formats.
      previous owner's pid is gone; otherwise it is held until that pid exits or 100 ms (`in`) / 3000 ms (`proxy`) after
      the cut pass (`reason=forced`, `gate_forced` + 1). On opening the held avcC is applied and the IDR marker created;
      log `gate-open reason=… gate_forced=…` and `gate-stats cuts=… forced=… gate_drops=… wait_ms=…`.
-   - The gate counters are **not** in the consumer status line: the v0.2 line is already 253 B in the worst case, so
+   - The gate counters are **not** in the consumer status line: the line is already 255 B in the worst case, so
      `gate_cuts`/`gate_forced` would break the 255 B limit. They are in `bridge.log` only (also a `gate-stats` line at
      exit).
    - No owner file at all: no gate, upstream behaviour (`parity` test, ts_compare SAME).
@@ -125,6 +125,27 @@ the file formats.
      for the AUs that follow. Before, the requested IDR was dropped as "writer not recovered" whenever it arrived just
      after a slow write (streak 0), and no second request was ever made: the map stayed frozen (3 of 5 test runs with
      the streak-1 rule; with upstream's streak 8 the same trap exists, it is only reached less often).
+9. **Logging for the car (stage 1c)**. The first car test (2026-11-16, audit A201) lost the cold-start flash: the
+   64 KB log rotated in about two minutes.
+   - `avcC ready` is logged only when the avcC changes, and once after a new ring generation or owner cut. The phone
+     repeats the same avcC before every IDR (about every 5th frame), and logging each one filled the log. The repeats
+     are counted (`pmcp avcc_repeats=…` at exit).
+   - **Event file** `/ramdisk/pmcp-most/events.log` (next to the log; env `PMCP_MOST_EVENTS`, `-` = none). It is never
+     rotated and is appended by every bridge run of this start. At 64 KB (`PMCP_MOST_EVENTS_LIMIT`) it ends with one
+     `events-full` line, so the first runs after the unit start are kept.
+     - Every line: `boot_ms=` (monotonic, from unit start), `up_ms=` (from this bridge's start), `pid=`, then the event.
+     - Events: `start`, `most-open` / `most-open-failed`, `most-error errno=`, `reclaim attempt=…`,
+       `reclaim-not-attempted`, `reclaim-resync`, `latency-reset … queued= discarded=`, `idr-request`, `idr-resume`,
+       `chain-gap`, `ring-overrun` and `frame-gap` (at most 40 of each per run), `ring-generation`, `owner-cut`,
+       `gate-open`, `session-stop`, `avcC` (changed), `video-start`, `writer-stopped`, `exit` (counters).
+     - `frame-gap`: a consumed video frame ≥ 250 ms after the previous one, with the gap in local time (`gap_ms`) and
+       in the phone's media time (`media_ms`). The two together say whether the phone or the unit paused.
+     - One `write()` per line on an `O_APPEND` file, under its own mutex. Only rare events, so the writer thread's
+       ~8 ms MOST writes are unaffected.
+   - Consumer `pid`: the full QNX pid. Contract v1.2 clamps it at 2147483647 instead of 9999999, which hid the real
+     pid in the car. `most_errno` now goes down to -9999, so the worst-case line is exactly 255 B.
+   - The installer copies `events.log` into the CarPlay log (before `bridge.log.1`), and "Bridge status" shows its
+     last 15 lines. The file is in `/ramdisk`, so a unit restart removes it; it is not a persistent log.
 
 ## Build (QNX)
 

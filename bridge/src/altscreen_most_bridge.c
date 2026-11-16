@@ -446,6 +446,9 @@ static void enter_low_latency_recovery(size_t queued_packets,
             (unsigned long)discarded,
             (unsigned)TS_LOW_LATENCY_LIMIT_PACKETS,
             g_latency_resets);
+    pmcp_event("latency-reset seq=%u queued=%lu discarded=%lu limit=%u resets=%lu", sequence,
+               (unsigned long)queued_packets, (unsigned long)discarded,
+               (unsigned)TS_LOW_LATENCY_LIMIT_PACKETS, g_latency_resets); /* pmcp */
 }
 
 static int writer_recovered_after_reset(void)
@@ -889,8 +892,24 @@ static int parse_avcc_config(AvcConfig *config, const uint8_t *data,
     if (!next.sps || !next.pps || next.length_size < 1U ||
         next.length_size > 4U) goto failed;
     next.valid = 1;
-    free_config(config);
-    *config = next;
+    /* pmcp: the phone repeats the same avcC before every IDR (about every 5th
+     * frame); logging each one rotated the 64 KB log in about a minute. Log a
+     * changed one, and the first one after a new ring generation or cut. */
+    {
+        int same = config->valid && config->length_size == next.length_size &&
+                   config->sps_size == next.sps_size && config->pps_size == next.pps_size &&
+                   memcmp(config->sps, next.sps, next.sps_size) == 0 &&
+                   memcmp(config->pps, next.pps, next.pps_size) == 0;
+        free_config(config);
+        *config = next;
+        if (same && !g_pmcp.avcc_log_next) {
+            ++g_pmcp.avcc_repeats;
+            return 0;
+        }
+        g_pmcp.avcc_log_next = 0;
+        if (!same) pmcp_event("avcC length=%u sps=%u pps=%u", config->length_size,
+                              (unsigned)config->sps_size, (unsigned)config->pps_size);
+    } /* pmcp: end */
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: avcC ready length=%u sps=%u pps=%u\n",
             config->length_size, (unsigned)config->sps_size,
             (unsigned)config->pps_size);
@@ -988,6 +1007,7 @@ static int most_open(const char *device, int reopen)
 #endif
     if (fd < 0) {
         g_pmcp_most_errno = errno; /* pmcp */
+        pmcp_event("most-open-failed errno=%d step=open", errno); /* pmcp */
         cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: open %s failed: %s\n", device, strerror(errno));
         return -1;
     }
@@ -1004,6 +1024,7 @@ static int most_open(const char *device, int reopen)
     status = devctl(fd, MLB_DEVCTL_START, &blocks, sizeof(blocks), NULL);
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: start status=%d packets=%u\n", status, blocks);
     if (status != 0) {
+        pmcp_event("most-open-failed step=start status=%d", status); /* pmcp */
         if ((int)g_most_fd == fd) {
             g_most_fd = -1;
             close(fd);
@@ -1017,6 +1038,7 @@ static int most_open(const char *device, int reopen)
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: portable file-output validation mode\n");
 #endif
     g_pmcp_most_ready = 1; /* pmcp: isoTX2 open and START = 0 */
+    pmcp_event("most-open ok reopen=%d", reopen); /* pmcp */
     return fd;
 }
 
@@ -1115,6 +1137,8 @@ static int most_reclaim(const char *device, int fd, unsigned int attempt)
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
             "bridge: most-reclaim attempt=%u reopen=%s\n",
             attempt, fd >= 0 ? "ok" : "failed");
+    pmcp_event("reclaim attempt=%u dmdt=%d/%d reopen=%s", attempt, dc_status, sc_status,
+               fd >= 0 ? "ok" : "failed"); /* pmcp */
     return fd;
 }
 
@@ -1196,6 +1220,8 @@ static void *most_writer_thread(void *context)
             int write_errno = errno;
             uint64_t uptime_us = monotonic_us();
             g_pmcp_most_errno = write_errno; /* pmcp */
+            pmcp_event("most-error errno=%d blocks=%lu queue=%lu reclaims=%u stop=%d", write_errno,
+                       written_blocks, (unsigned long)queue_count(&g_queue), reclaims, (int)g_stop); /* pmcp */
             cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: MOST write failed: %s\n", strerror(write_errno));
             if (g_stop) break;
             if (write_errno == ENOMEM && reclaims < ALTSCREEN_BRIDGE_RECLAIM_MAX &&
@@ -1212,6 +1238,8 @@ static void *most_writer_thread(void *context)
                     continue;
                 }
             } else if (write_errno == ENOMEM) {
+                pmcp_event("reclaim-not-attempted reclaims=%u max=%u", reclaims,
+                           (unsigned)ALTSCREEN_BRIDGE_RECLAIM_MAX); /* pmcp */
                 cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
                         "bridge: most-reclaim not-attempted reclaims=%u max=%u uptime_ms=%llu\n",
                         reclaims, (unsigned)ALTSCREEN_BRIDGE_RECLAIM_MAX,
@@ -1277,6 +1305,7 @@ static void *most_writer_thread(void *context)
     most_close(fd);
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: writer stopped blocks=%lu reclaims=%u\n",
             written_blocks, reclaims);
+    pmcp_event("writer-stopped blocks=%lu reclaims=%u", written_blocks, reclaims); /* pmcp */
     return NULL;
 }
 
@@ -1331,6 +1360,8 @@ static int process_frame(AvcConfig *config, const uint8_t *data, size_t size,
         cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
                 "bridge: most-reclaim-resync sequence=%u queued=%lu reclaims=%lu\n",
                 sequence, (unsigned long)queued_packets, g_most_reclaims_handled);
+        pmcp_event("reclaim-resync seq=%u queued=%lu reclaims=%lu", sequence,
+                   (unsigned long)queued_packets, g_most_reclaims_handled); /* pmcp */
 #ifdef ALTSCREEN_AA_SINGLE_IDR
         /* No second IDR from an Android phone: mark the break and keep going. */
         g_discontinuity_pending = 1;
@@ -1358,6 +1389,8 @@ static int process_frame(AvcConfig *config, const uint8_t *data, size_t size,
         cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
                 "bridge: predictive-chain-gap previous=%u current=%u restart=%d\n",
                 g_last_sequence, sequence, sequence_restart);
+        pmcp_event("chain-gap previous=%u current=%u restart=%d", g_last_sequence, sequence,
+                   sequence_restart); /* pmcp */
         enter_low_latency_recovery(queued_packets, sequence, now_us);
         queued_packets = 0;
     }
@@ -1394,6 +1427,8 @@ static int process_frame(AvcConfig *config, const uint8_t *data, size_t size,
                     sequence, marker_status,
                     (unsigned long long)(now_us - g_latency_wait_start_us),
                     g_writer_blocks_completed, g_writer_fast_streak);
+            pmcp_event("idr-request seq=%u status=%d wait_ms=%llu", sequence, marker_status,
+                       (unsigned long long)((now_us - g_latency_wait_start_us) / 1000ULL)); /* pmcp */
         }
         ++g_latency_frames_discarded;
         g_last_sequence = sequence;
@@ -1415,6 +1450,8 @@ static int process_frame(AvcConfig *config, const uint8_t *data, size_t size,
                 sequence, (unsigned long long)waited_us,
                 (unsigned long)discarded,
                 g_writer_blocks_completed, g_writer_fast_streak);
+        pmcp_event("idr-resume seq=%u wait_ms=%llu extra_discarded=%lu", sequence,
+                   (unsigned long long)(waited_us / 1000ULL), (unsigned long)discarded); /* pmcp */
         g_waiting_for_keyframe = 0;
         g_recovery_idr_requested = 0;
     }
@@ -1571,6 +1608,7 @@ static void pmcp_gate_opened(void)
                 strerror(errno));
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: gate-open reason=%s gate_forced=%lu\n",
             pmcp_gate_reason(), (unsigned long)g_pmcp_gate.forced);
+    pmcp_event("gate-open reason=%s gate_drops=%lu", pmcp_gate_reason(), g_pmcp.gate_drops);
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
             "bridge: gate-stats cuts=%lu forced=%lu gate_drops=%lu wait_ms=%llu\n",
             (unsigned long)g_pmcp_gate.cuts, (unsigned long)g_pmcp_gate.forced, g_pmcp.gate_drops,
@@ -1702,6 +1740,9 @@ int main(int argc, char **argv)
                 g_local_origin_us = 0;
                 g_discontinuity_pending = 1;
                 pmcp_new_epoch = 1;
+                g_pmcp.avcc_log_next = 1;
+                pmcp_event("owner-cut owner_gen=%u ring_gen=%u prev_pid=%lu", (unsigned)g_pmcp_gate.owner_gen,
+                           (unsigned)generation, g_pmcp_gate.prev_pid);
                 cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
                         "bridge: owner-cut owner_gen=%u ring_gen=%u kind=%s prev_pid=%lu\n",
                         (unsigned)g_pmcp_gate.owner_gen, (unsigned)generation,
@@ -1748,6 +1789,8 @@ int main(int argc, char **argv)
             g_discontinuity_pending = 1;
             pmcp_new_epoch = 1; /* pmcp */
             pmcp_replay = 0; /* pmcp */
+            g_pmcp.avcc_log_next = 1; /* pmcp */
+            pmcp_event("ring-generation gen=%u", generation); /* pmcp */
             if (request_fresh_idr() != 0)
                 cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: reconnect IDR request failed: %s\n",
                         strerror(errno));
@@ -1785,6 +1828,9 @@ int main(int argc, char **argv)
                 if (committed > next_sequence) {
                     g_dropped_messages += committed - next_sequence;
                     ++g_pmcp_overruns; /* pmcp */
+                    if (g_pmcp_overruns <= PMCP_MOST_GAP_EVENTS) /* pmcp: same cap as frame gaps */
+                        pmcp_event("ring-overrun wanted=%u found=%u overruns=%lu", next_sequence, committed,
+                                   g_pmcp_overruns);
                     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
                             "bridge: ring overrun wanted=%u found=%u drops=%lu\n",
                             next_sequence, committed, g_dropped_messages);
@@ -1827,7 +1873,7 @@ int main(int argc, char **argv)
             if (type == ALT_FRAME_TYPE_CONFIG)
                 status = parse_avcc_config(&config, message, size);
             else if (type == ALT_FRAME_TYPE_VIDEO) {
-                pmcp_most_note_frame(media_timestamp_ns, monotonic_us(), pmcp_new_epoch); /* pmcp */
+                pmcp_most_note_frame(media_timestamp_ns, monotonic_us(), pmcp_new_epoch, next_sequence); /* pmcp */
                 pmcp_new_epoch = 0; /* pmcp */
                 status = process_frame(&config, message, size, flags,
                                        source_sequence, media_timestamp_ns);
@@ -1860,6 +1906,14 @@ done:
             g_latency_resets, g_latency_packets_discarded,
             g_latency_frames_discarded, g_pts_clock_rebases,
             g_intro_frames);
+    cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, /* pmcp */
+            "bridge: pmcp avcc_repeats=%lu frame_gaps=%lu gap_max_ms=%lu overruns=%lu\n",
+            g_pmcp.avcc_repeats, g_pmcp.gaps, g_pmcp.gap_max_ms, g_pmcp_overruns);
+    pmcp_event("exit result=%d frames=%lu drops=%lu overruns=%lu latency_resets=%lu reclaims=%lu "
+               "queue_hi=%lu most_errno=%d frame_gaps=%lu gap_max_ms=%lu", result, g_frames,
+               g_dropped_messages, g_pmcp_overruns, g_latency_resets, (unsigned long)g_most_reclaims,
+               (unsigned long)g_queue.high_water_total, (int)g_pmcp_most_errno, g_pmcp.gaps,
+               g_pmcp.gap_max_ms); /* pmcp */
     if (g_pmcp_gate.cuts) /* pmcp */
         cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
                 "bridge: gate-stats cuts=%lu forced=%lu gate_drops=%lu closed=%d\n",

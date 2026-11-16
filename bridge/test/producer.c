@@ -21,6 +21,10 @@
  * different SPS, frame_no from 100001) while the old stream keeps writing
  * for --old-tail-ms (every 4th tail frame an IDR). The child is killed --kill-old-ms after the switch
  * (-1: only at the end). Synthetic frames only.
+ * --gop N makes every N-th synthetic frame an IDR (default: only the first);
+ * --repeat-avcc 1 writes the avcC again before every IDR (core.so does that
+ * in the car); --pause-at K --pause-ms MS holds frame K back MS ms (a frame
+ * gap in the ring; the frame timestamps follow the real time).
  *
  * Writes OUT/frames.raw.jsonl (one record per frame/event, frame bytes at
  * avcc_off/avcc_bytes in OUT/input.avcc); the harness adds the SHA-256. */
@@ -456,7 +460,8 @@ static void usage(void)
         "  [--seed S] [--idr-size B] [--p-min B] [--p-max B] [--burst-at K --burst-count M --burst-size B]\n"
         "  [--idr-on-request N] [--session-dir D --src NAME --gen G --stop-after K --stop-hold-ms MS]\n"
         "  [--session-dir D --switch-after K [--kind K] [--new-src S] [--new-kind K] [--old-tail-ms T]\n"
-        "   [--new-delay-ms D] [--kill-old-ms X] [--new-frames N]]\n");
+        "   [--new-delay-ms D] [--kill-old-ms X] [--new-frames N]]\n"
+        "  [--gop N] [--repeat-avcc 0|1] [--pause-at K --pause-ms MS]\n");
     exit(2);
 }
 
@@ -468,6 +473,8 @@ int main(int argc, char **argv)
     size_t idr_size = 20000, p_min = 1500, p_max = 6000, burst_size = 100000;
     int burst_at = -1, burst_count = 0, idr_on_request = 1, stop_after = -1;
     unsigned stop_hold_ms = 2000;
+    int repeat_avcc = 0, pause_at = -1, pause_ms = 0;
+    unsigned gop = 0;
     SwitchOpts sw;
     char path[512], line[256];
     FILE *man, *avcc_file;
@@ -514,6 +521,10 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--new-delay-ms")) sw.new_delay_ms = atoi(v);
         else if (!strcmp(a, "--kill-old-ms")) sw.kill_old_ms = atoi(v);
         else if (!strcmp(a, "--new-frames")) sw.new_frames = (unsigned)atoi(v);
+        else if (!strcmp(a, "--repeat-avcc")) repeat_avcc = atoi(v);
+        else if (!strcmp(a, "--gop")) gop = (unsigned)atoi(v);
+        else if (!strcmp(a, "--pause-at")) pause_at = atoi(v);
+        else if (!strcmp(a, "--pause-ms")) pause_ms = atoi(v);
         else usage();
     }
     if (!ring_path || !idr_path || !out || fps == 0) usage();
@@ -563,7 +574,12 @@ int main(int argc, char **argv)
         size_t size;
         uint32_t seq;
         uint64_t ts;
-        uint64_t now = now_ns();
+        uint64_t now;
+        if ((int)idx == pause_at && pause_ms > 0) {
+            usleep((useconds_t)pause_ms * 1000U);
+            next_ns = now_ns();
+        }
+        now = now_ns();
         if (!burst) {
             if (next_ns > now) {
                 uint64_t d = next_ns - now;
@@ -597,7 +613,7 @@ int main(int argc, char **argv)
             each_nal(g_cap + au->off, au->len, to_avcc_nal, &frame);
             if (!avcc_sent && (!g_sps_n || !g_pps_n)) continue; /* nothing decodable yet */
         } else {
-            idr = idx == 0;
+            idr = idx == 0 || (gop && idx % gop == 0);
             size = burst ? burst_size : p_min + (size_t)((idx * 2654435761U) % (unsigned)(p_max - p_min + 1));
             if (pending == 0 && !idr) { idr = 1; forced = 1; }
             if (idr) size = idr_size;
@@ -605,7 +621,7 @@ int main(int argc, char **argv)
         }
         if (pending == 0) pending = -1;
         else if (pending > 0) --pending;
-        if (!avcc_sent) {
+        if (!avcc_sent || (repeat_avcc && idr)) {
             const uint8_t *s = h264 ? g_sps : sps, *p = h264 ? g_pps : pps;
             size_t sn = h264 ? g_sps_n : sps_n, pn = h264 ? g_pps_n : pps_n;
             Buf rec = {0, 0, 0};

@@ -25,6 +25,17 @@
  *     cut_seq is the ring write_sequence of the PREVIOUS owner poll (contract
  *     decision OQ3 (a)): an avcC written in the detection window opens it.
  *     No owner file at all = no gate (upstream behaviour).
+ *  5. Event file /ramdisk/pmcp-most/events.log (next to the log; env
+ *     PMCP_MOST_EVENTS, "-" = none): one line per rare event, never rotated,
+ *     appended by every bridge run of this start, so the first runs survive
+ *     a log that rotates in minutes. Each line starts with boot_ms (CLOCK_
+ *     MONOTONIC, from unit start), up_ms (from this bridge's start) and pid.
+ *     Events: start, MOST open / error / reclaim, latency reset (queue size),
+ *     IDR request and resume, chain gap, ring overrun, ring generation, owner
+ *     cut, gate open, session stop, first video frame of an epoch, frame
+ *     gaps >= PMCP_MOST_GAP_MS (at most PMCP_MOST_GAP_EVENTS per run), exit.
+ *     Capped at PMCP_MOST_EVENTS_LIMIT: the last line written is
+ *     "events-full"; later events are only in bridge.log.
  *
  * Nothing here blocks: small files on /ramdisk, read or written by the
  * reader thread at most every PMCP_MOST_OWNER_POLL_MS / 1000 ms; the writer
@@ -34,7 +45,9 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,8 +69,16 @@
 #define PMCP_MOST_SRC_DIR "/ramdisk/most-src"
 #endif
 #define PMCP_MOST_STATUS_PERIOD_MS 1000U
+#ifndef PMCP_STATUS_PID
+#define PMCP_STATUS_PID getpid() /* host tests may set a large constant */
+#endif
 #define PMCP_MOST_SESSION_POLL_MS 100U
 #define PMCP_MOST_OWNER_POLL_MS 20U /* PMCP_MOST_LINE_MAX: contract kit */
+#ifndef PMCP_MOST_EVENTS_LIMIT
+#define PMCP_MOST_EVENTS_LIMIT (64U * 1024U)
+#endif
+#define PMCP_MOST_GAP_MS 250U      /* a video frame this late after the previous one is an event */
+#define PMCP_MOST_GAP_EVENTS 40U   /* gap events per bridge run; the rest only counted */
 
 /* Reader-visible state, set by the writer thread / signal handler. */
 static volatile sig_atomic_t g_pmcp_most_ready;
@@ -100,10 +121,22 @@ typedef struct PmcpMostState {
     int poll_seq_have;
     uint32_t cut_write_seq;   /* write_sequence when the cut was noticed */
     unsigned long gate_drops; /* slots dropped by the closed gate */
+    /* event file and frame gaps */
+    char event_path[256];
+    int event_fd;
+    int event_full;
+    uint64_t last_frame_us;   /* local time of the previous consumed video frame */
+    uint64_t last_frame_ntp;
+    int last_frame_have;
+    unsigned long gaps;
+    unsigned long gap_max_ms;
+    unsigned long avcc_repeats; /* identical avcC parsed again (not logged) */
+    int avcc_log_next;          /* log the next avcC even when unchanged */
 } PmcpMostState;
 
-static PmcpMostState g_pmcp;
+static PmcpMostState g_pmcp = { .event_fd = -1, .avcc_log_next = 1 };
 static pmcp_consumer_gate g_pmcp_gate;
+static pthread_mutex_t g_pmcp_event_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static uint64_t pmcp_now_us(void)
 {
@@ -179,6 +212,71 @@ static void pmcp_log_reserve(FILE *file, size_t bytes)
     }
 }
 
+/* Opens the event file: PMCP_MOST_EVENTS, else events.log next to the active
+ * log; none when the log is stderr and no path is given. Appends (never
+ * truncates): all bridge runs of this start share it. */
+static void pmcp_event_init(void)
+{
+    const char *path = getenv("PMCP_MOST_EVENTS");
+    size_t n;
+    if (path == NULL || path[0] == '\0') {
+        if (!g_pmcp.log_active) return;
+        n = strlen(g_pmcp.log_path);
+        while (n > 0 && g_pmcp.log_path[n - 1U] != '/') --n;
+        if (n + sizeof("events.log") > sizeof(g_pmcp.event_path)) return;
+        memcpy(g_pmcp.event_path, g_pmcp.log_path, n);
+        memcpy(g_pmcp.event_path + n, "events.log", sizeof("events.log"));
+    } else {
+        if (strcmp(path, "-") == 0 || strlen(path) >= sizeof(g_pmcp.event_path)) return;
+        memcpy(g_pmcp.event_path, path, strlen(path) + 1U);
+    }
+    pmcp_mkdirs(g_pmcp.event_path, 0);
+    g_pmcp.event_fd = open(g_pmcp.event_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+}
+
+/* One event line: "boot_ms= up_ms= pid= <text>\n", one write() (O_APPEND, so
+ * lines of overlapping bridge runs never interleave). Any thread; never
+ * blocks on more than a small ramdisk write. Errors are ignored. */
+static void pmcp_event(const char *format, ...)
+{
+    char line[320];
+    struct stat st;
+    uint64_t now_us = pmcp_now_us();
+    int head;
+    int body;
+    int saved = errno;
+    va_list ap;
+    pthread_mutex_lock(&g_pmcp_event_mutex);
+    if (g_pmcp.event_fd < 0 || g_pmcp.event_full) goto out;
+    head = snprintf(line, sizeof(line), "boot_ms=%llu up_ms=%llu pid=%ld ",
+            (unsigned long long)(now_us / 1000ULL),
+            (unsigned long long)((now_us - g_pmcp.start_us) / 1000ULL), (long)getpid());
+    if (head <= 0 || head >= (int)sizeof(line)) goto out;
+    va_start(ap, format);
+    body = vsnprintf(line + head, sizeof(line) - (size_t)head - 1U, format, ap);
+    va_end(ap);
+    if (body < 0) goto out;
+    if (body > (int)(sizeof(line) - (size_t)head - 2U)) body = (int)(sizeof(line) - (size_t)head - 2U);
+    head += body;
+    line[head++] = '\n';
+    if (fstat(g_pmcp.event_fd, &st) != 0) goto out;
+    /* keep room for the closing events-full line */
+    if ((uint64_t)st.st_size + (uint64_t)head + 128U > (uint64_t)PMCP_MOST_EVENTS_LIMIT) {
+        g_pmcp.event_full = 1;
+        if ((uint64_t)st.st_size + 128U > (uint64_t)PMCP_MOST_EVENTS_LIMIT) goto out;
+        head = snprintf(line, sizeof(line),
+                "boot_ms=%llu up_ms=%llu pid=%ld events-full limit=%u (later events only in bridge.log)\n",
+                (unsigned long long)(now_us / 1000ULL),
+                (unsigned long long)((now_us - g_pmcp.start_us) / 1000ULL), (long)getpid(),
+                (unsigned)PMCP_MOST_EVENTS_LIMIT);
+        if (head <= 0 || head >= (int)sizeof(line)) goto out;
+    }
+    (void)write(g_pmcp.event_fd, line, (size_t)head);
+out:
+    pthread_mutex_unlock(&g_pmcp_event_mutex);
+    errno = saved;
+}
+
 static void pmcp_most_init(void)
 {
     const char *dir = getenv("PMCP_MOST_SRC_DIR");
@@ -195,6 +293,10 @@ static void pmcp_most_init(void)
             "bridge: pmcp-most stage1b pid=%ld log=%s limit=%u src_dir=%s\n",
             (long)getpid(), g_pmcp.log_active ? g_pmcp.log_path : "stderr",
             (unsigned)PMCP_MOST_LOG_LIMIT, g_pmcp.dir);
+    pmcp_event_init();
+    pmcp_event("start stage=1c log=%s events=%s limit=%u",
+            g_pmcp.log_active ? g_pmcp.log_path : "stderr", g_pmcp.event_path,
+            (unsigned)PMCP_MOST_EVENTS_LIMIT);
 }
 
 /* Reads one contract line; returns its length or -1. */
@@ -360,6 +462,8 @@ static int pmcp_session_check(uint64_t now_us)
             cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
                     "bridge: session-stop src=%s pid=%ld reason=vanished-dead-pid\n",
                     g_pmcp.src, g_pmcp.session_pid);
+            pmcp_event("session-stop src=%s session_pid=%ld reason=vanished-dead-pid",
+                    g_pmcp.src, g_pmcp.session_pid);
             return 1;
         }
         return 0;
@@ -390,6 +494,7 @@ static int pmcp_session_check(uint64_t now_us)
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
             "bridge: session-stop src=%s gen=%lu pid=%lu reason=%s\n",
             g_pmcp.src, gen, pid, reason);
+    pmcp_event("session-stop src=%s gen=%lu session_pid=%lu reason=%s", g_pmcp.src, gen, pid, reason);
     return 1;
 }
 
@@ -401,20 +506,21 @@ static void pmcp_status_write(const PmcpConsumerStats *s, int ready, uint64_t no
     int n;
     int fd;
     int errno_value = (int)g_pmcp_most_errno;
-    /* Field limits of contract v0.2 (worst case 253 bytes with the newline). */
+    /* Field limits of contract v1.2 (worst case 255 bytes with the newline):
+     * the full QNX pid (a pid_t is 32 bits; 9999999 hid the real one). */
 #define PMCP_CLAMP(value, max) ((value) > (max) ? (max) : (value))
     n = snprintf(line, sizeof(line),
             "v=1 ready=%d pid=%ld owner_gen=%lu ring_gen=%lu seq=%lu frames=%lu "
             "drops=%lu overruns=%lu latency_resets=%lu age_ms=%lu queue_pkts=%lu "
             "queue_hi=%lu reclaims=%lu most_errno=%d up_ms=%llu\n",
-            ready ? 1 : 0, PMCP_CLAMP((long)getpid(), 9999999L),
+            ready ? 1 : 0, PMCP_CLAMP((long)PMCP_STATUS_PID, 2147483647L),
             (unsigned long)g_pmcp.owner_gen, (unsigned long)s->ring_gen,
             (unsigned long)s->seq, PMCP_CLAMP(s->frames, 99999999UL),
             PMCP_CLAMP(s->drops, 99999999UL), PMCP_CLAMP(g_pmcp_overruns, 99999999UL),
             PMCP_CLAMP(s->latency_resets, 99999999UL), PMCP_CLAMP(g_pmcp.age_ms, 999999UL),
             PMCP_CLAMP(s->queue_pkts, 999999UL), PMCP_CLAMP(s->queue_hi, 999999UL),
             PMCP_CLAMP(s->reclaims, 99999999UL),
-            errno_value < -99999 ? -99999 : errno_value > 99999 ? 99999 : errno_value,
+            errno_value < -9999 ? -9999 : errno_value > 99999 ? 99999 : errno_value,
             PMCP_CLAMP((unsigned long long)((now_us - g_pmcp.start_us) / 1000ULL), 999999999ULL));
     if (n <= 0 || n > (int)PMCP_MOST_LINE_MAX) return;
     snprintf(path, sizeof(path), "%s/consumer", g_pmcp.dir);
@@ -463,12 +569,32 @@ static int pmcp_most_tick(uint64_t now_us, pmcp_ring *ring, uint32_t *cut_seq)
     return result;
 }
 
-/* Called for each consumed video slot with its media timestamp. */
-static void pmcp_most_note_frame(uint64_t media_ntp, uint64_t now_us, int new_epoch)
+/* Called for each consumed video slot with its media timestamp: age_ms, the
+ * first frame of an epoch and frame gaps (local and media time) as events. */
+static void pmcp_most_note_frame(uint64_t media_ntp, uint64_t now_us, int new_epoch,
+                                 uint32_t seq)
 {
     int64_t media_us;
     int64_t offset;
-    if (new_epoch) g_pmcp.age_have_min = 0;
+    if (new_epoch) {
+        g_pmcp.age_have_min = 0;
+        pmcp_event("video-start seq=%u", (unsigned)seq);
+    } else if (g_pmcp.last_frame_have &&
+               now_us - g_pmcp.last_frame_us >= PMCP_MOST_GAP_MS * 1000ULL) {
+        unsigned long gap_ms = (unsigned long)((now_us - g_pmcp.last_frame_us) / 1000ULL);
+        long media_ms = -1;
+        if (media_ntp != 0 && g_pmcp.last_frame_ntp != 0 && media_ntp >= g_pmcp.last_frame_ntp)
+            media_ms = (long)((((media_ntp - g_pmcp.last_frame_ntp) >> 16) * 1000ULL) >> 16);
+        ++g_pmcp.gaps;
+        if (gap_ms > g_pmcp.gap_max_ms) g_pmcp.gap_max_ms = gap_ms;
+        if (g_pmcp.gaps <= PMCP_MOST_GAP_EVENTS)
+            pmcp_event("frame-gap seq=%u gap_ms=%lu media_ms=%ld gaps=%lu%s", (unsigned)seq, gap_ms,
+                    media_ms, g_pmcp.gaps,
+                    g_pmcp.gaps == PMCP_MOST_GAP_EVENTS ? " (last gap event of this run)" : "");
+    }
+    g_pmcp.last_frame_us = now_us;
+    g_pmcp.last_frame_ntp = media_ntp;
+    g_pmcp.last_frame_have = 1;
     if (media_ntp == 0) {
         g_pmcp.age_ms = 0;
         return;
