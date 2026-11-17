@@ -2,6 +2,27 @@
 
 One entry per beta. How to install and test a beta: [BETA.md](BETA.md). Stable releases: [CHANGELOG.md](CHANGELOG.md).
 
+## v1.7.0-mu1418-beta.1.1 (2026-11-17)
+
+From the first car test (the map on the AID works). Same packages and the same menu; two installer changes:
+
+- **Status and Check name the file.** When there is no pmcp install but the unit is not factory, "7. Status" and
+  "1. Check card and unit" now say which files are not the factory ones (`lsd.sh`, `dio_manager`, `gal`, the iAP2
+  driver, `iap2.cfg`) instead of one line for all of them.
+- **An `lsd.sh` changed by another tool is taken over.** Installing and uninstalling a tool that edits `lsd.sh` (for
+  example MIB Toolbox's NavActiveIgnore) can leave it not exactly the factory file, and the card then refused
+  everything. Now, when `lsd.sh` is the only file that is not factory (and it does not hold our own block), "2. Install
+  CarPlay" saves it byte for byte on the unit, puts the factory `lsd.sh` of this card in its place and installs as on a
+  factory unit. "8. Remove everything" puts that exact file back (checked against the hash the unit computed when it was
+  saved). Every other way back (removing the last feature, the rescue card) gives the factory `lsd.sh`. Any other
+  changed file is still refused, and nothing is changed then.
+
+Offline tests: installer tests in ksh and mksh with the factory and the Toolbox `lsd.sh`, the takeover with several kinds
+of changed `lsd.sh` (Toolbox line without its jar or with a changed jar, an extra line, the line twice or moved, an empty
+line at the end), the whole way with the additional features and a trial start, a repair with main menu 2, refusals
+(another file changed too, our own block in `lsd.sh`, a damaged saved copy), and a power loss before every step of the
+takeover and of the way back: each ends in exactly the files from before the install.
+
 ## v1.7.0-mu1418-beta.1 (2026-11-12)
 
 **First beta for MU1418:** VW Golf (US), Discover Pro MHI2 `MHI2_US_VWG13_P3662`, MU 1418, AID part 791. Installer version

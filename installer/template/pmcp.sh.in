@@ -458,6 +458,7 @@ java_part_tolerable() {
 detect_state() {
     STATE=UNKNOWN; STATE_WHY=""; RGSYS=unknown; JAVA_OLD_SET=""; JAVA_STRAY=""; AASYS=unknown; AAMODE=""
 #@@TBX_BEGIN
+    LSD_FOREIGN=no
     TBX=no; matches "$LSD" "$TBX_LSD_SHA" "$TBX_LSD_SIZE" && TBX=yes
 #@@TBX_END
     CORE_STATE=UNKNOWN; MAPOK=no; JAVAPART=mixed
@@ -470,10 +471,23 @@ detect_state() {
             && matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE"; then
             STATE=STOCK; CORE_STATE=STOCK; RGSYS=off; AASYS=off; return
         fi
-        STATE_WHY="no carplaymaps, but lsd.sh, dio_manager, gal, the iAP2 driver or iap2.cfg is not the factory file"
+        # name every file that is not the factory one (only here: hashing all of them costs a few seconds)
+        _s_bad=""
+        @@LSD_PRE@@ || _s_bad="$_s_bad lsd.sh"
+        matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" || _s_bad="$_s_bad dio_manager"
+        matches "$GAL" "$STOCK_GAL_SHA" "$STOCK_GAL_SIZE" || _s_bad="$_s_bad gal"
+        matches "$DRV" "$STOCK_DRV_SHA" "$STOCK_DRV_SIZE" || _s_bad="$_s_bad iAP2-driver"
+        matches "$CFG" "$STOCK_CFG_SHA" "$STOCK_CFG_SIZE" || _s_bad="$_s_bad iap2.cfg"
+        STATE_WHY="no carplaymaps, but not the factory file:${_s_bad:- (none, changed while checking)}"
+#@@TBX_BEGIN
+        if [ "$_s_bad" = " lsd.sh" ] && lsd_foreign_ok; then
+            LSD_FOREIGN=yes
+            STATE_WHY="$STATE_WHY (changed by another tool; every other file is factory. 2. Install CarPlay saves it, uses the factory lsd.sh of this card, and 8. Remove everything puts it back exactly)"
+        fi
+#@@TBX_END
 #@@TBX_BEGIN
         if [ $TBX = yes ] && ! tbx_live; then
-            STATE_WHY="$STATE_WHY (lsd.sh has MIB Toolbox's NavActiveIgnore line, but $TBX_JAR is not Toolbox's file: nothing is merged)"
+            STATE_WHY="$STATE_WHY (lsd.sh has MIB Toolbox's NavActiveIgnore line, but $TBX_JAR is not Toolbox's file: it is not merged, only taken over as a changed lsd.sh)"
         fi
 #@@TBX_END
         return
@@ -542,6 +556,40 @@ lsd_pre() {
 # the same inside our install: Toolbox's state counts only with both audit copies in carplaymaps
 lsd_pre_root() {
     matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" || { tbx_live && tbx_saved; }
+}
+
+# lsd.sh changed by another tool (e.g. what a Toolbox uninstall leaves), every other file factory (detect_state LSD_FOREIGN):
+# install saves it byte for byte in carplaymaps/rollback/unit-lsd/ (lsd.sh + HASH = "sha1 size" as this unit computes
+# it), puts the factory lsd.sh of this card (LSD_STOCK) in its place and goes on as on a factory unit. Only restore (8)
+# puts the saved file back, checked against HASH; every other way back (java-off, features-reset, the rescue card)
+# gives the factory lsd.sh. Not taken over: a file that is not plain, larger than 256 KB, or holds our own lsd.sh block.
+UNIT_LSD="$ROOT/rollback/unit-lsd"
+lsd_foreign_ok() {
+    [ -f "$LSD" ] && [ ! -h "$LSD" ] || return 1
+    _f_z=`size_of "$LSD"`
+    case "$_f_z" in ""|*[!0-9]*) return 1 ;; esac
+    [ "$_f_z" -gt 0 ] && [ "$_f_z" -le 262144 ] || return 1
+    grep -q ">>> pmcp" "$LSD" 2>/dev/null
+    [ $? = 1 ]   # 1 = no own block; 0 = found, 2 = grep failed: both not taken over
+}
+# the saved copy is complete and matches its HASH (checked before restore changes anything)
+unit_lsd_saved_ok() {
+    _v_want=`cat "$UNIT_LSD/HASH" 2>/dev/null`
+    [ -n "$_v_want" ] && [ "`hash_of "$UNIT_LSD/lsd.sh"`" = "$_v_want" ]
+}
+# unit_lsd_back: the saved lsd.sh back in place, checked; 0 = back, 1 = nothing saved, 2 = the copy or the switch failed
+unit_lsd_back() {
+    [ -f "$UNIT_LSD/lsd.sh" ] || return 1
+    _u_want=`cat "$UNIT_LSD/HASH" 2>/dev/null`
+    [ -n "$_u_want" ] && [ "`hash_of "$UNIT_LSD/lsd.sh"`" = "$_u_want" ] || { say "  saved lsd.sh does not match its hash"; return 2; }
+    if [ "`hash_of "$LSD"`" != "$_u_want" ]; then
+        cp "$UNIT_LSD/lsd.sh" "$LSD.pmcp-restore" && chmod 755 "$LSD.pmcp-restore" || return 2
+        [ "`hash_of "$LSD.pmcp-restore"`" = "$_u_want" ] || return 2
+        mv "$LSD.pmcp-restore" "$LSD" || return 2
+    fi
+    [ "`hash_of "$LSD"`" = "$_u_want" ] || return 2
+    say "  ok the lsd.sh from before the install is back (exact, $_u_want)"
+    return 0
 }
 #@@TBX_END
 
@@ -1265,7 +1313,15 @@ rollback_install() {
     say "Rolling back"
     cp "$ROOT/stock_first/dio_manager.real" "$DIO.pmcp-rb" 2>/dev/null && chmod 755 "$DIO.pmcp-rb" && mv "$DIO.pmcp-rb" "$DIO"
     rm -f "$DIO.pmcp-new" 2>/dev/null
-    if matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" && [ -x "$DIO" ] && @@LSD_PRE@@; then
+    _rb_lsd=no
+#@@TBX_BEGIN
+    rm -f "$LSD.pmcp-take" 2>/dev/null
+    if [ -f "$UNIT_LSD/lsd.sh" ]; then
+        # a saved changed lsd.sh: carplaymaps (its only copy) goes only once that file is back
+        if unit_lsd_back; then _rb_lsd=yes; else _rb_lsd=keep; fi
+    fi
+#@@TBX_END
+    if [ "$_rb_lsd" != keep ] && matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" && [ -x "$DIO" ] && { [ $_rb_lsd = yes ] || @@LSD_PRE@@; }; then
         remove_root
         say "PMCP_ROLLBACK_OK (factory files verified)"
     else
@@ -1300,6 +1356,13 @@ do_install() {
     detect_state
 #@@TBX_BEGIN
     if [ "$STATE" != STOCK ] && [ -n "$STATE_WHY" ]; then say "  $STATE_WHY"; fi
+    FOREIGN=""
+    if [ "$STATE" = UNKNOWN ] && [ "$LSD_FOREIGN" = yes ]; then
+        FOREIGN=`hash_of "$LSD"`
+        [ -n "$FOREIGN" ] || fail "CHANGED_LSD_HASH_FAILED"
+        say "lsd.sh was changed by another tool (sha1 size $FOREIGN): it is saved, the factory lsd.sh of this card replaces it"
+        TBX=no; STATE=STOCK
+    fi
 #@@TBX_END
     [ "$STATE" = STOCK ] || fail "UNIT_NOT_FACTORY_STATE_$STATE"
     say "Unit is in factory state; installing variant $ARG"
@@ -1311,6 +1374,9 @@ do_install() {
     # Leftovers of an interrupted earlier attempt (never active files: those are covered by detect_state).
     remove_stale
     rm -f "$DIO.pmcp-new" "$LSD.pmcp-new" "$DIO.pmcp-rb" "$LSD.pmcp-rb" "$DIO.pmcp-restore" "$LSD.pmcp-restore" 2>/dev/null
+#@@TBX_BEGIN
+    rm -f "$LSD.pmcp-take" 2>/dev/null
+#@@TBX_END
     # Old trial/ok markers must not carry over to a new install (they are per JAR hash, a set could skip its trial).
     rm -rf "$PERSIST" 2>/dev/null
     [ ! -e "$PERSIST" ] || fail "OLD_TRIAL_MARKERS_NOT_REMOVED"
@@ -1329,6 +1395,14 @@ do_install() {
         set -- `manifest_get LSD_STOCK`
         cp "$PAYLOAD/$3" "$NEW/rollback/lsd.sh" || fail "STOCK_LSD_COPY_FAILED"
         say "  lsd.sh loads MIB Toolbox's NavActiveIgnore: both Toolbox files saved, the factory lsd.sh of this card is the way back"
+    fi
+    if [ -n "$FOREIGN" ]; then
+        mkdir "$NEW/rollback/unit-lsd" || fail "STAGE_CREATE_FAILED"
+        mv "$NEW/rollback/lsd.sh" "$NEW/rollback/unit-lsd/lsd.sh" || fail "UNIT_LSD_COPY_FAILED"
+        echo "$FOREIGN" > "$NEW/rollback/unit-lsd/HASH" || fail "UNIT_LSD_COPY_FAILED"
+        set -- `manifest_get LSD_STOCK`
+        cp "$PAYLOAD/$3" "$NEW/rollback/lsd.sh" || fail "STOCK_LSD_COPY_FAILED"
+        cp "$PAYLOAD/$3" "$LSD.pmcp-take" && chmod 755 "$LSD.pmcp-take" || fail "LSD_STAGE_FAILED"
     fi
 #@@TBX_END
     cp "$PAYLOAD/$C_PATH" "$NEW/core.so" || fail "CORE_COPY_FAILED"
@@ -1358,6 +1432,7 @@ EOF
     if [ "$TBX" = yes ]; then
         chmod 644 "$NEW/rollback/toolbox-nai/lsd.sh" "$NEW/rollback/toolbox-nai/@@TBX_JAR_NAME@@" || fail "CHMOD_FAILED"
     fi
+    if [ -n "$FOREIGN" ]; then chmod 644 "$NEW/rollback/unit-lsd/lsd.sh" "$NEW/rollback/unit-lsd/HASH" || fail "CHMOD_FAILED"; fi
 #@@TBX_END
 
     cp "$PAYLOAD/$W_PATH" "$DIO.pmcp-new" || fail "DIO_STAGE_FAILED"
@@ -1371,6 +1446,12 @@ EOF
     if [ "$TBX" = yes ]; then
         check "$NEW/rollback/toolbox-nai/lsd.sh" "$TBX_LSD_SHA" "$TBX_LSD_SIZE" STAGED_TOOLBOX_LSD
         check "$NEW/rollback/toolbox-nai/@@TBX_JAR_NAME@@" "$TBX_JAR_SHA" "$TBX_JAR_SIZE" STAGED_TOOLBOX_JAR
+    fi
+    if [ -n "$FOREIGN" ]; then
+        [ "`hash_of "$NEW/rollback/unit-lsd/lsd.sh"`" = "$FOREIGN" ] || fail "STAGED_UNIT_LSD_MISMATCH"
+        [ "`cat "$NEW/rollback/unit-lsd/HASH"`" = "$FOREIGN" ] || fail "STAGED_UNIT_LSD_HASH_MISMATCH"
+        say "  ok STAGED_UNIT_LSD"
+        check "$LSD.pmcp-take" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" STAGED_FACTORY_LSD
     fi
 #@@TBX_END
     check "$NEW/core.so" "$C_SHA" "$C_SIZE" STAGED_CORE
@@ -1389,11 +1470,23 @@ EOF
     check "$DIO.pmcp-new" "$W_SHA" "$W_SIZE" STAGED_WRAPPER_DIO
 
     # Re-check the live factory files right before the switch (nothing else may have changed them).
+#@@TBX_BEGIN
+    if [ -n "$FOREIGN" ]; then
+        [ "`hash_of "$LSD"`" = "$FOREIGN" ] || fail "LSD_CHANGED_DURING_INSTALL"
+    else
+#@@TBX_END
     @@LSD_PRE@@ || fail "LSD_CHANGED_DURING_INSTALL"
+#@@TBX_BEGIN
+    fi
+#@@TBX_END
     matches "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" || fail "DIO_CHANGED_DURING_INSTALL"
 
     say "Activating"
     mv "$NEW" "$ROOT" || fail "ROOT_ACTIVATION_FAILED"
+#@@TBX_BEGIN
+    # the changed lsd.sh is in carplaymaps now (checked above): the factory file takes its place
+    if [ -n "$FOREIGN" ]; then mv "$LSD.pmcp-take" "$LSD" || { rollback_install; fail "LSD_ACTIVATION_FAILED"; }; fi
+#@@TBX_END
     mv "$DIO.pmcp-new" "$DIO" || { rollback_install; fail "DIO_ACTIVATION_FAILED"; }
 
     say "Verifying active files"
@@ -1403,6 +1496,12 @@ EOF
     matches "$ROOT/core.so" "$C_SHA" "$C_SIZE" || { rollback_install; fail "POST_INSTALL_CORE"; }
     flush
     say "PMCP_INSTALL_OK stage=A variant=$ARG version=$PMCP_VERSION"
+#@@TBX_BEGIN
+    if [ -n "$FOREIGN" ]; then
+        say "A full unit reboot is required. lsd.sh is now the factory file; the changed one is saved, 8. Remove everything puts it back."
+        return 0
+    fi
+#@@TBX_END
     say "A full unit reboot is required. lsd.sh and the HMI are unchanged."
 }
 
@@ -1462,6 +1561,9 @@ do_map_install() {
     selftest
     firmware_identity
     detect_state
+#@@TBX_BEGIN
+    if [ "$STATE" = UNKNOWN ] && [ "$LSD_FOREIGN" = yes ]; then do_install; return 0; fi
+#@@TBX_END
     case "$STATE" in
         STOCK) do_install; return 0 ;;
         UNKNOWN) [ -n "$STATE_WHY" ] && say "  $STATE_WHY"; fail "MAP_INSTALL_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" ;;
@@ -2037,6 +2139,11 @@ do_restore() {
         VIDEO|JAVA|PARTIAL) ;;
         *) fail "RESTORE_NEEDS_PMCP_INSTALL_STATE_$STATE" ;;
     esac
+#@@TBX_BEGIN
+    if [ -e "$UNIT_LSD" ]; then
+        unit_lsd_saved_ok || fail "SAVED_UNIT_LSD_NOT_VERIFIED_NOTHING_CHANGED"
+    fi
+#@@TBX_END
     remount_rw
     stop_runtime
     # Idempotent: each live file is replaced only if it is not already the factory file. lsd.sh first:
@@ -2059,16 +2166,41 @@ do_restore() {
         rm -f "$JARS/$f" "$JARS/$f.pmcp-new" || fail "JAR_REMOVE_FAILED"
     done
     rm -f "$LSD.pmcp-new" "$DIO.pmcp-new" "$LSD.pmcp-rb" "$DIO.pmcp-rb" 2>/dev/null
+#@@TBX_BEGIN
+    rm -f "$LSD.pmcp-take" 2>/dev/null
+#@@TBX_END
     rg_files_off
     check "$DIO" "$STOCK_DIO_SHA" "$STOCK_DIO_SIZE" FACTORY_DIO
     [ -x "$DIO" ] || fail "FACTORY_DIO_NOT_EXECUTABLE"
     check "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" FACTORY_LSD
+#@@TBX_BEGIN
+    # an lsd.sh changed by another tool before the install goes back last (while carplaymaps still holds its copy, an
+    # interrupted restore is PARTIAL and runs again)
+    _r_uh=""
+    if [ -f "$UNIT_LSD/lsd.sh" ]; then
+        _r_uh=`cat "$UNIT_LSD/HASH" 2>/dev/null`
+        [ -n "$_r_uh" ] || fail "SAVED_UNIT_LSD_HASH_MISSING"
+        unit_lsd_back || fail "UNIT_LSD_RESTORE_FAILED"
+    fi
+#@@TBX_END
     # trial/ok markers before carplaymaps: while carplaymaps exists, an interrupted restore can be run again
     rm -rf "$PERSIST" 2>/dev/null
     [ ! -e "$PERSIST" ] || fail "TRIAL_MARKERS_REMOVE_FAILED"
     remove_root || fail "ROOT_REMOVE_FAILED"
     remove_stale
     detect_state
+#@@TBX_BEGIN
+    if [ -n "$_r_uh" ]; then
+        # the saved file is back and carplaymaps is gone (the state is UNKNOWN with this lsd.sh, or STOCK when it matches
+        # a known lsd.sh again, e.g. Toolbox's with its jar)
+        [ ! -e "$ROOT" ] && [ "`hash_of "$LSD"`" = "$_r_uh" ] && { [ "$STATE" = STOCK ] || [ "$LSD_FOREIGN" = yes ]; } \
+            || fail "POST_RESTORE_STATE_$STATE"
+        flush
+        say "PMCP_RESTORE_OK (factory dio_manager verified; lsd.sh is the one from before the install, exact)"
+        say "A full unit reboot is required."
+        return 0
+    fi
+#@@TBX_END
     [ "$STATE" = STOCK ] || fail "POST_RESTORE_STATE_$STATE"
     flush
     say "PMCP_RESTORE_OK (factory lsd.sh and dio_manager verified)"
@@ -2084,6 +2216,9 @@ do_status() {
 #@@TBX_BEGIN
     if [ "$TBX" = yes ]; then
         say "MIB Toolbox NavActiveIgnore: loaded by lsd.sh now (the first Java package of this card replaces that line)"
+    fi
+    if [ -f "$UNIT_LSD/lsd.sh" ]; then
+        say "lsd.sh from before the install (changed by another tool): saved in carplaymaps/rollback/unit-lsd, 8. Remove everything puts it back"
     fi
     if [ -d "$ROOT/rollback/toolbox-nai" ]; then
         if tbx_saved; then

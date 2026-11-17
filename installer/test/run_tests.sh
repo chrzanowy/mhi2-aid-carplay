@@ -518,10 +518,14 @@ PY
     fresh_unit; rm "$W/unit/ifs/lsd.jxe"; truncate -s $BADSIZE "$W/unit/ifs/lsd.jxe"
     run install map-clean; rc_is 1; expect_out "NOT_${PMCP_PROFILE}_LSD_JXE_SIZE_$BADSIZE" "size gate"
 
-    echo "[11] modified factory lsd.sh: refused"
+    echo "[11] modified factory lsd.sh: refused (a profile with the factory lsd.sh on its card takes it over instead: [53])"
     fresh_unit; echo "# local edit" >> "$W/unit/mnt/app/eso/hmi/lsd/lsd.sh"; before=$(snapshot "$W/unit")
-    run install map-clean; rc_is 1; expect_out "UNIT_NOT_FACTORY_STATE_UNKNOWN" "unknown state"
-    [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
+    if [ $HAS_TBX = yes ]; then
+        run install map-clean; rc_is 0; expect_out "lsd.sh was changed by another tool" "taken over"
+    else
+        run install map-clean; rc_is 1; expect_out "UNIT_NOT_FACTORY_STATE_UNKNOWN" "unknown state"
+        [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
+    fi
 
     echo "[12] another mod present (generic CarPlayNavigationPatch.jar): refused"
     fresh_unit; echo x > "$W/unit/mnt/app/eso/hmi/lsd/jars/CarPlayNavigationPatch.jar"; before=$(snapshot "$W/unit")
@@ -831,6 +835,21 @@ PY
     [ "$factory" = "$(snapshot "$W/unit")" ] && ok "restore after the v1.3.0 update: exact factory tree" || bad "tree after restore"
     fi
 
+    # takeover_cycle LABEL: on the unit as it is now (lsd.sh changed by another tool, everything else factory), 1 names only
+    # lsd.sh, 2 saves it and puts the factory lsd.sh in its place, the map works as usual, 8 gives back the exact tree
+    takeover_cycle() {
+        _tc_before=$(cd "$W/unit" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2); _tc_lsd=$(h "$W/unit/mnt/app/eso/hmi/lsd/lsd.sh")
+        run verify; rc_is 0; expect_out "PMCP_VERIFY_OK state=UNKNOWN" "$1: verify UNKNOWN"
+        expect_out "not the factory file: lsd.sh (changed by another tool" "$1: verify names only lsd.sh and the takeover"
+        run map-install map-square-fps40; rc_is 0; expect_out "lsd.sh was changed by another tool" "$1: 2 takes it over"
+        expect_out "PMCP_INSTALL_OK stage=A" "$1: map installed"
+        [ "$(h "$W/unit/mnt/app/eso/hmi/lsd/lsd.sh")" = "$STOCK_LSD" ] && ok "$1: live lsd.sh is the factory file" || bad "$1: live lsd.sh not factory"
+        [ "$(h "$U/carplaymaps/rollback/unit-lsd/lsd.sh")" = "$_tc_lsd" ] && ok "$1: changed lsd.sh saved exactly" || bad "$1: saved copy differs"
+        run status; expect_out "Unit state: VIDEO" "$1: VIDEO after 2"; expect_out "lsd.sh from before the install" "$1: status names the saved file"
+        run restore; rc_is 0; expect_out "lsd.sh is the one from before the install, exact" "$1: 8 puts it back"
+        [ "$_tc_before" = "$(cd "$W/unit" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2 | grep -v '/ramdisk/')" ] \
+            && ok "$1: exact tree from before the install" || { bad "$1: tree differs after 8"; diff <(echo "$_tc_before") <(cd "$W/unit" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2 | grep -v '/ramdisk/') | head -5 | sed 's/^/       | /'; }
+    }
     # ---- profile specifics: the Toolbox NavActiveIgnore state, no Android Auto, a card of another profile ----
     if [ $HAS_TBX = yes ]; then
     TBXL="$U/eso/hmi/lsd/lsd.sh"; TBXJ="$U/eso/hmi/lsd/jars/$TBX_JAR_NAME"
@@ -845,27 +864,18 @@ PY
     fi
     [ "$before" = "$(snapshot "$W/unit")" ] && ok "verify wrote nothing" || bad "verify changed the unit"
     if [ "$LSD_TEST_STATE" = toolbox_nai ]; then
-        # the Toolbox jar changed by one byte: lsd.sh is Toolbox's, the jar is not -> unknown, nothing is merged
-        fresh_unit; printf 'Z' | dd of="$TBXJ" bs=1 seek=100 conv=notrunc 2>/dev/null; before=$(snapshot "$W/unit")
-        run install map-clean; rc_is 1; expect_out "UNIT_NOT_FACTORY_STATE_UNKNOWN" "tampered Toolbox jar: install stops"
-        expect_out "is not Toolbox's file" "reason names the Toolbox jar"
-        run map-install map-square-fps40; rc_is 1; expect_out "MAP_INSTALL_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" "main menu 2 stops too"
-        [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
-        # the Toolbox jar missing
-        fresh_unit; rm "$TBXJ"; before=$(snapshot "$W/unit")
-        run install map-clean; rc_is 1; expect_out "UNIT_NOT_FACTORY_STATE_UNKNOWN" "Toolbox lsd.sh without its jar: install stops"
-        [ "$before" = "$(snapshot "$W/unit")" ] && ok "unit unchanged" || bad "unit changed"
-        # the Toolbox line plus another line, the line twice, the line in another place: each is another file
-        for variant in extra twice moved; do
+        # lsd.sh is not one we know (Toolbox's without its own jar, or changed in any other way), every other file factory:
+        # main menu 2 takes it over (saved byte for byte, the factory lsd.sh in its place); 8 puts that exact file back
+        for variant in tampered-jar no-jar extra twice moved; do
             fresh_unit
             case $variant in
+                tampered-jar) printf 'Z' | dd of="$TBXJ" bs=1 seek=100 conv=notrunc 2>/dev/null ;;
+                no-jar) rm "$TBXJ" ;;
                 extra) echo '# local edit' >> "$TBXL" ;;
                 twice) { cat "$TBXL"; sed -n '/NavActiveIgnore.jar/p' "$TBXL"; } > "$W/lsd.v"; cp "$W/lsd.v" "$TBXL" ;;
                 moved) { sed -n '/NavActiveIgnore.jar/p' "$TBXL"; grep -v NavActiveIgnore.jar "$TBXL"; } > "$W/lsd.v"; cp "$W/lsd.v" "$TBXL" ;;
             esac
-            before=$(snapshot "$W/unit")
-            run install map-clean; rc_is 1; expect_out "UNIT_NOT_FACTORY_STATE_UNKNOWN" "lsd.sh variant '$variant': install stops"
-            [ "$before" = "$(snapshot "$W/unit")" ] && ok "'$variant': unit unchanged" || bad "'$variant': unit changed"
+            takeover_cycle "lsd.sh '$variant'"
         done
         # Toolbox's lsd.sh with the pmcp block and no carplaymaps (a rest of something else): unknown
         fresh_unit; cp "$SDB/pmcp/payload/lsd/lsd.sh" "$TBXL"; before=$(snapshot "$W/unit")
@@ -2102,6 +2112,82 @@ PEOF
         [ "$before" = "$(snapshot "$W/unit" | grep -v '/ramdisk/' | grep -v '/persist/pmcp/gem.log')" ] && ok "9c0c4493: 4 and 3 changed no file" || bad "9c0c4493: 4 or 3 changed files"
         [ "$(cat "$W/unit/mnt/persist/pmcp/native-speedlimit-mode" 2>/dev/null)" = turnto ] && ok "9c0c4493: speed-limit mode kept" || bad "9c0c4493: speed-limit mode lost"
         restore_exact "9c0c4493: restore gives the exact factory tree"
+    fi
+
+    if [ $HAS_TBX = yes ]; then
+    echo "[53] lsd.sh changed by another tool (what a Toolbox uninstall can leave): 2 takes it over, 4 and the trial work, 8 gives it back exactly; power loss at every step"
+    # the factory text plus one empty line at the end
+    foreign_unit() { fresh_unit; rm -f "$U/eso/hmi/lsd/jars/$TBX_JAR_NAME"; cp "$FACTORY_LSD_SRC" "$U/eso/hmi/lsd/lsd.sh"; echo >> "$U/eso/hmi/lsd/lsd.sh"; }
+    tree() { (cd "$W/unit" && find . -type f ! -path './sdlog/*' -exec shasum -a 256 {} + | sort -k2 | grep -v '/ramdisk/'); }
+    foreign_unit; orig=$(tree)
+    takeover_cycle "factory + empty line"
+    # the whole way with the features: 4, trial start, confirm, then 8
+    foreign_unit
+    run map-install map-square-fps40; rc_is 0
+    feat; rc_is 0; expect_out "PMCP_FEATURES_ON_OK" "takeover: 4 installs the features"
+    confirm_now; run status; expect_out "Unit state: JAVA" "takeover: JAVA"
+    run java-off nai; run java-off rg; run java-off zoom; run java-off dn
+    [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = "$STOCK_LSD" ] && ok "takeover: java-off of the last package gives the FACTORY lsd.sh" || bad "takeover: lsd.sh after the last java-off"
+    feat; rc_is 0
+    run restore; rc_is 0; expect_out "lsd.sh is the one from before the install, exact" "takeover with features: 8 puts it back"
+    [ "$orig" = "$(tree)" ] && ok "takeover with features: exact tree after 8" || { bad "takeover with features: tree differs"; diff <(echo "$orig") <(tree) | head -6 | sed 's/^/       | /'; }
+    # main menu 2 on mixed map files (PARTIAL): its restore gives the changed lsd.sh back, then takes it over again
+    foreign_unit; run map-install map-clean; rc_is 0; cp "$BK/eso/bin/apps/dio_manager" "$U/eso/bin/apps/dio_manager"
+    run status; expect_out "Unit state: PARTIAL" "takeover, mixed map files: PARTIAL"
+    run map-install map-square-fps40; rc_is 0; expect_out "removing everything first" "takeover, mixed map files: 2 removes first"
+    expect_out "lsd.sh was changed by another tool" "takeover, mixed map files: and takes lsd.sh over again"
+    expect_out "PMCP_INSTALL_OK stage=A" "takeover, mixed map files: 2 repairs"
+    [ -f "$U/carplaymaps/rollback/unit-lsd/lsd.sh" ] && [ "$(h "$U/carplaymaps/rollback/unit-lsd/lsd.sh")" = "$(echo "$orig" | sed -n 's#^\([0-9a-f]*\)  ./mnt/app/eso/hmi/lsd/lsd.sh$#\1#p')" ] \
+        && ok "takeover, mixed map files: the changed lsd.sh is still the saved one" || bad "takeover, mixed map files: saved copy lost or changed"
+    run restore; rc_is 0; [ "$orig" = "$(tree)" ] && ok "takeover, mixed map files: exact tree after 8" || bad "takeover, mixed map files: tree differs"
+    # not taken over: another file changed too, or lsd.sh holds our own block
+    foreign_unit; echo x >> "$W/unit/mnt/system/etc/mm/iap2.cfg"; before=$(tree)
+    run map-install map-clean; rc_is 1; expect_out "not the factory file: lsd.sh iap2.cfg" "lsd.sh and iap2.cfg: both named"
+    expect_out "MAP_INSTALL_NOT_A_PMCP_INSTALL_NOTHING_CHANGED" "lsd.sh and iap2.cfg: 2 refuses"
+    run install map-clean; rc_is 1; [ "$before" = "$(tree)" ] && ok "lsd.sh and iap2.cfg: unit unchanged" || bad "lsd.sh and iap2.cfg: unit changed"
+    foreign_unit; cp "$SDB/pmcp/payload/lsd/lsd.sh" "$U/eso/hmi/lsd/lsd.sh"; before=$(tree)
+    run map-install map-clean; rc_is 1; grep -q "changed by another tool" "$W/out" && bad "our block: offered for takeover" || ok "lsd.sh with our block: not taken over"
+    [ "$before" = "$(tree)" ] && ok "lsd.sh with our block: unit unchanged" || bad "lsd.sh with our block: unit changed"
+    foreign_unit; echo x >> "$U/eso/bin/apps/gal"
+    run status; expect_out "not the factory file: lsd.sh gal" "lsd.sh and gal: both named"
+    # the saved copy damaged, or its HASH missing, inside our install: 8 refuses before it changes anything
+    for dmg in copy hash; do
+        foreign_unit; run map-install map-clean; rc_is 0; feat
+        case $dmg in copy) echo y >> "$U/carplaymaps/rollback/unit-lsd/lsd.sh" ;; hash) rm "$U/carplaymaps/rollback/unit-lsd/HASH" ;; esac
+        before=$(tree)
+        run restore; rc_is 1; expect_out "SAVED_UNIT_LSD_NOT_VERIFIED_NOTHING_CHANGED" "damaged saved $dmg: 8 stops"
+        [ "$before" = "$(tree)" ] && ok "damaged saved $dmg: unit unchanged" || bad "damaged saved $dmg: unit changed"
+    done
+    # power loss before every mutating command of 2 (takeover) and of 8 (give back): status is never locked, and
+    # 2 + 8 (after 2) or 8 (after 8) end in the exact tree from before
+    for act in "map-install map-clean" restore; do
+        foreign_unit
+        awk -v inc="$T/fault_inject.inc" '{print} /^unset LD_PRELOAD$/ && !done {while ((getline l < inc) > 0) print l; done=1}' \
+            "$W/sd/pmcp.sh" > "$W/sd/pmcp-fi.sh"
+        [ "$act" = restore ] && { run map-install map-clean; feat; confirm_now; }
+        rm -rf "$W/otpl"; cp -Rp "$W/unit" "$W/otpl"
+        n=1; okk=yes
+        while [ $n -lt 40 ]; do
+            rm -rf "$W/unit"; cp -Rp "$W/otpl" "$W/unit"; rm -f "$W/ficnt"
+            ( PMCP_KILL_AT=$n PMCP_FI_CNT="$W/ficnt" PMCP_FI_LOG="$W/filog" PMCP_TEST_ROOT="$W/unit" $SH "$W/sd/pmcp-fi.sh" $act > "$W/out" 2>&1; : ) 2>/dev/null
+            grep -q FI_KILLED "$W/out" || break
+            run status
+            st=$(sed -n 's/^.*Unit state: //p' "$W/out" | head -1)
+            case "$st" in
+                VIDEO|JAVA|PARTIAL) run restore ;;
+                UNKNOWN) grep -q "changed by another tool" "$W/out" || { okk=no; bad "$act killed at $n: UNKNOWN without the takeover"; }
+                         run map-install map-clean; run restore ;;
+                *) okk=no; bad "$act killed at $n: state '$st'" ;;
+            esac
+            grep -q PMCP_RESTORE_OK "$W/out" || { okk=no; bad "$act killed at $n: 8 did not finish"; sed 's/^/       | /' "$W/out" | tail -3; }
+            [ "$orig" = "$(tree)" ] || { okk=no; bad "$act killed at $n: not the tree from before"; diff <(echo "$orig") <(tree) | head -4 | sed 's/^/       | /'; }
+            n=$((n+1))
+        done
+        [ $n -lt 40 ] || bad "takeover, $act: more than 39 mutating commands, the loop did not reach the end"
+        [ $n -gt 1 ] && [ $okk = yes ] && ok "takeover, $act: power loss at each of $((n-1)) mutating commands ends in the exact tree from before" \
+            || { [ $n -gt 1 ] || bad "takeover, $act: the kill loop never hit a mutating command"; }
+    done
+    rm -rf "$W/otpl"
     fi
 
     [ -s "$W/noexec" ] && { bad "pmcp.sh called a command the unit does not have ($(wc -l < "$W/noexec" | tr -d ' ') runs)"; sort -u "$W/noexec" | head -5 | sed 's/^/       | /'; } \
