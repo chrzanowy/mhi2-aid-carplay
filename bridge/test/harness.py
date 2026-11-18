@@ -559,7 +559,7 @@ EV_HEAD = re.compile(r'^boot_ms=(\d+) up_ms=(\d+) pid=(\d+) (\S+)')
 
 
 def test_events():
-    """Stage 1c logging: avcC logged only when it changes, the unrotated event file, frame gaps."""
+    """Stage 1c logging: avcC logged only when it changes, the rotated event file, frame gaps."""
     # (1) the phone repeats the avcC before every IDR (IDR every 10 frames); one frame held back 600 ms
     r = Run('events').start()
     r.produce('--frames', 150, '--gop', 10, '--repeat-avcc', 1, '--pause-at', 70, '--pause-ms', 600)
@@ -595,6 +595,12 @@ def test_events():
           'frame_gaps=1 ' in log, ev[-1:])
     check('events: consumer pid is still the bridge pid', st.get('pid') == str(r.p.pid), st)
     check('events: exit 0', rc == 0, rc)
+    if LIB:
+        check('priority: stage 2 handles the main thread before MOST open and the writer after start (target 14)',
+              'priority thread=main unchanged (host build) target=14' in log and
+              'priority thread=writer unchanged (host build) target=14' in log and
+              log.index('priority thread=main') < log.index('priority thread=writer'),
+              [l for l in log.splitlines() if 'priority' in l][:3])
     size1 = os.path.getsize(os.path.join(os.path.dirname(r.log), 'events.log'))
     # (2) a second bridge run of the same start appends (never truncates)
     r2 = Run('events')            # same directory: Run() clears it, so keep the first file aside
@@ -609,11 +615,12 @@ def test_events():
     check('events: a later run appends to the file of this start', ev2[:1] == ['EARLIER RUN'] and
           len(ev2) > 2 and ' start ' in ev2[1], ev2[:2])
     r2.cleanup()
-    # (3) limit (build with 1024 B): the file stops at the limit with one events-full line;
+    # (3) rotation (build with limit 1024 B: each file <= 512 B): a file that would pass half the limit
+    #     becomes events.log.1 (one copy); nothing on /ramdisk only grows; the newest events are kept;
     #     the same build reports a 10-digit pid and keeps the status line <= 255 bytes
     r3 = Run('events-limit', bridge=BRIDGE_EV)
     os.makedirs(os.path.dirname(r3.log))
-    pre = 'boot_ms=0 up_ms=0 pid=1 filler\n' * 25   # 775 bytes
+    pre = 'boot_ms=0 up_ms=0 pid=1 filler\n' * 25   # 775 bytes, over half the limit
     open(os.path.join(os.path.dirname(r3.log), 'events.log'), 'w').write(pre)
     r3.start()
     r3.produce('--frames', 60, '--gop', 10, '--pause-at', 20, '--pause-ms', 300)
@@ -622,10 +629,19 @@ def test_events():
     r3.stop()
     p3 = os.path.join(os.path.dirname(r3.log), 'events.log')
     text = open(p3).read()
+    old = open(p3 + '.1').read() if os.path.exists(p3 + '.1') else ''
     lines = text.splitlines()
-    check('events: limit kept (<= 1024 B), earlier lines kept, last line events-full, written once',
-          len(text.encode()) <= 1024 and text.startswith(pre) and lines and ' events-full limit=1024 ' in lines[-1]
-          and text.count('events-full') == 1, (len(text.encode()), lines[-3:]))
+    both = old.splitlines() + lines
+    check('events: rotated: events.log <= 512 B, events.log.1 is the earlier file or a rotated one (<= 512 B), '
+          'no third file, no events-full',
+          len(text.encode()) <= 512 and old and (old == pre or len(old.encode()) <= 512)
+          and not os.path.exists(p3 + '.2') and 'events-full' not in text + old,
+          (len(text.encode()), len(old.encode())))
+    check('events: rotation keeps the newest events: exit is the last line of events.log, every line whole',
+          lines and ' exit ' in lines[-1] and all(EV_HEAD.match(l) for l in both), lines[-2:])
+    ups = [int(EV_HEAD.match(l).group(2)) for l in both if EV_HEAD.match(l) and ' filler' not in l]
+    check('events: no line lost or reordered across the rotation (up_ms non-decreasing across .1 + log)',
+          ups == sorted(ups), ups[:5])
     check('events: status line with pid=2147483647 (QNX pid_t range), <= 255 bytes, one newline',
           ' pid=2147483647 ' in st3 and len(st3.encode()) <= 255 and st3.count('\n') == 1, st3)
     r3.cleanup()

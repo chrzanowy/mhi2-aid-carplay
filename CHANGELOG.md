@@ -29,6 +29,10 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
   the backlog drains (nothing is cut). The PTS is set when the frame's first packet is built. The ENOMEM reclaim after
   boot works as before. While Android Auto holds the MOST channel (its guardian's pid file), the bridge does not open
   it and exits; the event file gets `most-busy`. The Android Auto feeder is unchanged.
+- **pmcp-most stage 2: thread priority 14, rotated event file (binary 93bad193):** the bridge's reader and MOST writer
+  threads run at priority 14 instead of the inherited 10 (only raised, logged), so a CPU peak with the reverse camera
+  does not starve the bridge (after tomasz-twardzicki MU1367 v1.5.3). `events.log` is now rotated like the bridge's
+  log (`events.log.1`, both together at most 64 KB) instead of stopping at 64 KB; "CP save log" includes both files.
 
 ## Unreleased (release-candidate)
 

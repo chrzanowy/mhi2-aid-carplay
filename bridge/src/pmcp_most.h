@@ -26,16 +26,16 @@
  *     decision OQ3 (a)): an avcC written in the detection window opens it.
  *     No owner file at all = no gate (upstream behaviour).
  *  5. Event file /ramdisk/pmcp-most/events.log (next to the log; env
- *     PMCP_MOST_EVENTS, "-" = none): one line per rare event, never rotated,
- *     appended by every bridge run of this start, so the first runs survive
- *     a log that rotates in minutes. Each line starts with boot_ms (CLOCK_
+ *     PMCP_MOST_EVENTS, "-" = none): one line per rare event, appended by
+ *     every bridge run of this start, so the first runs survive a log that
+ *     rotates in minutes. Rotated like the log (events.log.1, one copy):
+ *     each file at most PMCP_MOST_EVENTS_LIMIT / 2, both together at most
+ *     PMCP_MOST_EVENTS_LIMIT (no file on /ramdisk only grows). Each line starts with boot_ms (CLOCK_
  *     MONOTONIC, from unit start), up_ms (from this bridge's start) and pid.
  *     Events: start, MOST open / error / reclaim, latency reset (queue size),
  *     IDR request and resume, chain gap, ring overrun, ring generation, owner
  *     cut, gate open, session stop, first video frame of an epoch, frame
  *     gaps >= PMCP_MOST_GAP_MS (at most PMCP_MOST_GAP_EVENTS per run), exit.
- *     Capped at PMCP_MOST_EVENTS_LIMIT: the last line written is
- *     "events-full"; later events are only in bridge.log.
  *
  * Nothing here blocks: small files on /ramdisk, read or written by the
  * reader thread at most every PMCP_MOST_OWNER_POLL_MS / 1000 ms; the writer
@@ -131,7 +131,6 @@ typedef struct PmcpMostState {
     /* event file and frame gaps */
     char event_path[256];
     int event_fd;
-    int event_full;
     uint64_t last_frame_us;   /* local time of the previous consumed video frame */
     uint64_t last_frame_ntp;
     int last_frame_have;
@@ -241,20 +240,48 @@ static void pmcp_event_init(void)
     g_pmcp.event_fd = open(g_pmcp.event_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
 }
 
+/* Rotation of the event file (under g_pmcp_event_mutex). Another bridge run
+ * of this start may have rotated it: when the path no longer names our open
+ * file, reopen. A file that would pass half the limit with this line becomes
+ * events.log.1 (only when the path still names our file, so two runs do not
+ * both rotate). Errors are ignored: the event is then written as it can. */
+static void pmcp_event_rotate(size_t bytes)
+{
+    struct stat mine;
+    struct stat named;
+    char old_path[sizeof(g_pmcp.event_path) + 2U];
+    int fd;
+    if (fstat(g_pmcp.event_fd, &mine) != 0) return;
+    if (stat(g_pmcp.event_path, &named) != 0 || named.st_ino != mine.st_ino || named.st_dev != mine.st_dev) {
+        fd = open(g_pmcp.event_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (fd < 0) return;
+        close(g_pmcp.event_fd);
+        g_pmcp.event_fd = fd;
+        if (fstat(fd, &mine) != 0) return;
+    }
+    if (mine.st_size <= 0 ||
+        (uint64_t)mine.st_size + bytes <= (uint64_t)(PMCP_MOST_EVENTS_LIMIT / 2U)) return;
+    snprintf(old_path, sizeof(old_path), "%s.1", g_pmcp.event_path);
+    if (rename(g_pmcp.event_path, old_path) != 0) return;
+    fd = open(g_pmcp.event_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd < 0) return;
+    close(g_pmcp.event_fd);
+    g_pmcp.event_fd = fd;
+}
+
 /* One event line: "boot_ms= up_ms= pid= <text>\n", one write() (O_APPEND, so
  * lines of overlapping bridge runs never interleave). Any thread; never
  * blocks on more than a small ramdisk write. Errors are ignored. */
 static void pmcp_event(const char *format, ...)
 {
     char line[320];
-    struct stat st;
     uint64_t now_us = pmcp_now_us();
     int head;
     int body;
     int saved = errno;
     va_list ap;
     pthread_mutex_lock(&g_pmcp_event_mutex);
-    if (g_pmcp.event_fd < 0 || g_pmcp.event_full) goto out;
+    if (g_pmcp.event_fd < 0) goto out;
     head = snprintf(line, sizeof(line), "boot_ms=%llu up_ms=%llu pid=%ld ",
             (unsigned long long)(now_us / 1000ULL),
             (unsigned long long)((now_us - g_pmcp.start_us) / 1000ULL), (long)getpid());
@@ -266,18 +293,7 @@ static void pmcp_event(const char *format, ...)
     if (body > (int)(sizeof(line) - (size_t)head - 2U)) body = (int)(sizeof(line) - (size_t)head - 2U);
     head += body;
     line[head++] = '\n';
-    if (fstat(g_pmcp.event_fd, &st) != 0) goto out;
-    /* keep room for the closing events-full line */
-    if ((uint64_t)st.st_size + (uint64_t)head + 128U > (uint64_t)PMCP_MOST_EVENTS_LIMIT) {
-        g_pmcp.event_full = 1;
-        if ((uint64_t)st.st_size + 128U > (uint64_t)PMCP_MOST_EVENTS_LIMIT) goto out;
-        head = snprintf(line, sizeof(line),
-                "boot_ms=%llu up_ms=%llu pid=%ld events-full limit=%u (later events only in bridge.log)\n",
-                (unsigned long long)(now_us / 1000ULL),
-                (unsigned long long)((now_us - g_pmcp.start_us) / 1000ULL), (long)getpid(),
-                (unsigned)PMCP_MOST_EVENTS_LIMIT);
-        if (head <= 0 || head >= (int)sizeof(line)) goto out;
-    }
+    pmcp_event_rotate((size_t)head);
     (void)write(g_pmcp.event_fd, line, (size_t)head);
 out:
     pthread_mutex_unlock(&g_pmcp_event_mutex);

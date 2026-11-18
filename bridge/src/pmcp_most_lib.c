@@ -65,6 +65,9 @@
 #include "pmcp_most.h"
 #include "most_writer.h"
 #include "ts_mux.h"
+#ifdef __QNX__
+#include <sched.h>
+#endif
 
 #ifndef ALTSCREEN_BRIDGE_DMDT_PATH
 #define ALTSCREEN_BRIDGE_DMDT_PATH "/eso/bin/apps/dmdt"
@@ -73,6 +76,16 @@
 #define ALTSCREEN_BRIDGE_RECLAIM_WINDOW_US 180000000ULL /* CLOCK_MONOTONIC = time since boot */
 #endif
 #define PMCP_CP_RECLAIM_MAX 3U
+/* Thread priority (after tomasz-twardzicki MU1367 v1.5.3, measured there in a car): with the reverse
+ * camera on, the CPU reaches 98-100 % for seconds and the navigation renderer threads run at 10, the
+ * priority the bridge inherited, so the bridge got no CPU long enough to overrun the ring. A resource
+ * manager serves a write at its client's priority, so devp-iso-mmx (16) handled our writes at 10 too.
+ * 14: above the navigation threads seen there (MapPositioning 13), below the MOST driver (16) and the
+ * CarPlay receive threads (17-19). Only ever raised, never lowered; 0 = leave as inherited. */
+#ifndef PMCP_MOST_PRIORITY
+#define PMCP_MOST_PRIORITY 14
+#endif
+static void raise_priority(pthread_t th, const char *name);
 #define PMCP_CP_RECLAIM_SETTLE_US 500000U
 #define PMCP_CP_DMDT_TIMEOUT_POLLS 300U         /* 10 ms each */
 #define PMCP_CP_LIMIT_PACKETS 2048U             /* as stage 1c (TS_LOW_LATENCY_LIMIT_PACKETS) */
@@ -475,6 +488,7 @@ static int check_writer(void)
         if (rc == 0) {
             ts_mux_discontinuity(&g_mux);
             rc = most_start(&g_w, &g_mux);
+            if (rc == 0) raise_priority(g_w.th, "writer");
         }
         cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: most-reclaim attempt=%u reopen=%s\n", g_reclaims,
                 rc == 0 ? "ok" : "failed");
@@ -557,6 +571,38 @@ static void gate_opened(void)
     pmcp_event("gate-open reason=%s gate_drops=%lu", pmcp_gate_reason(), g_pmcp.gate_drops);
 }
 
+/* Raises one thread of this process to PMCP_MOST_PRIORITY (same policy), never lowers it; logs the result
+ * in bridge.log and events.log. The writer thread of most_writer.c is created with default attributes, so
+ * it inherits the main thread's priority: main is raised before most_start and the writer is checked after. */
+static void raise_priority(pthread_t th, const char *name)
+{
+#ifdef __QNX__
+    struct sched_param param;
+    int policy = 0;
+    int before;
+    int status = 0;
+    if (PMCP_MOST_PRIORITY <= 0) return;
+    if (pthread_getschedparam(th, &policy, &param) != 0) {
+        cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: priority read failed thread=%s\n", name);
+        pmcp_event("priority thread=%s read-failed", name);
+        return;
+    }
+    before = param.sched_priority;
+    if (before < PMCP_MOST_PRIORITY) {
+        param.sched_priority = PMCP_MOST_PRIORITY;
+        status = pthread_setschedparam(th, policy, &param);
+    }
+    cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: priority thread=%s before=%d target=%d policy=%d status=%d\n",
+            name, before, PMCP_MOST_PRIORITY, policy, status);
+    pmcp_event("priority thread=%s before=%d target=%d policy=%d status=%d", name, before, PMCP_MOST_PRIORITY, policy,
+            status);
+#else
+    (void)th;
+    cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT, "bridge: priority thread=%s unchanged (host build) target=%d\n",
+            name, PMCP_MOST_PRIORITY);
+#endif
+}
+
 int main(int argc, char **argv)
 {
     AltFrameRing *ring = MAP_FAILED;
@@ -623,6 +669,7 @@ int main(int argc, char **argv)
             goto done;
         }
     }
+    raise_priority(pthread_self(), "main");
     if (most_open(&g_w, &g_wcfg) != 0) {
         log_devinfo("open failed");
         g_pmcp_most_errno = g_w.dev.open_errno ? g_w.dev.open_errno : EIO;
@@ -636,6 +683,7 @@ int main(int argc, char **argv)
         goto done;
     }
     writer_on = 1;
+    raise_priority(g_w.th, "writer");
     g_pmcp_most_ready = 1;
     pmcp_event("most-open ok reopen=0 output=aa-most-lib wait=%s", most_wait_name(g_wcfg.wait));
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,

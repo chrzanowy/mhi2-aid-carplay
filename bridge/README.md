@@ -130,9 +130,12 @@ the file formats.
    - `avcC ready` is logged only when the avcC changes, and once after a new ring generation or owner cut. The phone
      repeats the same avcC before every IDR (about every 5th frame), and logging each one filled the log. The repeats
      are counted (`pmcp avcc_repeats=…` at exit).
-   - **Event file** `/ramdisk/pmcp-most/events.log` (next to the log; env `PMCP_MOST_EVENTS`, `-` = none). It is never
-     rotated and is appended by every bridge run of this start. At 64 KB (`PMCP_MOST_EVENTS_LIMIT`) it ends with one
-     `events-full` line, so the first runs after the unit start are kept.
+   - **Event file** `/ramdisk/pmcp-most/events.log` (next to the log; env `PMCP_MOST_EVENTS`, `-` = none). It is
+     appended by every bridge run of this start and rotated like the log: a line that would take it past half of
+     `PMCP_MOST_EVENTS_LIMIT` (64 KB) moves it to `events.log.1` first, so both files together stay within 64 KB
+     and no file on `/ramdisk` only grows (user decision 2026-11-18; until then it stopped at 64 KB with
+     `events-full`). Events are rare, so the cold start normally stays in the two files. A run that finds the file
+     rotated by another run reopens it.
      - Every line: `boot_ms=` (monotonic, from unit start), `up_ms=` (from this bridge's start), `pid=`, then the event.
      - Events: `start`, `most-open` / `most-open-failed`, `most-error errno=`, `reclaim attempt=…`,
        `reclaim-not-attempted`, `reclaim-resync`, `latency-reset … queued= discarded=`, `idr-request`, `idr-resume`,
@@ -144,8 +147,16 @@ the file formats.
        ~8 ms MOST writes are unaffected.
    - Consumer `pid`: the full QNX pid. Contract v1.2 clamps it at 2147483647 instead of 9999999, which hid the real
      pid in the car. `most_errno` now goes down to -9999, so the worst-case line is exactly 255 B.
-   - The installer copies `events.log` into the CarPlay log (before `bridge.log.1`), and "Bridge status" shows its
-     last 15 lines. The file is in `/ramdisk`, so a unit restart removes it; it is not a persistent log.
+   - The installer copies `events.log.1` and `events.log` into the CarPlay log (before `bridge.log.1`), and "Bridge
+     status" shows the last 15 lines of `events.log`. The file is in `/ramdisk`, so a unit restart removes it; it is not a persistent log.
+10. **Thread priority (stage 2, 2026-11-18)**. After tomasz-twardzicki MU1367 v1.5.3, measured there in a car: with
+    the reverse camera on, the CPU reaches 98-100 % for seconds; the navigation renderer threads run at 10, the
+    priority the bridge inherited, so the bridge got no CPU long enough to overrun the ring (a resource manager serves
+    a write at its client's priority, so devp-iso-mmx (16) ran our writes at 10 too). Stage 2 raises the main (ring
+    reader) thread to 14 before MOST open, and checks the writer thread of `aa/most/most_writer.c` (default attributes,
+    so it inherits 14) after every `most_start`, the reclaim included. Only raised, never lowered
+    (`PMCP_MOST_PRIORITY`, 0 = off). Logged as `priority thread=main|writer before= target= policy= status=` in
+    `bridge.log` and `events.log`. `aa/` is not changed; the AA feeder does the same in its own code (AA session).
 
 ## Build (QNX)
 

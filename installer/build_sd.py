@@ -169,7 +169,8 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
 # BRIDGE (pmcp.sh bridge mathsls|pmcp-most, GEM experimental; default mathsls). The ONE line to change after a rebuild:
 # bridge/build.sh OUTDIR prints the size and sha256; OUTDIR = <this project>/build/pmcp-most-<first 8 of the sha256>.
 # Since 2026-11-16 (A203): stage 2 (PMCP_MOST_LIB=1, src/pmcp_most_lib.c on the AA MOST output library); stage 1c was 8c104a06.
-PMCP_MOST_PIN = ("build/pmcp-most-175eee71/altscreen-most-bridge", "175eee71e3186c3236720ac0c4364949d6cbfeb8333ed824b5c127555aba51b1", 37588)
+# 2026-11-18: stage 2 with thread priority 14 and the rotated event file (was 175eee71).
+PMCP_MOST_PIN = ("build/pmcp-most-93bad193/altscreen-most-bridge", "93bad193f7351eecdb6808e8ffd96ae5e8b31caf8e2ab08802e6d57e46dab79c", 38172)
 if IS_EXP and PROFILE_ID == "MU1161":
     PAYLOAD_BY_PROFILE["MU1161"].update({
         "PMCP_MOST": (PROJ / PMCP_MOST_PIN[0], PMCP_MOST_PIN[1], PMCP_MOST_PIN[2], "pmcp-most/altscreen-most-bridge"),

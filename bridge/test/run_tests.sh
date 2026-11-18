@@ -62,11 +62,13 @@ if grep -q FAILED "$B/build-results.txt"; then
     echo "BRIDGE TESTS: $n_ok ok, $n_bad failed"
     exit 1
 fi
-# AA's condition for stage 2 (2026-11-16): aa/ is used, never changed (the feeder binary is pinned)
-AA_DIFF=$(cd "$ROOT/.." && git diff --stat origin/release-candidate -- aa 2>/dev/null; git status --porcelain -- aa 2>/dev/null)
+# AA's condition for stage 2 (2026-11-16): the bridge uses aa/most as it is and never changes aa/. The output library
+# must match origin/release-candidate; the rest of aa/ moves only with AA's own commits (feeder v16, 2026-11-18), so
+# only uncommitted changes there fail.
+AA_DIFF=$(cd "$ROOT/.." && git diff --stat origin/release-candidate -- aa/most 2>/dev/null; git status --porcelain -- aa 2>/dev/null)
 python3 -I "$HERE/harness.py" "$B" "$TOOLS" "$H264" "$@"; rc1=$?
 echo "== stage 2 (bridge-host-lib, AA MOST output library)"
 PMCP_TEST_BRIDGE=bridge-host-lib python3 -I "$HERE/harness.py" "$B" "$TOOLS" "$H264" "$@"; rc2=$?
-if [ -z "$AA_DIFF" ]; then echo "ok     aa/ unchanged against origin/release-candidate"; rc3=0
-else echo "FAILED aa/ differs from origin/release-candidate:"; echo "$AA_DIFF"; rc3=1; fi
+if [ -z "$AA_DIFF" ]; then echo "ok     aa/most unchanged against origin/release-candidate, aa/ clean"; rc3=0
+else echo "FAILED aa/most differs from origin/release-candidate or aa/ has local changes:"; echo "$AA_DIFF"; rc3=1; fi
 [ $rc1 = 0 ] && [ $rc2 = 0 ] && [ $rc3 = 0 ]
