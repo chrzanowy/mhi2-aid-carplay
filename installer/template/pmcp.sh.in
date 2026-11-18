@@ -33,6 +33,9 @@
 # Experimental cards only (pmcp-...-exp-...; aa_advanced):
 #   pmcp.sh aa-capture 60|off   record the first 60 s of the phone's video at each AA connection to
 #                               /mnt/persist/pmcp/aa-stream.h264 (for the log card)
+#   pmcp.sh aa-regrant on|off   A203-AA reverse-gear test: after the main screen changes focus (reverse camera, a VW
+#                               screen) the AA hook gives the cluster display its focus once more; from the next AA
+#                               connection, no trial (PMCP_AA_SEC_REASSERT in aa-extra.conf, read by the AA hook)
 #   pmcp.sh aa-on-exp           only with a manifest key AAX_FEEDER (an experimental feeder next to the stable one; none
 #                               since AA 1.0): that set, its own set id and trial; main menu 3 goes back to stable
 #@@EXP_BEGIN
@@ -992,9 +995,11 @@ aa_extra_set() {    # KEY VALUE
     # the other key is kept only as a valid line (output: direct|ring; recording: 0|60), as the feeder reads it
     _x_out=`grep -x -e 'PMCP_AA_OUTPUT=direct' -e 'PMCP_AA_OUTPUT=ring' "$_x_f" 2>/dev/null | head -1`
     _x_cap=`grep -x -e 'PMCP_AA_CAPTURE_S=0' -e 'PMCP_AA_CAPTURE_S=60' "$_x_f" 2>/dev/null | head -1`
+    _x_rea=`grep -x -e 'PMCP_AA_SEC_REASSERT=0' -e 'PMCP_AA_SEC_REASSERT=3' "$_x_f" 2>/dev/null | head -1`
     case "$1" in
         PMCP_AA_OUTPUT) _x_out="PMCP_AA_OUTPUT=$2" ;;
         PMCP_AA_CAPTURE_S) _x_cap="PMCP_AA_CAPTURE_S=$2" ;;
+        PMCP_AA_SEC_REASSERT) _x_rea="PMCP_AA_SEC_REASSERT=$2" ;;
     esac
     mkdir -p "$PERSIST" 2>/dev/null
     rm -f "$_x_f.pmcp-new" 2>/dev/null
@@ -1002,6 +1007,7 @@ aa_extra_set() {    # KEY VALUE
     echo "# pmcp $PMCP_VERSION: AA switches (GEM)" > "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"
     if [ -n "$_x_out" ]; then echo "$_x_out" >> "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"; fi
     if [ -n "$_x_cap" ]; then echo "$_x_cap" >> "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"; fi
+    if [ -n "$_x_rea" ]; then echo "$_x_rea" >> "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"; fi
     mv "$_x_f.pmcp-new" "$_x_f" || fail "AA_SWITCH_WRITE_FAILED"
     grep -qx "$1=$2" "$_x_f" || fail "AA_SWITCH_READBACK_FAILED"
 }
@@ -1043,6 +1049,20 @@ do_aa_capture() {
     say "PMCP_AA_CAPTURE_OK capture=$ARG (each AA connection overwrites /mnt/persist/pmcp/aa-stream.h264; the log card copies it)"
 }
 
+# A203-AA reverse-gear test (experimental cards): the AA hook reads aa-extra.conf at each AA connection and only the exact
+# line PMCP_AA_SEC_REASSERT=3 turns it on: the cluster re-granted once after each main-screen focus change. Same files,
+# the gal wrapper untouched (an earlier AA set is recognised by it), no trial.
+do_aa_regrant() {
+    aa_switch_ready exp
+    case "$ARG" in
+        on) aa_extra_set PMCP_AA_SEC_REASSERT 3 ;;
+        off) aa_extra_set PMCP_AA_SEC_REASSERT 0 ;;
+        *) fail "AA_REGRANT_MUST_BE_on_OR_off" ;;
+    esac
+    flush
+    say "PMCP_AA_REGRANT_OK regrant=$ARG (from the next AA connection; unplug and plug the phone)"
+}
+
 # AA log: the hook log and feeder summary live in /ramdisk and are gone at the next start; in GEM the SD card is
 # read-only, so they go to carplaymaps/logs, and the log card (update mode) copies them to its SD card.
 AA_LOG_MAX=5
@@ -1074,6 +1094,11 @@ do_aa_log_save() {
                [ -s "$RAMDISK/$_l_x" ] || continue
                echo "--- $_l_x"; cat "$RAMDISK/$_l_x" 2>/dev/null
            done
+           # A203-AA: the system log of this moment (reverse camera "RVC active", focus, MOST); it holds only minutes.
+           # The factory encoder's isoTX2 open/close tries (20 a second, A208) are left out.
+           if type sloginfo >/dev/null 2>&1; then
+               echo "--- sloginfo"; sloginfo 2>/dev/null | grep -vE 'isoTX2\]: io_(open|close):' 2>/dev/null
+           fi
            echo "--- end"; } > "$_l_f.pmcp-new" 2>/dev/null; then
         rm -f "$_l_f.pmcp-new" 2>/dev/null
         fail "AA_LOG_WRITE_FAILED"
@@ -2370,6 +2395,7 @@ case "$ACTION" in
     aa-on-exp)     do_aa_install gammax ;;
     aa-output)     do_aa_output ;;
     aa-capture)    do_aa_capture ;;
+    aa-regrant)    do_aa_regrant ;;
 #@@EXP_BEGIN
     bridge)        do_bridge ;;
     bridge-status) do_bridge_status ;;

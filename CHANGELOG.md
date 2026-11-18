@@ -32,6 +32,17 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (release-candidate)
 
+- **Android Auto feeder v16 (reverse gear):** the feeder raises itself to priority 14 (above the VW navigation threads,
+  below the MOST driver), so a reverse camera that takes the CPU no longer starves the cluster stream on our side; it
+  also claims the MOST video channel in `/ramdisk/most-src/isotx2` while it holds it, so the CarPlay bridge never opens
+  the channel under it. "AA save log" now adds the unit's system log (without the factory encoder's open/close lines),
+  so a reverse-camera event can be seen next to the AA stream. New AA set: one trial start, then "5. Confirm".
+- **Android Auto hook: reverse-gear experiment (experimental cards only).** The car logs show that when the reverse camera
+  (or a VW screen) takes the main screen, the phone often slows the cluster picture to a few frames per second or stops
+  it for seconds, while our side is idle. A new switch on GEM `experimental`, "AA cluster re-grant after the main screen
+  changes (reverse camera test): on", makes the hook give the cluster display its focus once more after each main-screen
+  change (never taking it away first). Off by default; release cards carry the same hook with the switch off. Hook
+  `c92a4c3e…` (was `dedd6452…`).
 - **Rescue card and log card flush the files on MMX:** both run in update mode on the RCC node, which has no `sync`
   (found in the car on 2026-11-16). They now run `on -f mmx sync`, falling back to a local `sync`. The card and the
   unit's files both live on MMX.

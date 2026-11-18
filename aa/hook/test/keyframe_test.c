@@ -149,11 +149,21 @@ int main(void)
     static unsigned char sink[64];
     fc_ops ops = { fake_set_focus, fake_frames_rendered, fake_send_config };
     int cfg, discards;
-    int m = 1, held, starts, stops;
+    int m = 1, held, starts, stops, i;
     char port[16];
 
     snprintf(port, sizeof port, "%d", 20000 + (int)(getpid() % 20000));
     setenv("GAL_STREAM_PORT", port, 1);
+    {   /* A203-AA, section 6: the GEM switch file as pmcp.sh aa-regrant writes it (CRLF too), no environment value */
+        char xp[64];
+        FILE *x;
+        snprintf(xp, sizeof xp, "/tmp/pmcp-kf-extra.%d", (int)getpid());
+        x = fopen(xp, "w");
+        if (x != NULL) { fputs("# pmcp: AA switches (GEM)\nPMCP_AA_OUTPUT=direct\nPMCP_AA_SEC_REASSERT=3\r\n", x); fclose(x); }
+        unsetenv("GAL_PMCP_SEC_REASSERT");
+        setenv("GAL_PMCP_EXTRA_CONF", xp, 1);
+        setenv("GAL_PMCP_SEC_REASSERT_MS", "300", 1);
+    }
     sink[4] = 1;                                   /* channel open */
 
     fc_start(sink, &ops);
@@ -220,6 +230,30 @@ int main(void)
     check(log_count("event=ack.discard") == discards, "C bytes are not ACKs (no new discard)");
     pthread_mutex_lock(&g_m); starts = g_player_starts; stops = g_player_stops; pthread_mutex_unlock(&g_m);
     check(starts == 1 && stops == 0, "C: player still the first one");
+
+    /* 6 (A203-AA, patch_reassert.py): a main-screen focus change re-grants the cluster once, after the delay; no mode 2 */
+    m = n_modes();
+    fc_primary_focus(1);                           /* the session's first primary mode: nothing */
+    sleep_ms(400);
+    check(n_modes() == m && log_count("event=focus.reassert ") == 0, "reassert: the first primary mode does nothing");
+    check(log_count("event=focus.reassert_config value=3 delay_ms=300") == 1, "reassert: setting logged once");
+    fc_primary_focus(2);                           /* reverse camera: primary native */
+    check(log_count("event=focus.reassert primary_mode=2 prev=1 action=queued") == 1, "reassert: queued on primary native");
+    sleep_ms(100); fc_run_mailbox();
+    check(n_modes() == m, "reassert: nothing before the delay");
+    for (i = 0; i < 100 && n_modes() == m; ++i) { fc_run_mailbox(); sleep_ms(10); }
+    check(n_modes() == m + 1 && last_mode() == 1, "reassert: one mode 1 write after the delay");
+    check(wait_log("mode=1 unconstrained=1 reason=primary_native", 1, 500), "reassert: write logged with its reason");
+    fc_primary_focus(2);                           /* the same mode again */
+    sleep_ms(400); fc_run_mailbox();
+    check(n_modes() == m + 1 && log_count("event=focus.reassert ") == 1, "reassert: a repeated primary mode does nothing");
+    fc_primary_focus(1);                           /* back to Android Auto on the main screen */
+    for (i = 0; i < 100 && n_modes() == m + 1; ++i) { fc_run_mailbox(); sleep_ms(10); }
+    check(n_modes() == m + 2 && last_mode() == 1, "reassert: primary projected again: one more mode 1");
+    check(log_count("reason=primary_native") + log_count("reason=primary_projected") == 2
+          && log_count("mode=2 unconstrained=1 reason=primary") == 0, "reassert: two writes, never a mode 2");
+    pthread_mutex_lock(&g_m); starts = g_player_starts; stops = g_player_stops; pthread_mutex_unlock(&g_m);
+    check(starts == 1 && stops == 0, "reassert: player still the first one");
 
     sink[4] = 0;                                   /* channel closed */
     fc_notify();

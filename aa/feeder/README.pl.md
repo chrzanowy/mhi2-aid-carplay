@@ -62,6 +62,16 @@ uruchamia `altscreen-most-bridge` i nie tworzy ringu:
   odrzucany 5 s w pierwszych `PMCP_AA_RECLAIM_S` od startu radia (180, 0 = wyłączone) przejmuje MOST ponownie, najwyżej
   `PMCP_AA_RECLAIM_MAX` razy (3): znowu dmdt, ta sama sekwencja open i devctl, znacznik nieciągłości na następnym AU,
   potem SPS/PPS i ostatnie IDR jeszcze raz. Liczy to linia statusu `ponowne przejecie MOST:`.
+- v16 (A203-AA, Niobe): zgłoszenie użytkownika „AA się wywala, jak wrzucę wsteczny”. Za MU1367 v1.5.3
+  tomasz-twardzicki główny wątek dostaje na starcie priorytet `PMCP_AA_PRIO` (14, 0 = wyłączone), nigdy niższy: kamera
+  cofania obciąża procesor prawie w 100%, a wątki nawigacji VW mają 10, czyli tyle, ile feeder dziedziczył po gal. Wątek
+  zapisu MOST, strażnik i (ring) bridge dziedziczą 14; wątek nagrywania wraca do starego priorytetu. Linia statusu
+  `priorytet:`. Do tego plik właściciela MOST (docs/23, arbitraż isoTX2, krok b): `/ramdisk/most-src/isotx2`
+  (`PMCP_AA_OWNER`, tylko ze środowiska, `off` = bez pliku) zakładany przez O_EXCL przed dmdt, potem z pid strażnika
+  (to on oddaje MOST), usuwany po przywróceniu. Na żywego właściciela (most CarPlay) czeka i nigdy go nie przejmuje;
+  martwego usuwa. Linia statusu `wlasciciel isoTX2:`. Uwaga: logi z 9-14.11 pokazują, że to telefon zwalnia obraz
+  na zegary, gdy ekran główny wychodzi z AA (feeder bezczynny, kolejka 0, ACK nie wstrzymany); priorytet pokrywa tylko
+  stronę procesora.
 
 Diagnostyka w obu wyjściach: strażnik trzyma pierwsze 30 linii bridge'a (odczyty devctl) obok ostatnich;
 `PMCP_AA_CAPTURE_S=N` (domyślnie 0) nagrywa jednostki dostępu z telefonu przez N s do `PMCP_AA_CAPTURE_PATH` (tylko ze

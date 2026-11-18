@@ -510,7 +510,7 @@ PY
         case "$args" in
             verify|status|restore|confirm|retry|aa-install|cp-log-save|log-clear|"map-install map-square-fps40"|java-retry|java-confirm|java-update|aa-remove|aa-on|aa-confirm|aa-retry|aa-status|aa-log-save|rg-system-on|rg-system-off|rg-update|speedlimit-status|"speedlimit-mode turnto"|"speedlimit-mode street"|"speedlimit-mode off"|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
             "aa-output direct"|"aa-output ring") ;;
-            "aa-capture 60"|"aa-capture off"|"bridge pmcp-most"|"bridge mathsls"|bridge-status)
+            "aa-capture 60"|"aa-capture off"|"aa-regrant on"|"aa-regrant off"|"bridge pmcp-most"|"bridge mathsls"|bridge-status)
                 case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) ;; *) bad "experimental button on a release card: $args" ;; esac ;;
             *) bad "unexpected button command in $(basename "$m"): $args" ;;
         esac
@@ -582,9 +582,9 @@ PY
         # their own screen experimental
         _br=""; [ -e "$SDB/pmcp/payload/pmcp-most/altscreen-most-bridge" ] && _br="menu/bridge-pmcp-most.sh menu/bridge-mathsls.sh menu/bridge-status.sh "
         xp=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen experimental/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-        [ "$xp" = "${_br}menu/aa-capture-60.sh menu/aa-capture-off.sh " ] \
-            && ok "experimental:${_br:+ MOST bridge switch and status,} AA record on/off" || bad "experimental: $xp"
-        sed '/^screen experimental/,$d' "$SDB/esd/Launcher-sda0.esd" | grep -q 'menu/bridge-\|menu/aa-capture-\|rg-aa' && bad "experimental buttons outside the experimental screen" || ok "experimental buttons only on the experimental screen"
+        [ "$xp" = "${_br}menu/aa-capture-60.sh menu/aa-capture-off.sh menu/aa-regrant-on.sh menu/aa-regrant-off.sh " ] \
+            && ok "experimental:${_br:+ MOST bridge switch and status,} AA record on/off, AA cluster re-grant on/off" || bad "experimental: $xp"
+        sed '/^screen experimental/,$d' "$SDB/esd/Launcher-sda0.esd" | grep -q 'menu/bridge-\|menu/aa-capture-\|menu/aa-regrant-\|rg-aa' && bad "experimental buttons outside the experimental screen" || ok "experimental buttons only on the experimental screen"
         grep -qi 'rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says rg-aa" || ok "menu: no rg-aa" ;;
     *)
         [ "$aa" = "menu/aa-confirm.sh menu/aa-output-direct.sh menu/aa-output-ring.sh menu/aa-retry.sh menu/aa-status.sh menu/aa-log-save.sh menu/aa-remove.sh " ] \
@@ -982,7 +982,7 @@ PEOF
     grep -q '^PMCP_AA_MODE=most$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_PACE_KBPS=6000$' "$AAD/feeder.conf" && grep -q '^PMCP_AA_SYNC_HOLD_MS=3000$' "$AAD/feeder.conf" \
         && ! grep -q 'KF_METHOD\|KF_TAKE' "$AAD/feeder.conf" && ok "feeder settings: MOST, pacing, start sync, no probe" || bad "feeder.conf"
     [ -x "$AAD/aa-most-feeder" ] && [ -x "$AAD/gal.real" ] && [ ! -e "$U/carplaymaps/.aa-new" ] && ok "executables, no staging leftovers" || bad "aa files"
-    case "$(cat "$AAD/AA_BOOT")" in gamma-dedd6452-*-716516eb) ok "set id gamma-hook-feeder-conf" ;; *) bad "AA_BOOT $(cat "$AAD/AA_BOOT")" ;; esac
+    case "$(cat "$AAD/AA_BOOT")" in gamma-c92a4c3e-*-716516eb) ok "set id gamma-hook-feeder-conf" ;; *) bad "AA_BOOT $(cat "$AAD/AA_BOOT")" ;; esac
     run status; expect_out "Unit state: VIDEO" "still VIDEO with AA"; expect_out "Android Auto: on mode=gamma" "status: AA on"
     run aa-on; rc_is 1; expect_out "AA_ALREADY_ON" "second aa-on refused"
     run aa-confirm; rc_is 1; expect_out "AA_NO_TRIAL_YET" "confirm before any AA connection refused"
@@ -1438,8 +1438,25 @@ PEOF
         [ "$before" = "$(aaf)" ] && ok "recording: no marker or set file changed" || bad "recording changed: $(aaf)"
         run aa-capture 5; rc_is 1; expect_out "AA_CAPTURE_MUST_BE_60_OR_off" "aa-capture: unknown value refused"
         run aa-capture off; rc_is 0; grep -qx 'PMCP_AA_CAPTURE_S=0' "$P/aa-extra.conf" && ok "recording off" || bad "capture off"
+        # A203-AA reverse-gear test: the hook itself re-grants the cluster after a main-screen focus change when
+        # aa-extra.conf has exactly PMCP_AA_SEC_REASSERT=3 (patch_reassert.py); the gal wrapper is not touched (an earlier
+        # AA set is recognised by it)
+        gal0=$(h "$U/eso/bin/apps/gal")
+        run aa-regrant on; rc_is 0; expect_out "PMCP_AA_REGRANT_OK regrant=on" "aa-regrant on"
+        grep -qx 'PMCP_AA_SEC_REASSERT=3' "$P/aa-extra.conf" && grep -qx 'PMCP_AA_OUTPUT=direct' "$P/aa-extra.conf" \
+            && grep -qx 'PMCP_AA_CAPTURE_S=0' "$P/aa-extra.conf" && ok "re-grant on: the other switches kept" || bad "aa-extra.conf: $(cat "$P/aa-extra.conf")"
+        [ "$before" = "$(aaf)" ] && [ "$gal0" = "$(h "$U/eso/bin/apps/gal")" ] && ok "re-grant: no marker, set file or wrapper changed (no trial)" || bad "re-grant changed: $(aaf)"
+        run aa-output ring; rc_is 0; grep -qx 'PMCP_AA_SEC_REASSERT=3' "$P/aa-extra.conf" && ok "re-grant kept when the output changes" || bad "re-grant lost: $(cat "$P/aa-extra.conf")"
+        run aa-output direct; rc_is 0
+        run aa-capture 60; rc_is 0; grep -qx 'PMCP_AA_SEC_REASSERT=3' "$P/aa-extra.conf" && ok "re-grant kept when recording changes" || bad "re-grant lost on capture"
+        run aa-capture off; rc_is 0
+        run aa-regrant maybe; rc_is 1; expect_out "AA_REGRANT_MUST_BE_on_OR_off" "aa-regrant: unknown value refused"
+        grep -qx 'PMCP_AA_SEC_REASSERT=3' "$P/aa-extra.conf" && ok "refused value: switch unchanged" || bad "aa-extra.conf changed"
+        run aa-regrant off; rc_is 0; grep -qx 'PMCP_AA_SEC_REASSERT=0' "$P/aa-extra.conf" && ! grep -q 'PMCP_AA_SEC_REASSERT=3' "$P/aa-extra.conf" \
+            && ok "re-grant off: line 0" || bad "re-grant off: $(cat "$P/aa-extra.conf")"
     else
         run aa-capture 60; rc_is 1; expect_out "AA_EXPERIMENTAL_NOT_ON_THIS_CARD" "release card: no recording button action"
+        run aa-regrant on; rc_is 1; expect_out "AA_EXPERIMENTAL_NOT_ON_THIS_CARD" "release card: no re-grant button action"
     fi
     run aa-on-exp; rc_is 1; expect_out "AA_EXPERIMENTAL_NOT_ON_THIS_CARD" "aa-on-exp: no experimental set since AA 1.0"
     run aa-install; rc_is 0; expect_out "PMCP_AA_INSTALL_OK (already installed" "3 again: nothing to do"

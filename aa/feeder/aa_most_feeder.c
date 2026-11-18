@@ -123,6 +123,19 @@
  * sends one about every 60 s and asking breaks its session), so the picture comes back with brief artifacts at most.
  * A short write, a write stuck in the driver, a failed reclaim or anything later goes the old way.
  *
+ * v16 (A203-AA, user: "AA sie wywala, jak wrzuce wsteczny"; after tomasz-twardzicki MU1367 v1.5.3): the reverse camera
+ * drives the CPU to ~100% for seconds while the VW navigation renderer threads run at priority 10; the feeder inherited
+ * 10 from gal, so it starved: frames queue up, the ACK hold stops the phone, MOST writes come late (QNX resource managers
+ * serve a write at the client's priority). The main thread is now raised to PMCP_AA_PRIO (default 14, 0 = off) at start,
+ * never lowered; the MOST writer thread and the guardian (and in ring mode the bridge) inherit it, the capture thread is
+ * put back to the old priority. 14: above every navigation thread (13 at most), below the MOST driver (16).
+ * Also v16, MOST owner arbitration step (b) (docs/23 "arbitraz isoTX2" v2): before dmdt dc 72 the feeder claims
+ * PMCP_AA_OWNER (default /ramdisk/most-src/isotx2) with O_CREAT|O_EXCL, "v=1 holder=aa pid=<pid> since_ms=<ms>"; the
+ * guardian rewrites it with its own pid (it is the one that gives MOST back) before it starts anything, and removes it
+ * only after the dmdt restore, only while it still holds its pid. A live holder is never taken over (EPERM = alive); a
+ * dead one is removed after a second read of the same pid; an unreadable file older than 5 s counts as dead. A live
+ * holder=cp file is waited for like CarPlay's bridge (PMCP_AA_CP_WAIT_MS). A reclaim (v15) is not a release.
+ *
  * Modes (PMCP_AA_MODE): "analyze" (default) only reads, ACKs and writes a summary; the cluster keeps
  * the VW map. "most" also takes the MOST channel over. The summary is rewritten once a second to
  * PMCP_AA_STATUS (default /ramdisk/pmcp-aa-feeder.txt); nothing grows without bound.
@@ -158,7 +171,7 @@
 #include "../most/ts_mux.h"
 #include "../most/most_writer.h"
 
-#define FEEDER_VERSION "15"
+#define FEEDER_VERSION "16"
 
 #define RING_MAGIC      0x43505247u
 #define RING_VERSION    1u
@@ -286,6 +299,13 @@ static const char *const CONF_KEYS[] = { "PMCP_AA_MODE", "PMCP_AA_RATE_KBPS", "P
 static const char *const EXTRA_KEYS[] = { "PMCP_AA_OUTPUT", "PMCP_AA_CAPTURE_S", NULL };
 
 static unsigned long g_reclaim_s, g_reclaim_max;   /* v15: PMCP_AA_RECLAIM_S / _MAX (direct only) */
+/* v16: priority and MOST owner file */
+static const char *g_owner_path;               /* PMCP_AA_OWNER, "off" = no file (environment only, host tests) */
+static unsigned long g_prio_target;            /* PMCP_AA_PRIO, 0 = off */
+static int g_prio_before = -1, g_prio_after = -1, g_prio_rc = -1, g_prio_writer = -1, g_prio_cap = -1, g_prio_policy = -1;
+static char g_owner_state[96] = "-";
+static void owner_to_guardian(long feeder_pid);
+static void owner_release(long pid);
 static unsigned long g_output_ignored;    /* v14: PMCP_AA_OUTPUT lines with a value other than direct/ring */
 static char g_output_from[16] = "domyslne";
 
@@ -484,6 +504,9 @@ static void write_status(void)
             g_kf_byte == 'C' ? "config" : "focus", S.kf_bridge, S.kf_take, S.kf_sent, S.kf_skipped, S.kf_failed, S.kf_idr_ms_last,
             S.kf_idr_ms_max, S.kf_no_idr, S.kf_ignored, g_kf_bridge_on ? "" : " (prosby bridge nie ida do telefonu)");
     fprintf(f, "blad: %s\n", S.last_error[0] ? S.last_error : "-");
+    fprintf(f, "priorytet: glowny przed=%d po=%d cel=%lu status=%d zapis=%d nagrywanie=%d\n", g_prio_before, g_prio_after,
+            g_prio_target, g_prio_rc, g_prio_writer, g_prio_cap);
+    fprintf(f, "wlasciciel isoTX2: %s\n", g_owner_state);
     if (S.ring_file[0]) fprintf(f, "plik ringu: %s\n", S.ring_file);
     if (S.take_wait_ms) fprintf(f, "czekanie przed przejeciem MOST: %lums (%s)\n", S.take_wait_ms,
                                 S.take_wait_reason[0] ? S.take_wait_reason : "-");
@@ -945,6 +968,7 @@ static void guardian(int rfd)
         snprintf(pf, sizeof pf, "%ld\n", (long)getpid());
         if (fd >= 0) { (void)write(fd, pf, strlen(pf)); close(fd); }
     }
+    owner_to_guardian((long)getppid());         /* v16: before the bridge starts (it checks the file) */
     if (g_direct) {
         /* v11 direct output: no bridge. The feeder itself writes isoTX2 and closes it before this pipe (or the kernel
          * closes both when it dies); then MOST goes back exactly as below. */
@@ -954,6 +978,7 @@ static void guardian(int rfd)
         }
         sleep_ms(250);
         dmdt_restore();
+        owner_release((long)getpid());            /* v16: only after the restore */
         (void)unlink(gpath);
         _exit(0);
     }
@@ -1005,6 +1030,7 @@ static void guardian(int rfd)
     }
     sleep_ms(250);
     dmdt_restore();
+    owner_release((long)getpid());                /* v16: only after the restore */
     (void)unlink(gpath);                          /* only now may the next session take MOST */
     _exit(0);
 }
@@ -1023,11 +1049,180 @@ static void most_restore(void)
     }
 }
 
+/* ---------------------------------------------------------------- v16: priority and MOST owner file */
+static void ev_log(const char *fmt, ...);
+
+static int prio_of(pthread_t th, int *policy)
+{
+    struct sched_param sp;
+    int pol;
+    if (pthread_getschedparam(th, &pol, &sp) != 0) return -1;
+    if (policy != NULL) *policy = pol;
+    return sp.sched_priority;
+}
+
+/* Main thread up to g_prio_target, never down. Threads and processes started later inherit it. */
+static void prio_raise(void)
+{
+    struct sched_param sp;
+    int pol = -1;
+    if (g_prio_target == 0u) { ev_log("priorytet: wylaczone (PMCP_AA_PRIO=0)"); return; }
+    g_prio_before = prio_of(pthread_self(), &pol);
+    g_prio_policy = pol;
+    if (g_prio_before < 0) { g_prio_rc = errno ? errno : -1; ev_log("priorytet watek=glowny odczyt blad"); return; }
+    if (g_prio_before >= (int)g_prio_target) {
+        g_prio_rc = 0; g_prio_after = g_prio_before;
+        ev_log("priorytet watek=glowny przed=%d cel=%lu status=bez-zmian", g_prio_before, g_prio_target);
+        return;
+    }
+    memset(&sp, 0, sizeof sp);
+    sp.sched_priority = (int)g_prio_target;
+    g_prio_rc = pthread_setschedparam(pthread_self(), pol, &sp);
+    g_prio_after = prio_of(pthread_self(), NULL);
+    ev_log("priorytet watek=glowny przed=%d cel=%lu status=%d po=%d", g_prio_before, g_prio_target, g_prio_rc, g_prio_after);
+}
+
+/* A thread that must not run above the old priority (capture: file I/O). */
+static void prio_restore(pthread_t th)
+{
+    struct sched_param sp;
+    if (g_prio_before < 0 || g_prio_after <= g_prio_before || g_prio_policy < 0) return;
+    memset(&sp, 0, sizeof sp);
+    sp.sched_priority = g_prio_before;
+    (void)pthread_setschedparam(th, g_prio_policy, &sp);
+    g_prio_cap = prio_of(th, NULL);
+}
+
+static int pid_live(long pid)
+{
+    return pid > 0 && (kill((pid_t)pid, 0) == 0 || errno == EPERM);
+}
+
+/* Owner file: 1 = parsed (holder, pid), 0 = absent, -1 = present but unreadable/garbled (age_s set). */
+static int owner_read(char *holder, size_t hn, long *pid, long *age_s)
+{
+    char buf[128], *h, *q;
+    struct stat sb;
+    int fd, n;
+    *pid = 0; holder[0] = '\0'; *age_s = 0;
+    if (g_owner_path == NULL || !g_owner_path[0]) return 0;
+    fd = open(g_owner_path, O_RDONLY);
+    if (fd < 0) return errno == ENOENT ? 0 : -1;
+    if (fstat(fd, &sb) == 0) *age_s = (long)(time(NULL) - sb.st_mtime);
+    n = (int)read(fd, buf, sizeof buf - 1u);
+    close(fd);
+    if (n <= 0) return -1;
+    buf[n] = '\0';
+    h = strstr(buf, "holder="); q = strstr(buf, "pid=");
+    if (strncmp(buf, "v=1 ", 4) != 0 || h == NULL || q == NULL) return -1;
+    h += 7;
+    for (n = 0; h[n] && h[n] != ' ' && h[n] != '\n' && n < (int)hn - 1; ++n) holder[n] = h[n];
+    holder[n] = '\0';
+    *pid = strtol(q + 4, NULL, 10);
+    return holder[0] && *pid > 0 ? 1 : -1;
+}
+
+static int owner_text(char *buf, size_t n, long pid)
+{
+    return snprintf(buf, n, "v=1 holder=aa pid=%ld since_ms=%llu\n", pid, (unsigned long long)(now_us() / 1000u));
+}
+
+/* Who else holds MOST by the file: "cp", "aa" (not us) or NULL. A dead holder is removed (same pid read twice). */
+static const char *owner_busy(void)
+{
+    static char holder[16];
+    long pid, pid2, age;
+    char h2[16];
+    int r = owner_read(holder, sizeof holder, &pid, &age);
+    if (r == 0) return NULL;
+    if (r < 0) {
+        if (age <= 5) return "plik isotx2 (nieczytelny)";
+        if (owner_read(h2, sizeof h2, &pid2, &age) < 0 && age > 5) {
+            (void)unlink(g_owner_path);
+            ev_log("plik isotx2: nieczytelny, starszy niz 5 s, usuniety");
+        }
+        return NULL;
+    }
+    if (pid_live(pid)) {
+        if (pid == (long)getpid()) return NULL;
+        return holder;
+    }
+    if (owner_read(h2, sizeof h2, &pid2, &age) == 1 && pid2 == pid && !pid_live(pid2)) {
+        (void)unlink(g_owner_path);
+        ev_log("plik isotx2: holder=%s pid=%ld nie zyje, usuniety", holder, pid);
+    }
+    return NULL;
+}
+
+/* O_EXCL claim with our pid; 0 = ours (checked by reading back), -1 = held by someone else or an error. */
+static int owner_claim(void)
+{
+    char buf[128], holder[16], dir[256], *sl;
+    long pid, age;
+    int fd, len, tries;
+    if (g_owner_path == NULL || !g_owner_path[0]) { snprintf(g_owner_state, sizeof g_owner_state, "wylaczony"); return 0; }
+    snprintf(dir, sizeof dir, "%s", g_owner_path);
+    sl = strrchr(dir, '/');
+    if (sl != NULL && sl != dir) { *sl = '\0'; (void)mkdir(dir, 0755); }
+    len = owner_text(buf, sizeof buf, (long)getpid());
+    for (tries = 0; tries < 2; ++tries) {
+        fd = open(g_owner_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+        if (fd >= 0) {
+            int w = (int)write(fd, buf, (size_t)len);
+            close(fd);
+            if (w != len) { (void)unlink(g_owner_path); break; }
+            if (owner_read(holder, sizeof holder, &pid, &age) == 1 && pid == (long)getpid() && strcmp(holder, "aa") == 0) {
+                snprintf(g_owner_state, sizeof g_owner_state, "przejety (feeder pid=%ld)", pid);
+                return 0;
+            }
+            break;
+        }
+        if (errno != EEXIST) {
+            snprintf(g_owner_state, sizeof g_owner_state, "blad open errno=%d", errno);
+            ev_log("plik isotx2: open errno=%d, przejmuje bez pliku", errno);
+            return 0;                             /* the file is advisory: no /ramdisk dir must not stop AA */
+        }
+        if (owner_busy() != NULL) break;          /* live holder: never taken over */
+    }
+    {
+        const char *b = owner_busy();
+        snprintf(g_owner_state, sizeof g_owner_state, "zajety (%s)", b ? b : "?");
+    }
+    return -1;
+}
+
+/* The guardian: the file names the process that gives MOST back. Rewritten only while it is ours (feeder's pid). */
+static void owner_to_guardian(long feeder_pid)
+{
+    char buf[128], tmp[300], holder[16];
+    long pid, age;
+    int fd, len;
+    if (g_owner_path == NULL || !g_owner_path[0]) return;
+    if (owner_read(holder, sizeof holder, &pid, &age) != 1 || pid != feeder_pid || strcmp(holder, "aa") != 0) return;
+    snprintf(tmp, sizeof tmp, "%s.aa.tmp", g_owner_path);
+    len = owner_text(buf, sizeof buf, (long)getpid());
+    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return;
+    if (write(fd, buf, (size_t)len) == len) { close(fd); (void)rename(tmp, g_owner_path); }
+    else { close(fd); (void)unlink(tmp); }
+}
+
+/* Removes the file only while it still names pid (the guardian's own, or the feeder's on an early failure). */
+static void owner_release(long pid)
+{
+    char holder[16];
+    long p, age;
+    if (g_owner_path == NULL || !g_owner_path[0]) return;
+    if (owner_read(holder, sizeof holder, &p, &age) == 1 && p == pid && strcmp(holder, "aa") == 0) (void)unlink(g_owner_path);
+}
+
 /* Why MOST cannot be taken now, or NULL. */
 static const char *busy_reason(void)
 {
     char pb[256];
+    const char *o;
     if (access(g_cp_ready_path, F_OK) == 0 && other_bridge_alive(-1) != 0) return "bridge CarPlay";
+    if ((o = owner_busy()) != NULL) return strcmp(o, "aa") == 0 ? "poprzednia sesja AA" : "CarPlay (plik isotx2)";
     if (pid_alive(run_path(pb, sizeof pb, "pmcp-aa-guard.pid")) || pid_alive(run_path(pb, sizeof pb, "pmcp-aa-bridge.pid")))
         return "poprzednia sesja AA";
     return NULL;
@@ -1100,20 +1295,27 @@ static int most_take(void)
         if (ring_prepare() != 0) return -1;
         (void)unlink(g_kf_req_path);            /* a request left by an earlier bridge is not ours */
     }
-    if (pipe(p) != 0) { set_error("pipe errno=%d", errno); return -1; }
+    if (owner_claim() != 0) {                     /* v16: someone took MOST between the wait and now */
+        snprintf(S.most_state, sizeof S.most_state, "zajety (plik isotx2)");   /* details: wlasciciel isoTX2 line */
+        return -1;
+    }
+    if (pipe(p) != 0) { set_error("pipe errno=%d", errno); owner_release((long)getpid()); return -1; }
     rc = dmdt("dc", "72", NULL);
     S.dmdt_release_rc = rc != 0 ? rc : dmdt("sc", "4", "72");
     if (rc != 0 || S.dmdt_release_rc != 0) {
         set_error("dmdt release rc=%d", S.dmdt_release_rc);
         close(p[0]); close(p[1]);
         dmdt_restore();                           /* the first call may have gone through */
+        owner_release((long)getpid());
         return -1;
     }
     sleep_ms(500);
     g_guard_pid = fork();
     if (g_guard_pid == 0) { close(p[1]); guardian(p[0]); }
     close(p[0]);
-    if (g_guard_pid < 0) { set_error("fork straznik errno=%d", errno); close(p[1]); dmdt_restore(); return -1; }
+    if (g_guard_pid < 0) {
+        set_error("fork straznik errno=%d", errno); close(p[1]); dmdt_restore(); owner_release((long)getpid()); return -1;
+    }
     g_guard_fd = p[1];
     (void)fcntl(g_guard_fd, F_SETFD, FD_CLOEXEC);
     S.bridge_pid = (long)g_guard_pid;
@@ -1322,6 +1524,8 @@ static int direct_start(void)
         return -1;
     }
     g_direct_on = 1;
+    g_prio_writer = g_mw.thread_on ? prio_of(g_mw.th, NULL) : -1;     /* v16: inherited from the main thread */
+    ev_log("priorytet watek=zapis %d", g_prio_writer);
     g_au_limit = AU_BUF_MAX;
     g_avcc_dirty = 1;
     snprintf(S.most_state, sizeof S.most_state, "przejety (direct)");
@@ -1528,7 +1732,7 @@ static void cap_finish(int wait)
 {
     if (S.cap_state != 1) return;
     S.cap_state = 2;
-    if (!wait && pthread_create(&g_cap_th, NULL, cap_write, NULL) == 0) { g_cap_th_on = 1; return; }
+    if (!wait && pthread_create(&g_cap_th, NULL, cap_write, NULL) == 0) { g_cap_th_on = 1; prio_restore(g_cap_th); return; }
     cap_write(NULL);
 }
 
@@ -2131,12 +2335,16 @@ int main(int argc, char **argv)
     g_cap_path = env_or("PMCP_AA_CAPTURE_PATH", "/mnt/persist/pmcp/aa-stream.h264");   /* environment only */
     g_tokens = g_burst;
     g_idle_ms = (unsigned)env_ul("PMCP_AA_IDLE_MS", 8ul, 2ul, 30ul);
+    g_prio_target = env_ul("PMCP_AA_PRIO", 14ul, 0ul, 15ul);                     /* v16 */
+    g_owner_path = env_or("PMCP_AA_OWNER", "/ramdisk/most-src/isotx2");          /* v16, environment only */
+    if (strcmp(g_owner_path, "off") == 0) g_owner_path = "";                      /* host tests */
 
     signal(SIGTERM, on_signal); signal(SIGINT, on_signal); signal(SIGHUP, on_signal);
     signal(SIGPIPE, SIG_IGN);
     memset(&S, 0, sizeof S);
     S.t_start_us = now_us(); g_tokens_t = S.t_start_us; S.sec_start_us = S.t_start_us;
     S.bridge_pid = -1;
+    prio_raise();                                 /* v16: before the guardian, the bridge and the writer thread */
     if (g_cap_s != 0u) {                          /* v11: one allocation for the whole capture */
         g_cap = (uint8_t *)malloc(CAP_MAX);
         g_cap_idx = (char *)malloc(CAP_MAX / 16u);
@@ -2208,11 +2416,13 @@ int main(int argc, char **argv)
         if (g_guard_pid > 0) {                   /* bridge gone mid-session: the guardian gave MOST back */
             int st;
             if (waitpid(g_guard_pid, &st, WNOHANG) == g_guard_pid) {
+                long dead = (long)g_guard_pid;
                 g_guard_pid = -1;
                 if (g_direct_on) {
                     /* v11: the guardian is gone, so nobody would give MOST back: stop writing and do it here */
                     direct_lost("straznik zakonczyl sie");
                     dmdt_restore();
+                    owner_release(dead);                  /* v16: the file named the dead guardian */
                 } else {
                     if (g_ring != NULL) { munmap((void *)g_ring, RING_FILE_SIZE); g_ring = NULL; }
                     if (g_guard_fd >= 0) { close(g_guard_fd); g_guard_fd = -1; }

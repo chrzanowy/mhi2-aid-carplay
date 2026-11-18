@@ -6,8 +6,9 @@
 #
 #   build.sh <out dir> [gamma]
 #
-# gamma: also patch_rg.py (AA 1.7 navigation -> rg RAM mailbox, pmcp_rg.c; active only with GAL_PMCP_RG=1), build tag
-# -pmcp-g2 (g1 = before the 2026-11-03 liveness review). Without it the output is the AA 1 / 2 / 3 hook (tag -pmcp-kf2), byte for byte as before.
+# gamma: also patch_rg.py (AA 1.7 navigation -> rg RAM mailbox, pmcp_rg.c; active only with GAL_PMCP_RG=1) and
+# patch_reassert.py (A203-AA: the cluster re-granted after a main-screen focus change; off unless GAL_PMCP_SEC_REASSERT),
+# build tag -pmcp-g3 (g2 = before A203-AA, g1 = before the 2026-11-03 liveness review). Without it the output is the AA 1 / 2 / 3 hook (tag -pmcp-kf2), byte for byte as before.
 #
 # Needs: docker with the qnx65-armv7-toolchain:8.5 image (luka-dev/qnx65-armv7-toolchain, see aa/README.md), git, python3,
 # and a MacsInSpace/mib-cluster-map clone holding the pinned commit (default <workspace>/upstream/macsinspace, made by
@@ -17,7 +18,7 @@ set -euo pipefail
 OUT=${1:?out dir}
 VARIANT=${2:-}
 TAG=pmcp-kf2
-case "$VARIANT" in "") ;; gamma) TAG=pmcp-g2 ;; *) echo "FAIL: unknown variant $VARIANT" >&2; exit 1 ;; esac
+case "$VARIANT" in "") ;; gamma) TAG=pmcp-g3 ;; *) echo "FAIL: unknown variant $VARIANT" >&2; exit 1 ;; esac
 H=$(cd "$(dirname "$0")" && pwd)
 WS=$(cd "$H/../../.." && pwd)     # workspace: upstream/ lives next to this repository (as in install.sh)
 MACS="${PMCP_MACS:-$WS/upstream/macsinspace}"
@@ -34,6 +35,7 @@ python3 -I "$H/patch_no_sd.py" "$OUT/src"
 python3 -I "$H/patch_keyframe.py" "$OUT/src"
 python3 -I "$H/patch_config_kf.py" "$OUT/src"
 [ "$VARIANT" = gamma ] && python3 -I "$H/patch_rg.py" "$OUT/src"
+[ "$VARIANT" = gamma ] && python3 -I "$H/patch_reassert.py" "$OUT/src"   # A203-AA, off unless GAL_PMCP_SEC_REASSERT
 
 for n in 1 2; do
     mkdir "$OUT/build$n"

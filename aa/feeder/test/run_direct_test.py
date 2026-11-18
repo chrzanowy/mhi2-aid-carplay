@@ -88,7 +88,7 @@ class Run:
     pass
 
 
-def run(case, plan, env_add=None, window=8, fps=30.0, golden_times=False, conf='', ack_idle=1.0, sync_reps=False, extra=None, pause=None, status=None):
+def run(case, plan, env_add=None, window=8, fps=30.0, golden_times=False, conf='', ack_idle=1.0, sync_reps=False, extra=None, pause=None, status=None, pre=None):
     d = os.path.join(OUT, case)
     shutil.rmtree(d, ignore_errors=True); os.makedirs(os.path.join(d, 'input'))
     P = lambda n: os.path.join(d, n)
@@ -102,7 +102,8 @@ def run(case, plan, env_add=None, window=8, fps=30.0, golden_times=False, conf='
                PMCP_AA_ACK=ack_path, PMCP_AA_FLUSH_DEV=P('flush.dev'), FAKE_DMDT_LOG=P('dmdt.log'),
                FAKE_BRIDGE_OUT=P('bridge.jsonl'), PMCP_AA_KF_REQ=P('kf.request'), PMCP_AA_RUNDIR=d,
                PMCP_AA_MODE='most', PMCP_AA_OUTPUT='direct', PMCP_AA_MOST_DEV=P('mlb.ts'), PMCP_AA_SETTLE_MS='200',
-               PMCP_AA_CP_READY=P('cp.ready'), PMCP_AA_CONF_EXTRA=P('extra.conf'))
+               PMCP_AA_CP_READY=P('cp.ready'), PMCP_AA_CONF_EXTRA=P('extra.conf'), PMCP_AA_OWNER=P('most-src/isotx2'))
+    if pre is not None: pre(P)                    # v16: e.g. an owner file left by CarPlay
     if extra is not None:
         with open(P('extra.conf'), 'w') as f: f.write(extra)
     for k, v in (env_add or {}).items():
@@ -157,6 +158,8 @@ def run(case, plan, env_add=None, window=8, fps=30.0, golden_times=False, conf='
         if i == len(plan) // 2:
             mid['status'] = open(SP).read() if os.path.exists(SP) else ''
             mid['dmdt'] = dmdt_lines(P)
+            mid['owner'] = open(P('most-src/isotx2')).read() if os.path.exists(P('most-src/isotx2')) else ''   # v16
+            mid['guard'] = open(P('pmcp-aa-guard.pid')).read().strip() if os.path.exists(P('pmcp-aa-guard.pid')) else ''
     r.t_send = time.time() - t0
     last = time.time()
     while time.time() - last < ack_idle:
@@ -247,7 +250,7 @@ STEADY = [(1, 1, 20000, 20000, False), (149, 0, 1500, 6000, False)]
 r = analyse(run('steady', plan_synth(STEADY)))
 common(r, 'steady', 150, lead_min=4500)
 st = r.status
-check(st.startswith('PMCP AA FEEDER v15 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
+check(st.startswith('PMCP AA FEEDER v16 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
 for p in ('kolejka direct:', 'ACK wstrzymane:', 'zapis MOST:', 'czas zapisu bloku:', 'PTS-PCR (90kHz):', 'devctl: interfejs=0 (status 0)',
           'MOST poczatek 01: ', 'AU direct:'):
     check(any(l.startswith(p) for l in st.split('\n')), 'steady: status line %r' % p)
@@ -426,7 +429,7 @@ check('przerwa od telefonu 3' in r.status or 'przerwa od telefonu 4' in r.status
 bl = [l for l in r.status.split('\n') if 'brak klatek 3 s' in l]
 check(len(bl) == 2 and 'ACK czeka 0 (wstrzymane nie)' in bl[-1] and 'kolejka 0 pakietow/0 AU' in bl[-1], 'gap: stall noted with ACK/queue state %s' % bl)
 pv = [open(SPATH + '-prev%d' % k).read() if os.path.exists(SPATH + '-prev%d' % k) else '' for k in (1, 2, 3)]
-check(all(x.startswith('PMCP AA FEEDER v15') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
+check(all(x.startswith('PMCP AA FEEDER v16') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
 check([num(line(x, 'klatki='), 'klatki') for x in pv] == [30, 30, 30] and pv[0] != pv[1] != pv[2], 'prev: prev1..3 are separate sessions')
 sess = [l for l in open(os.path.join(OUT, 'prev3', 'pmcp-aa-sessions.txt')).read().split('\n') if l]
 check(len(sess) == 1 and '>3s=1' in sess[0] and 'ACK=30' in sess[0]
@@ -463,7 +466,7 @@ r = run('ring-explicit', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 
         env_add={'PMCP_AA_OUTPUT': 'ring', 'FAKE_BRIDGE_PRINT': '1', 'PMCP_AA_CAPTURE_S': '1',
                  'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'ring.h264')})
 check(not os.path.exists(r.P('mlb.ts')) and os.path.exists(r.P('bridge.jsonl')) and r.acks == 40, 'ring-explicit: ring + bridge, no isoTX2')
-check(r.status.startswith('PMCP AA FEEDER v15 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
+check(r.status.startswith('PMCP AA FEEDER v16 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
 bt = open(r.P('pmcp-aa-bridge.txt')).read() if os.path.exists(r.P('pmcp-aa-bridge.txt')) else ''
 check('bridge poczatek 01: bridge: start status=0 packets=64' in bt and 'bridge poczatek 02: bridge: latency-reset' in bt,
       'ring-explicit: guardian keeps the first bridge lines')
@@ -478,7 +481,7 @@ r = run('extra-switch', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 6
         conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=ring\n', env_add={'PMCP_AA_OUTPUT': None, 'PMCP_AA_MODE': None,
         'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'extra.h264')},
         extra='PMCP_AA_OUTPUT=direct\nPMCP_AA_CAPTURE_S=1\nPMCP_AA_MODE=analyze\nPMCP_AA_CAPTURE_PATH=/tmp/x\n')
-check(r.status.startswith('PMCP AA FEEDER v15 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
+check(r.status.startswith('PMCP AA FEEDER v16 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
 check(os.path.exists(os.path.join(OUT, 'capture-files', 'extra.h264')) and 'nagranie: zapisane' in r.status,
       'extra-switch: capture switched on there, path key there ignored')
 check(r.acks == 40, 'extra-switch: every frame (%d)' % r.acks)
@@ -510,6 +513,53 @@ r = run('conf-bad', plan_synth([(1, 1, 20000, 20000, False), (9, 0, 1500, 6000, 
         conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=xyz\n', env_add={'PMCP_AA_OUTPUT': None})
 check(os.path.exists(r.P('bridge.jsonl')) and 'wyjscie: bridge (ring) (z: domyslne)' in r.status,
       'conf-bad: nothing valid anywhere = the built-in ring (feeder.conf is pinned by hash, so only a test case)')
+
+# 16. v16 (A203-AA): priority line; MOST owner file (docs/23 "arbitraz isoTX2" v2)
+r = run('owner-steady', plan_synth([(1, 1, 20000, 20000, False), (29, 0, 1500, 6000, False)], seed=81))
+o = r.mid.get('owner', '')
+check(o.startswith('v=1 holder=aa pid=') and r.mid.get('guard') and ('pid=%s ' % r.mid['guard']) in o,
+      'owner: mid-session the file names the guardian (it gives MOST back): %r guard=%r' % (o, r.mid.get('guard')))
+check(not os.path.exists(r.P('most-src/isotx2')), 'owner: removed after the restore')
+check('wlasciciel isoTX2: przejety (feeder pid=' in r.status_before_close, 'owner: status line')
+check(line(r.status, 'priorytet: glowny przed=') != '' and ' cel=14 ' in line(r.status, 'priorytet:'),
+      'priority: status line, target 14: %r' % line(r.status, 'priorytet:'))
+check(any('priorytet watek=glowny' in x for x in r.status.split('\n')), 'priority: event line for the main thread')
+r = run('owner-prio-off', plan_synth([(1, 1, 20000, 20000, False), (5, 0, 1500, 6000, False)], seed=82), env_add={'PMCP_AA_PRIO': '0'})
+check('priorytet: wylaczone (PMCP_AA_PRIO=0)' in r.status, 'priority: PMCP_AA_PRIO=0 leaves it alone')
+
+cp_live = subprocess.Popen(['sleep', '60'])
+def pre_cp(P, pid=cp_live.pid, body=None):
+    os.makedirs(P('most-src'), exist_ok=True)
+    with open(P('most-src/isotx2'), 'w') as f: f.write(body if body is not None else 'v=1 holder=cp pid=%d since_ms=1\n' % pid)
+r = run('owner-cp-live', plan_synth([(1, 1, 20000, 20000, False), (5, 0, 1500, 6000, False)], seed=83),
+        env_add={'PMCP_AA_CP_WAIT_MS': '1500'}, pre=pre_cp)
+check(r.dmdt == [] and 'CarPlay (plik isotx2)' in r.status and os.path.exists(r.P('most-src/isotx2'))
+      and 'holder=cp pid=%d' % cp_live.pid in open(r.P('most-src/isotx2')).read() and r.acks > 0,
+      'owner: a live CarPlay holder is waited for, never taken over, no dmdt; the session runs as analysis')
+cp_live.kill(); cp_live.wait()
+dead = subprocess.Popen(['true']); dead.wait()
+r = run('owner-cp-dead', plan_synth([(1, 1, 20000, 20000, False), (5, 0, 1500, 6000, False)], seed=84),
+        pre=lambda P: pre_cp(P, pid=dead.pid))
+check(len(r.dmdt) >= 4 and 'holder=cp pid=%d nie zyje, usuniety' % dead.pid in r.status and not os.path.exists(r.P('most-src/isotx2')),
+      'owner: a dead holder is removed, MOST taken and given back as usual')
+def pre_garbled(P, age):
+    pre_cp(P, body='junk')
+    t = time.time() - age; os.utime(P('most-src/isotx2'), (t, t))
+r = run('owner-garbled-old', plan_synth([(1, 1, 20000, 20000, False), (5, 0, 1500, 6000, False)], seed=85), pre=lambda P: pre_garbled(P, 60))
+check(len(r.dmdt) >= 4 and 'nieczytelny, starszy niz 5 s, usuniety' in r.status, 'owner: an unreadable file older than 5 s counts as dead')
+r = run('owner-garbled-new', plan_synth([(1, 1, 20000, 20000, False), (5, 0, 1500, 6000, False)], seed=86),
+        env_add={'PMCP_AA_CP_WAIT_MS': '9000'}, pre=lambda P: pre_garbled(P, 0))
+check(len(r.dmdt) >= 4 and 'nieczytelny, starszy niz 5 s, usuniety' in r.status,
+      'owner: a fresh unreadable file is waited for (a writer between create and write) until it is 5 s old')
+r = run('owner-ring', plan_synth([(1, 1, 20000, 20000, False), (29, 0, 1500, 6000, False)], seed=87), env_add={'PMCP_AA_OUTPUT': 'ring'})
+o = r.mid.get('owner', '')
+check(o.startswith('v=1 holder=aa') and r.mid.get('guard') and ('pid=%s ' % r.mid['guard']) in o and not os.path.exists(r.P('most-src/isotx2')),
+      'owner (ring): the guardian, parent of the bridge, holds the file; removed after the restore')
+r = run('owner-off', plan_synth([(1, 1, 20000, 20000, False), (5, 0, 1500, 6000, False)], seed=88), env_add={'PMCP_AA_OWNER': 'off'})
+check(len(r.dmdt) >= 4 and 'wlasciciel isoTX2: wylaczony' in r.status_before_close, 'owner: PMCP_AA_OWNER=off = no file')
+r = run('owner-nodir', plan_synth([(1, 1, 20000, 20000, False), (5, 0, 1500, 6000, False)], seed=89),
+        env_add={'PMCP_AA_OWNER': '/nonexistent-pmcp/x/isotx2'})
+check(len(r.dmdt) >= 4 and 'blad open errno=' in r.status_before_close, 'owner: no directory for the file does not stop AA')
 
 print('runs kept in', OUT)
 print('FAILED CHECKS: %d' % len(fails))

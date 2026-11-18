@@ -156,12 +156,12 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
     # v1.7.0: hook g2 + raw dump of the navigation messages (/ramdisk/pmcp-aa-rg-raw.txt, A166) + road name, lanes and
     # destination into the rg mailbox (AA 1.1, A171); v1.7.0/v1.7.1 had cbf2e388 (an earlier set, "old"). Since A185: file writes
     # outside the rg mutex, the raw dump no longer rewrites latest.bin, 0x8006 dedupe over the whole message (review A176)
-    "AA_HOOK": (PROJ / "aa/prebuilt/libgal_hook.so", "dedd6452a086cd8f04f8dede4f9c74707483af5854f4a5f7cbb487452abbf2fe", 141514, "aa/libgal_hook.so"),
+    "AA_HOOK": (PROJ / "aa/prebuilt/libgal_hook.so", "c92a4c3ef81ad14ed92ade628567f720f6c4adf6ddf410f15aeeec81ffc61a5e", 143597, "aa/libgal_hook.so"),
     "AA_DMDT_FLUSH": (PROJ / "aa/prebuilt/libdmdt_flush.so", "4e3202f0f41b5ad5a96d86ff49adbe574ce550f7b168c9a5f385069ca0e5222f", 5328, "aa/libdmdt_flush.so"),
     # AA 1.0 (A153): feeder v14 = v13 (pmcp's own MOST writer, direct) + only direct|ring taken from PMCP_AA_OUTPUT
     # v1.7.0: feeder v15 = v14 + MOST taken back when the factory encoder grabs isoTX2 early after boot (A166; in the car
     # with cards b542b2d4 and 9c0c4493)
-    "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "395d99b756789e39b119eded68f90d4eceee269138d7f950447aa928ea464592", 58656, "aa/aa-most-feeder"),
+    "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "58ded602b375ee5b797dc4ba0159d7e9fc207f03041938739f428e25eab17c37", 62456, "aa/aa-most-feeder"),
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", 1566, "aa/feeder.conf"),
 })
@@ -568,7 +568,10 @@ EXP_MENU = [] if not IS_EXP else ([
     ("bridge-status", "bridge-status", "Bridge status: which bridge, owner, last lines of its log (read-only)")]
     if "PMCP_MOST" in PAYLOAD else []) + [
     ("aa-capture-60", "aa-capture 60", "AA record: first 60 s of the phone video at each connection (for the log card)"),
-    ("aa-capture-off", "aa-capture off", "AA record: off")]
+    ("aa-capture-off", "aa-capture off", "AA record: off"),
+    # A203-AA reverse-gear test: the AA hook re-grants the cluster after a main-screen focus change (aa-extra.conf)
+    ("aa-regrant-on", "aa-regrant on", "AA cluster re-grant after the main screen changes (reverse camera test): on"),
+    ("aa-regrant-off", "aa-regrant off", "AA cluster re-grant: off (default)")]
 
 
 # main menu 4, in order: unsupported route guidance / Java files back to factory (features-reset), an earlier card's

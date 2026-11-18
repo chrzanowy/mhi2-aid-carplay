@@ -132,7 +132,7 @@ OWN+=("${MAIN[@]}")
 # it is); experimental cards also record. An experimental AA set (AAX_FEEDER) would be swapped in and out as well.
 XAA=("map-install map-square-fps40" "java-on nai" "aa-install" "aa-output ring" "aa-output direct" "aa-remove" \
      "fx:java-unknown" "aa-install" "aa-output ring" "restore")
-case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) XAA+=("map-install map-square-fps40" "aa-install" "aa-capture 60" "aa-capture off" "restore") ;; esac
+case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) XAA+=("map-install map-square-fps40" "aa-install" "aa-capture 60" "aa-capture off" "aa-regrant on" "aa-regrant off" "restore") ;; esac
 grep -q '^AAX_FEEDER ' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && \
     XAA+=("map-install map-square-fps40" "aa-install" "aa-on-exp" "aa-output direct" "aa-install" "aa-on-exp" "aa-remove" "aa-on-exp" "restore")
 OWN+=("${XAA[@]}")
@@ -144,7 +144,7 @@ BR_M=$(msha BRIDGE); BR_P=$(msha PMCP_MOST); WR_M=$(msha WRAPPER); WR_P=$(msha P
 XBR=()
 [ -n "$BR_P" ] && XBR=("map-install map-square-fps40" "aa-install" "bridge pmcp-most" "bridge mathsls" "bridge pmcp-most" \
     "java-on nai" "bridge mathsls" "bridge pmcp-most" "restore")
-OWN+=("${XBR[@]}")
+[ ${#XBR[@]} -gt 0 ] && OWN+=("${XBR[@]}")   # bash 3.2 (macOS): an empty array is unbound under set -u
 # earlier versions made from this card (A188): java-update and 4 over an earlier np and a renamed rg, 3 over an earlier
 # AA set (fx:aa-unknown is "old" now: our wrapper, the factory gal copy, a well-formed AA_BOOT)
 OLDV=("install map-square-fps40" "rg-system-on" "java-on nai" "java-on np" "java-on rg" "java-on sl" "speedlimit-mode turnto" \

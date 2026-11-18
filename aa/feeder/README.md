@@ -63,6 +63,15 @@ feeder starts no `altscreen-most-bridge` and makes no ring:
   a write error or a 5 s refused block in the first `PMCP_AA_RECLAIM_S` of uptime (180, 0 = off) takes MOST back, at
   most `PMCP_AA_RECLAIM_MAX` times (3): dmdt release again, the same open and devctl sequence, the discontinuity flag
   on the next AU, then SPS/PPS and the last IDR again. The status line `ponowne przejecie MOST:` counts it.
+- v16 (A203-AA, Niobe): the user's "AA breaks when I shift into reverse". After tomasz-twardzicki's MU1367 v1.5.3 the
+  main thread is raised to `PMCP_AA_PRIO` (14, 0 = off) at start, never lowered: the reverse camera drives the CPU to
+  ~100% and the VW navigation threads run at 10, the priority the feeder inherited from gal. The MOST writer thread, the
+  guardian and (ring) the bridge inherit 14; the capture thread goes back to the old priority. Status line `priorytet:`.
+  Also the MOST owner file (docs/23, isoTX2 arbitration step b): `/ramdisk/most-src/isotx2` (`PMCP_AA_OWNER`, environment
+  only, `off` = none) is claimed with O_EXCL before dmdt, then names the guardian (it gives MOST back) and is removed after
+  the restore. A live holder (CarPlay's bridge) is waited for and never taken over; a dead one is removed. Status line
+  `wlasciciel isoTX2:`. Note: the logs of 9-14.11 show the phone itself slowing the cluster stream when the main screen
+  leaves AA (feeder idle, queue 0, no ACK hold); the priority covers the CPU side only.
 
 Diagnostics in both outputs: the guardian keeps the bridge's first 30 lines (devctl read-backs) besides the last ones;
 `PMCP_AA_CAPTURE_S=N` (default 0) records the phone's access units for N s to `PMCP_AA_CAPTURE_PATH` (environment only,
