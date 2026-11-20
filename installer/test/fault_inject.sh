@@ -132,7 +132,7 @@ OWN+=("${MAIN[@]}")
 # it is); experimental cards also record. An experimental AA set (AAX_FEEDER) would be swapped in and out as well.
 XAA=("map-install map-square-fps40" "java-on nai" "aa-install" "aa-output ring" "aa-output direct" "aa-remove" \
      "fx:java-unknown" "aa-install" "aa-output ring" "restore")
-case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) XAA+=("map-install map-square-fps40" "aa-install" "aa-capture 60" "aa-capture off" "aa-regrant on" "aa-regrant off" "restore") ;; esac
+case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) XAA+=("map-install map-square-fps40" "aa-install" "aa-capture 60" "aa-capture off" "aa-regrant on" "aa-regrant off" "aa-keepalive off" "aa-keepalive on" "restore") ;; esac
 grep -q '^AAX_FEEDER ' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && \
     XAA+=("map-install map-square-fps40" "aa-install" "aa-on-exp" "aa-output direct" "aa-install" "aa-on-exp" "aa-remove" "aa-on-exp" "restore")
 OWN+=("${XAA[@]}")

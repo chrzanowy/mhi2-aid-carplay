@@ -11,7 +11,7 @@ set -e
 export PATH=/opt/qnx650/host/linux/x86/usr/bin:$PATH QNX_HOST=/opt/qnx650/host/linux/x86 QNX_TARGET=/opt/qnx650/target/qnx6
 P=arm-unknown-nto-qnx6.5.0eabi
 $P-gcc -O2 -Wall -Wextra -Werror -std=gnu99 -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 \
-    -ffile-prefix-map=/src=. feeder/aa_most_feeder.c most/ts_mux.c most/most_writer.c -lsocket -o /out/aa-most-feeder
+    -ffile-prefix-map=/src=. feeder/aa_most_feeder.c feeder/h264_ka.c most/ts_mux.c most/most_writer.c -lsocket -o /out/aa-most-feeder
 $P-strip /out/aa-most-feeder
 $P-readelf -d /out/aa-most-feeder | grep NEEDED'
 shasum -a 256 "$OUT/aa-most-feeder"

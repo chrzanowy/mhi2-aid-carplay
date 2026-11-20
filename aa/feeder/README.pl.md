@@ -72,6 +72,17 @@ uruchamia `altscreen-most-bridge` i nie tworzy ringu:
   martwego usuwa. Linia statusu `wlasciciel isoTX2:`. Uwaga: logi z 9-14.11 pokazują, że to telefon zwalnia obraz
   na zegary, gdy ekran główny wychodzi z AA (feeder bezczynny, kolejka 0, ACK nie wstrzymany); priorytet pokrywa tylko
   stronę procesora.
+- v17 (A215-AA, auto 2026-11-20): AID tracił mapę AA i wracała dopiero po ponownym podłączeniu telefonu. Na
+  postoju telefon wysyła obraz na zegary tylko przy zmianie (przerwy 5 s, czasem 18 s); za każdym razem, gdy milczał
+  ~18 s, zegary porzucały mapę i ponawiały co 5 s (datapool 1110045 miga), aż klatki znów popłynęły, a IDR nie było przez
+  minuty. Direct wstawia teraz klatkę „bez zmian” co `PMCP_AA_KEEPALIVE_MS` (1000, 0 = wyłączone; także w aa-extra.conf,
+  GEM „AA map keep-alive”, karty eksperymentalne), gdy telefon milczy, po IDR tej sesji (`h264_ka.c`): wycinek P z samych
+  makrobloków P_Skip, bez deblockingu, obraz odniesienia z kolejnym frame_num i POC; późniejsze obrazy telefonu dostają
+  frame_num += k i POC lsb += 2k do jego następnego IDR (pola stałej szerokości, NAL ponownie z bajtami 03). Wymaga jednej
+  ramki odniesienia, CAVLC, ramek, POC typu 0 lub 2 (telefon: 0, refs 1); inaczej nic. Bez ACK. Linia statusu
+  `keepalive:`, zdarzenie przerwy dostaje `keepalive=N`. Testy: `test/run_ka_test.py` (nagranie z telefonu, ffmpeg: zero
+  błędów dekodowania, każdy obraz telefonu identyczny co do piksela, każdy keep-alive = obraz przed nim) i sekcja 17
+  `run_direct_test.py` (strumień libx264 przez feeder i symulowany isoTX2).
 
 Diagnostyka w obu wyjściach: strażnik trzyma pierwsze 30 linii bridge'a (odczyty devctl) obok ostatnich;
 `PMCP_AA_CAPTURE_S=N` (domyślnie 0) nagrywa jednostki dostępu z telefonu przez N s do `PMCP_AA_CAPTURE_PATH` (tylko ze
@@ -83,7 +94,7 @@ a status pokazuje errno, wolne miejsce i ile zapisano.
 
 ```
 aa/feeder/build.sh build/aa/feeder                                   # QNX 6.5 armv7, obraz qnx65-armv7-toolchain:8.5
-S="aa/feeder/aa_most_feeder.c aa/most/ts_mux.c aa/most/most_writer.c"
+S="aa/feeder/aa_most_feeder.c aa/feeder/h264_ka.c aa/most/ts_mux.c aa/most/most_writer.c"
 cc -O2 -Wall -Wextra -Werror -std=gnu99 -pthread -o /tmp/pmcp-aa/feeder-host $S
 cc -O2 -Wall -Wextra -Werror -std=gnu99 -pthread -DMOST_HOST_SIM -o /tmp/pmcp-aa/feeder-host-sim $S aa/most/test/host_mlb.c
 python3 -I aa/feeder/test/run_host_test.py /tmp/pmcp-aa/feeder-host  # atrapy hooka, bridge'a (format ringu) i dmdt

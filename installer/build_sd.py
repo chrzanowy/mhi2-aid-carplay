@@ -161,7 +161,7 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
     # AA 1.0 (A153): feeder v14 = v13 (pmcp's own MOST writer, direct) + only direct|ring taken from PMCP_AA_OUTPUT
     # v1.7.0: feeder v15 = v14 + MOST taken back when the factory encoder grabs isoTX2 early after boot (A166; in the car
     # with cards b542b2d4 and 9c0c4493)
-    "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "58ded602b375ee5b797dc4ba0159d7e9fc207f03041938739f428e25eab17c37", 62456, "aa/aa-most-feeder"),
+    "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "7a578e1a6b8e1a6d9090be785f0bd35c89c51895a0df86927c5a202e8165d077", 68512, "aa/aa-most-feeder"),
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", 1566, "aa/feeder.conf"),
 })
@@ -572,7 +572,10 @@ EXP_MENU = [] if not IS_EXP else ([
     ("aa-capture-off", "aa-capture off", "AA record: off"),
     # A203-AA reverse-gear test: the AA hook re-grants the cluster after a main-screen focus change (aa-extra.conf)
     ("aa-regrant-on", "aa-regrant on", "AA cluster re-grant after the main screen changes (reverse camera test): on"),
-    ("aa-regrant-off", "aa-regrant off", "AA cluster re-grant: off (default)")]
+    ("aa-regrant-off", "aa-regrant off", "AA cluster re-grant: off (default)"),
+    # A215-AA: feeder v17 "nothing changed" pictures while the phone is silent (aa-extra.conf)
+    ("aa-keepalive-on", "aa-keepalive on", "AA map keep-alive while the phone sends nothing: on (default)"),
+    ("aa-keepalive-off", "aa-keepalive off", "AA map keep-alive: off (test only)")]
 
 
 # main menu 4, in order: unsupported route guidance / Java files back to factory (features-reset), an earlier card's

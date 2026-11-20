@@ -136,6 +136,14 @@
  * dead one is removed after a second read of the same pid; an unreadable file older than 5 s counts as dead. A live
  * holder=cp file is waited for like CarPlay's bridge (PMCP_AA_CP_WAIT_MS). A reclaim (v15) is not a release.
  *
+ * v17 (A215-AA, car 2026-11-20: the AID lost the AA map for good after the phone sent nothing for ~18 s): standing
+ * still the phone sends the cluster stream only when the picture changes; after ~15 s without a frame the cluster drops
+ * the map and retries every 5 s (map_visible 1110045 flipping) until frames flow again, and no IDR comes for minutes.
+ * In direct mode the feeder now inserts a "nothing changed" picture (all P_Skip, h264_ka.c) every PMCP_AA_KEEPALIVE_MS
+ * (default 1000, 0 = off; also a GEM switch in aa-extra.conf) while the phone is silent, once the session's IDR went out.
+ * Keep-alive pictures are reference pictures, so the phone's later pictures get frame_num += k and POC lsb += 2k
+ * until its next IDR; every picture decodes to exactly the pixels it would have had (host test on a phone capture).
+ *
  * Modes (PMCP_AA_MODE): "analyze" (default) only reads, ACKs and writes a summary; the cluster keeps
  * the VW map. "most" also takes the MOST channel over. The summary is rewritten once a second to
  * PMCP_AA_STATUS (default /ramdisk/pmcp-aa-feeder.txt); nothing grows without bound.
@@ -170,8 +178,9 @@
 
 #include "../most/ts_mux.h"
 #include "../most/most_writer.h"
+#include "h264_ka.h"
 
-#define FEEDER_VERSION "16"
+#define FEEDER_VERSION "17"
 
 #define RING_MAGIC      0x43505247u
 #define RING_VERSION    1u
@@ -292,13 +301,20 @@ static const char *const CONF_KEYS[] = { "PMCP_AA_MODE", "PMCP_AA_RATE_KBPS", "P
                                          "PMCP_AA_DISC_FIRST", "PMCP_AA_CAPTURE_S",
                                          "PMCP_AA_DIRECT_SYNC_HOLD_MS",
                                          /* v15 */
-                                         "PMCP_AA_RECLAIM_S", "PMCP_AA_RECLAIM_MAX", NULL };
+                                         "PMCP_AA_RECLAIM_S", "PMCP_AA_RECLAIM_MAX",
+                                         /* v17 */
+                                         "PMCP_AA_KEEPALIVE_MS", NULL };
 
 /* v11: GEM switches (pmcp.sh aa-output / aa-capture) write a second, unpinned file on /mnt/persist: only these keys,
  * never a path, read before the pinned settings so the switch wins over them (the environment still wins). */
-static const char *const EXTRA_KEYS[] = { "PMCP_AA_OUTPUT", "PMCP_AA_CAPTURE_S", NULL };
+static const char *const EXTRA_KEYS[] = { "PMCP_AA_OUTPUT", "PMCP_AA_CAPTURE_S", "PMCP_AA_KEEPALIVE_MS", NULL };
 
 static unsigned long g_reclaim_s, g_reclaim_max;   /* v15: PMCP_AA_RECLAIM_S / _MAX (direct only) */
+/* v17: keep-alive pictures while the phone is silent (direct only) */
+static h264ka_t g_ka;
+static unsigned long g_ka_ms;                  /* PMCP_AA_KEEPALIVE_MS, 0 = off */
+static uint64_t g_ka_last_us;                  /* last keep-alive picture put */
+static unsigned long g_ka_sent, g_ka_gap, g_ka_gap_max, g_ka_skipped;
 /* v16: priority and MOST owner file */
 static const char *g_owner_path;               /* PMCP_AA_OWNER, "off" = no file (environment only, host tests) */
 static unsigned long g_prio_target;            /* PMCP_AA_PRIO, 0 = off */
@@ -1644,6 +1660,10 @@ static void write_status_direct(FILE *f)
                 (unsigned long long)m.aus_in, (unsigned long long)m.aus_out, (unsigned long long)m.keyframes_out,
                 (unsigned long long)m.aus_without_ps, (unsigned long long)m.video_packets,
                 (unsigned long long)m.null_packets, (unsigned long long)m.packet_count_mismatch);
+        fprintf(f, "keepalive: co=%lums wyslane=%lu max w przerwie=%lu przesuniete=%lu bledy=%lu IDR=%lu przesuniecie=%u"
+                " niegotowe=%lu stan=%s\n", g_ka_ms, g_ka_sent, g_ka_gap_max, g_ka.rewritten, g_ka.rewrite_err,
+                g_ka.idr_resets, g_ka.shift, g_ka_skipped,
+                g_ka_ms == 0u ? "wylaczone" : (g_ka.why != NULL && g_ka.why[0] != '\0') ? g_ka.why : "gotowe");
     }
     fprintf(f, "devctl: interfejs=%u (status %d) rozmiar-pakietu=%u (status %d) liczba-blokow=%u (status %d) flush=%d start=%d"
             " urzadzenie=%s\n",
@@ -2001,6 +2021,7 @@ static int direct_reclaim(uint64_t t, const most_stats_t *ms, const char *why)
     if (g_sync_idr_len != 0u && S.sync_state != 1u) {
         out_frame(g_sync_idr, g_sync_idr_len, (uint32_t)++g_frame_no);
         S.reclaim_idr++;
+        g_ka.have_ref = 0;                        /* v17: the decoder restarted on an old IDR: no keep-alive until a new one */
     }
     snprintf(S.most_state, sizeof S.most_state, "przejety ponownie (direct)");
     ev_log("MOST znowu nasze po %lums (IDR ponownie: %s)", (unsigned long)((now_us() - t) / 1000u),
@@ -2031,6 +2052,27 @@ static int sync_hold_frame(const uint8_t *au, unsigned len, unsigned ack)
 }
 
 /* Turns one access unit (Annex B, possibly with AUD/SPS/PPS) into ring data. */
+/* v17: the phone has been silent for g_ka_ms (and nothing of ours waits): one "nothing changed" picture. */
+static void ka_poll(uint64_t t)
+{
+    uint8_t au[4u + 64u];
+    uint32_t pk = 0, aus = 0;
+    uint64_t last;
+    unsigned n;
+    if (!g_direct_on || g_ka_ms == 0u || S.last_frame_us == 0u || S.sync_state == 1u || g_pace_n != 0u) return;
+    last = S.last_frame_us > g_ka_last_us ? S.last_frame_us : g_ka_last_us;
+    if (t < last + (uint64_t)g_ka_ms * 1000u) return;
+    ts_mux_depth(&g_mux, &pk, &aus);
+    if (aus != 0u) return;                        /* a frame is still going out: it carries the picture */
+    g_ka_last_us = t;
+    n = h264ka_make(&g_ka, au + 4u, 64u);
+    if (n == 0u) { g_ka_skipped++; return; }
+    au[0] = 0; au[1] = 0; au[2] = (uint8_t)(n >> 8); au[3] = (uint8_t)n;
+    direct_put(au, 4u + n, (uint32_t)++g_frame_no);
+    g_ka_sent++;
+    if (++g_ka_gap > g_ka_gap_max) g_ka_gap_max = g_ka_gap;
+}
+
 static void handle_au(const uint8_t *p, unsigned n)
 {
     nal_t nals[64];
@@ -2052,8 +2094,8 @@ static void handle_au(const uint8_t *p, unsigned n)
         const uint8_t *nal = p + nals[j].off;
         unsigned len = nals[j].len, type = nal[0] & 0x1fu, first_mb;
         int st;
-        if (type == 7u) { keep_param_set(g_sps, &g_sps_len, nal, len); parse_sps(nal, len); continue; }
-        if (type == 8u) { keep_param_set(g_pps, &g_pps_len, nal, len); parse_pps(nal, len); continue; }
+        if (type == 7u) { keep_param_set(g_sps, &g_sps_len, nal, len); parse_sps(nal, len); h264ka_sps(&g_ka, nal, len); continue; }
+        if (type == 8u) { keep_param_set(g_pps, &g_pps_len, nal, len); parse_pps(nal, len); h264ka_pps(&g_ka, nal, len); continue; }
         if (type == 9u) continue;
         if (type == 5u) is_idr = 1;
         if (type == 1u || type == 5u) {
@@ -2065,6 +2107,16 @@ static void handle_au(const uint8_t *p, unsigned n)
             S.dropped_big++;
             if (g_au_limit == RING_DATA_MAX) set_error("klatka > 256 KB"); else set_error("klatka > %u KB", g_au_limit / 1024u);
             return;
+        }
+        if (g_ka_ms != 0u && g_direct && (type == 1u || type == 5u)) {
+            /* v17: after keep-alive pictures the phone's frame_num / POC are shifted (the NAL may grow by a byte) */
+            unsigned ol = 0;
+            (void)h264ka_slice(&g_ka, nal, len, g_au + out + 4u, g_au_limit - out - 4u, &ol);
+            if (ol == 0u) { S.dropped_big++; set_error("klatka po przesunieciu > %u KB", g_au_limit / 1024u); return; }
+            g_au[out++] = (uint8_t)(ol >> 24); g_au[out++] = (uint8_t)(ol >> 16);
+            g_au[out++] = (uint8_t)(ol >> 8); g_au[out++] = (uint8_t)ol;
+            out += ol;
+            continue;
         }
         g_au[out++] = (uint8_t)(len >> 24); g_au[out++] = (uint8_t)(len >> 16);
         g_au[out++] = (uint8_t)(len >> 8); g_au[out++] = (uint8_t)len;
@@ -2083,8 +2135,12 @@ static void handle_au(const uint8_t *p, unsigned n)
         if (g > S.gap_max_us) { S.gap_max_us = g; S.gap_max_at_us = S.last_frame_us; }
         if (g >= 1000000u) S.gaps_1s++;
         if (g >= 3000000u) S.gaps_3s++;
-        if (g >= 1500000u && g_direct) ev_log("przerwa od telefonu %lums (koniec)", (unsigned long)(g / 1000u));
+        if (g >= 1500000u && g_direct) {
+            if (g_ka_ms != 0u) ev_log("przerwa od telefonu %lums (koniec) keepalive=%lu", (unsigned long)(g / 1000u), g_ka_gap);
+            else ev_log("przerwa od telefonu %lums (koniec)", (unsigned long)(g / 1000u));
+        }
     }
+    g_ka_gap = 0;
     S.stall_logged = 0;
     S.last_frame_us = t;
     win_advance(t);
@@ -2336,6 +2392,9 @@ int main(int argc, char **argv)
     g_tokens = g_burst;
     g_idle_ms = (unsigned)env_ul("PMCP_AA_IDLE_MS", 8ul, 2ul, 30ul);
     g_prio_target = env_ul("PMCP_AA_PRIO", 14ul, 0ul, 15ul);                     /* v16 */
+    g_ka_ms = env_ul("PMCP_AA_KEEPALIVE_MS", 1000ul, 0ul, 10000ul);               /* v17 */
+    if (g_ka_ms != 0u && g_ka_ms < 200u) g_ka_ms = 200u;
+    h264ka_reset(&g_ka);
     g_owner_path = env_or("PMCP_AA_OWNER", "/ramdisk/most-src/isotx2");          /* v16, environment only */
     if (strcmp(g_owner_path, "off") == 0) g_owner_path = "";                      /* host tests */
 
@@ -2409,7 +2468,7 @@ int main(int argc, char **argv)
         }
         sync_poll(now_us());
         pace_poll(now_us());
-        if (g_direct) { direct_check(now_us()); direct_hold_update(now_us()); }   /* v11 */
+        if (g_direct) { direct_check(now_us()); direct_hold_update(now_us()); ka_poll(now_us()); }   /* v11, v17 */
         ack_send_due(now_us());
         kf_poll(now_us());
         if (S.cap_state == 1 && g_cap_t0 != 0u && now_us() - g_cap_t0 > (uint64_t)g_cap_s * 1000000u) cap_finish(0);

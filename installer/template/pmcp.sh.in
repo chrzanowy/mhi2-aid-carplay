@@ -36,6 +36,9 @@
 #   pmcp.sh aa-regrant on|off   A203-AA reverse-gear test: after the main screen changes focus (reverse camera, a VW
 #                               screen) the AA hook gives the cluster display its focus once more; from the next AA
 #                               connection, no trial (PMCP_AA_SEC_REASSERT in aa-extra.conf, read by the AA hook)
+#   pmcp.sh aa-keepalive on|off A215-AA: while the phone sends nothing the feeder (v17) gives the AID a "nothing changed"
+#                               picture every second, so it never drops the map (on = the feeder's default; off =
+#                               PMCP_AA_KEEPALIVE_MS=0 in aa-extra.conf); from the next AA connection, no trial
 #   pmcp.sh aa-on-exp           only with a manifest key AAX_FEEDER (an experimental feeder next to the stable one; none
 #                               since AA 1.0): that set, its own set id and trial; main menu 3 goes back to stable
 #@@EXP_BEGIN
@@ -996,10 +999,12 @@ aa_extra_set() {    # KEY VALUE
     _x_out=`grep -x -e 'PMCP_AA_OUTPUT=direct' -e 'PMCP_AA_OUTPUT=ring' "$_x_f" 2>/dev/null | head -1`
     _x_cap=`grep -x -e 'PMCP_AA_CAPTURE_S=0' -e 'PMCP_AA_CAPTURE_S=60' "$_x_f" 2>/dev/null | head -1`
     _x_rea=`grep -x -e 'PMCP_AA_SEC_REASSERT=0' -e 'PMCP_AA_SEC_REASSERT=3' "$_x_f" 2>/dev/null | head -1`
+    _x_ka=`grep -x -e 'PMCP_AA_KEEPALIVE_MS=0' -e 'PMCP_AA_KEEPALIVE_MS=1000' "$_x_f" 2>/dev/null | head -1`
     case "$1" in
         PMCP_AA_OUTPUT) _x_out="PMCP_AA_OUTPUT=$2" ;;
         PMCP_AA_CAPTURE_S) _x_cap="PMCP_AA_CAPTURE_S=$2" ;;
         PMCP_AA_SEC_REASSERT) _x_rea="PMCP_AA_SEC_REASSERT=$2" ;;
+        PMCP_AA_KEEPALIVE_MS) _x_ka="PMCP_AA_KEEPALIVE_MS=$2" ;;
     esac
     mkdir -p "$PERSIST" 2>/dev/null
     rm -f "$_x_f.pmcp-new" 2>/dev/null
@@ -1008,6 +1013,7 @@ aa_extra_set() {    # KEY VALUE
     if [ -n "$_x_out" ]; then echo "$_x_out" >> "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"; fi
     if [ -n "$_x_cap" ]; then echo "$_x_cap" >> "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"; fi
     if [ -n "$_x_rea" ]; then echo "$_x_rea" >> "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"; fi
+    if [ -n "$_x_ka" ]; then echo "$_x_ka" >> "$_x_f.pmcp-new" 2>/dev/null || fail "AA_SWITCH_WRITE_FAILED"; fi
     mv "$_x_f.pmcp-new" "$_x_f" || fail "AA_SWITCH_WRITE_FAILED"
     grep -qx "$1=$2" "$_x_f" || fail "AA_SWITCH_READBACK_FAILED"
 }
@@ -1061,6 +1067,20 @@ do_aa_regrant() {
     esac
     flush
     say "PMCP_AA_REGRANT_OK regrant=$ARG (from the next AA connection; unplug and plug the phone)"
+}
+
+# A215-AA (experimental cards): feeder v17 keep-alive pictures while the phone is silent (the AID dropped the map after
+# ~15 s without a frame and only a replug brought it back). On is the feeder's default; the line 1000 or 0 in
+# aa-extra.conf sets it. Same files, no trial.
+do_aa_keepalive() {
+    aa_switch_ready exp
+    case "$ARG" in
+        on) aa_extra_set PMCP_AA_KEEPALIVE_MS 1000 ;;
+        off) aa_extra_set PMCP_AA_KEEPALIVE_MS 0 ;;
+        *) fail "AA_KEEPALIVE_MUST_BE_on_OR_off" ;;
+    esac
+    flush
+    say "PMCP_AA_KEEPALIVE_OK keepalive=$ARG (from the next AA connection; unplug and plug the phone)"
 }
 
 # AA log: the hook log and feeder summary live in /ramdisk and are gone at the next start; in GEM the SD card is
@@ -2396,6 +2416,7 @@ case "$ACTION" in
     aa-output)     do_aa_output ;;
     aa-capture)    do_aa_capture ;;
     aa-regrant)    do_aa_regrant ;;
+    aa-keepalive)  do_aa_keepalive ;;
 #@@EXP_BEGIN
     bridge)        do_bridge ;;
     bridge-status) do_bridge_status ;;

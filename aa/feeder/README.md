@@ -72,6 +72,17 @@ feeder starts no `altscreen-most-bridge` and makes no ring:
   the restore. A live holder (CarPlay's bridge) is waited for and never taken over; a dead one is removed. Status line
   `wlasciciel isoTX2:`. Note: the logs of 9-14.11 show the phone itself slowing the cluster stream when the main screen
   leaves AA (feeder idle, queue 0, no ACK hold); the priority covers the CPU side only.
+- v17 (A215-AA, car 2026-11-20): the AID lost the AA map and only a replug brought it back. Standing still the
+  phone sends the cluster stream only when the picture changes (gaps of 5 s, at times 18 s); each time it was silent for
+  ~18 s the cluster dropped the map and retried every 5 s (datapool 1110045 flipping) until frames flowed again, and no
+  IDR came for minutes. Direct now inserts a "nothing changed" picture every `PMCP_AA_KEEPALIVE_MS` (1000, 0 = off; also
+  in aa-extra.conf, GEM "AA map keep-alive", experimental cards) while the phone is silent, once the session's IDR went
+  out (`h264_ka.c`): a P slice of P_Skip macroblocks only, deblocking off, a reference picture with the next frame_num
+  and POC; the phone's later pictures get frame_num += k and POC lsb += 2k until its next IDR (fixed-width fields, the
+  NAL is re-escaped). Needs one reference frame, CAVLC, frames, POC type 0 or 2 (the phone: 0, refs 1); otherwise none.
+  No ACK for them. Status line `keepalive:`, the gap event adds `keepalive=N`. Tests: `test/run_ka_test.py` (a phone
+  capture, ffmpeg: no decode error, every phone picture pixel-identical, every keep-alive = the picture before) and
+  section 17 of `run_direct_test.py` (libx264 stream through the feeder and the simulated isoTX2).
 
 Diagnostics in both outputs: the guardian keeps the bridge's first 30 lines (devctl read-backs) besides the last ones;
 `PMCP_AA_CAPTURE_S=N` (default 0) records the phone's access units for N s to `PMCP_AA_CAPTURE_PATH` (environment only,
@@ -83,7 +94,7 @@ and the status shows errno, the free space and what was written.
 
 ```
 aa/feeder/build.sh build/aa/feeder                                   # QNX 6.5 armv7, image qnx65-armv7-toolchain:8.5
-S="aa/feeder/aa_most_feeder.c aa/most/ts_mux.c aa/most/most_writer.c"
+S="aa/feeder/aa_most_feeder.c aa/feeder/h264_ka.c aa/most/ts_mux.c aa/most/most_writer.c"
 cc -O2 -Wall -Wextra -Werror -std=gnu99 -pthread -o /tmp/pmcp-aa/feeder-host $S
 cc -O2 -Wall -Wextra -Werror -std=gnu99 -pthread -DMOST_HOST_SIM -o /tmp/pmcp-aa/feeder-host-sim $S aa/most/test/host_mlb.c
 python3 -I aa/feeder/test/run_host_test.py /tmp/pmcp-aa/feeder-host  # stubs for the hook, the bridge (ring format) and dmdt

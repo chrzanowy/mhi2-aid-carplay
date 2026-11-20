@@ -34,6 +34,15 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
   does not starve the bridge (after tomasz-twardzicki MU1367 v1.5.3). `events.log` is now rotated like the bridge's
   log (`events.log.1`, both together at most 64 KB) instead of stopping at 64 KB; "CP save log" includes both files.
 
+## Unreleased (release-candidate)
+
+- **Android Auto feeder v17 (map lost on the instrument cluster):** standing still, the phone sends the cluster picture
+  only when it changes and can stay silent for 18 s; after about 15 s without a frame the cluster dropped the AA map and
+  kept retrying every 5 s until the phone was plugged in again (the known issue of v1.8.0). The feeder now gives the
+  cluster a "nothing changed" picture every second while the phone is silent (an exact copy of the last picture; the
+  phone's later pictures are renumbered to follow it). Experimental cards: "AA map keep-alive while the phone sends nothing: on (default)" / "AA map
+  keep-alive: off (test only)". New AA set: one trial start, then "5. Confirm". Feeder `7a578e1a…` (was `58ded602…`).
+
 ## v1.8.0 (2026-11-20)
 
 Installer version `pmcp-0.8.0-mu1161-791-<build id>`. Tested in the car on 2026-11-20 with an experimental card of this

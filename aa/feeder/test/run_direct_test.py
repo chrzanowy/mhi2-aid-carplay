@@ -250,7 +250,7 @@ STEADY = [(1, 1, 20000, 20000, False), (149, 0, 1500, 6000, False)]
 r = analyse(run('steady', plan_synth(STEADY)))
 common(r, 'steady', 150, lead_min=4500)
 st = r.status
-check(st.startswith('PMCP AA FEEDER v16 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
+check(st.startswith('PMCP AA FEEDER v17 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
 for p in ('kolejka direct:', 'ACK wstrzymane:', 'zapis MOST:', 'czas zapisu bloku:', 'PTS-PCR (90kHz):', 'devctl: interfejs=0 (status 0)',
           'MOST poczatek 01: ', 'AU direct:'):
     check(any(l.startswith(p) for l in st.split('\n')), 'steady: status line %r' % p)
@@ -429,7 +429,7 @@ check('przerwa od telefonu 3' in r.status or 'przerwa od telefonu 4' in r.status
 bl = [l for l in r.status.split('\n') if 'brak klatek 3 s' in l]
 check(len(bl) == 2 and 'ACK czeka 0 (wstrzymane nie)' in bl[-1] and 'kolejka 0 pakietow/0 AU' in bl[-1], 'gap: stall noted with ACK/queue state %s' % bl)
 pv = [open(SPATH + '-prev%d' % k).read() if os.path.exists(SPATH + '-prev%d' % k) else '' for k in (1, 2, 3)]
-check(all(x.startswith('PMCP AA FEEDER v16') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
+check(all(x.startswith('PMCP AA FEEDER v17') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
 check([num(line(x, 'klatki='), 'klatki') for x in pv] == [30, 30, 30] and pv[0] != pv[1] != pv[2], 'prev: prev1..3 are separate sessions')
 sess = [l for l in open(os.path.join(OUT, 'prev3', 'pmcp-aa-sessions.txt')).read().split('\n') if l]
 check(len(sess) == 1 and '>3s=1' in sess[0] and 'ACK=30' in sess[0]
@@ -466,7 +466,7 @@ r = run('ring-explicit', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 
         env_add={'PMCP_AA_OUTPUT': 'ring', 'FAKE_BRIDGE_PRINT': '1', 'PMCP_AA_CAPTURE_S': '1',
                  'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'ring.h264')})
 check(not os.path.exists(r.P('mlb.ts')) and os.path.exists(r.P('bridge.jsonl')) and r.acks == 40, 'ring-explicit: ring + bridge, no isoTX2')
-check(r.status.startswith('PMCP AA FEEDER v16 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
+check(r.status.startswith('PMCP AA FEEDER v17 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
 bt = open(r.P('pmcp-aa-bridge.txt')).read() if os.path.exists(r.P('pmcp-aa-bridge.txt')) else ''
 check('bridge poczatek 01: bridge: start status=0 packets=64' in bt and 'bridge poczatek 02: bridge: latency-reset' in bt,
       'ring-explicit: guardian keeps the first bridge lines')
@@ -481,7 +481,7 @@ r = run('extra-switch', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 6
         conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=ring\n', env_add={'PMCP_AA_OUTPUT': None, 'PMCP_AA_MODE': None,
         'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'extra.h264')},
         extra='PMCP_AA_OUTPUT=direct\nPMCP_AA_CAPTURE_S=1\nPMCP_AA_MODE=analyze\nPMCP_AA_CAPTURE_PATH=/tmp/x\n')
-check(r.status.startswith('PMCP AA FEEDER v16 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
+check(r.status.startswith('PMCP AA FEEDER v17 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
 check(os.path.exists(os.path.join(OUT, 'capture-files', 'extra.h264')) and 'nagranie: zapisane' in r.status,
       'extra-switch: capture switched on there, path key there ignored')
 check(r.acks == 40, 'extra-switch: every frame (%d)' % r.acks)
@@ -560,6 +560,55 @@ check(len(r.dmdt) >= 4 and 'wlasciciel isoTX2: wylaczony' in r.status_before_clo
 r = run('owner-nodir', plan_synth([(1, 1, 20000, 20000, False), (5, 0, 1500, 6000, False)], seed=89),
         env_add={'PMCP_AA_OWNER': '/nonexistent-pmcp/x/isotx2'})
 check(len(r.dmdt) >= 4 and 'blad open errno=' in r.status_before_close, 'owner: no directory for the file does not stop AA')
+
+# 17. v17 (A215-AA): keep-alive pictures while the phone is silent. A real H.264 stream (libx264 baseline, one
+# reference, ffmpeg needed), a 3.5 s pause before picture 30: the TS on "MOST" must decode without one error, every
+# phone picture to the pixels of the original, every keep-alive picture to a copy of the one before; no ACK for them.
+def x264_plan(path, frames=90):
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=800x480:rate=30', '-frames:v', str(frames),
+                    '-c:v', 'libx264', '-profile:v', 'baseline', '-x264-params', 'keyint=1000:ref=1:bframes=0:aud=1',
+                    '-f', 'h264', path], check=True)
+    data = open(path, 'rb').read(); aus, cur = [], b''
+    for nal in split_nals(data):
+        if (nal[0] & 0x1f) == 9 and cur: aus.append(cur); cur = b''
+        cur += b'\x00\x00\x00\x01' + nal
+    if cur: aus.append(cur)
+    return [(au, k == 0, False) for k, au in enumerate(aus)]
+
+
+def framemd5(path, fmt):
+    r = subprocess.run(['ffmpeg', '-v', 'error', '-err_detect', 'crccheck+bitstream+buffer+explode', '-f', fmt, '-i', path,
+                        '-map', '0:v', '-f', 'framemd5', '-'], capture_output=True, text=True)
+    return r.returncode, r.stderr.strip(), [l.split(',')[-1].strip() for l in r.stdout.splitlines() if l and not l.startswith('#')]
+
+
+if shutil.which('ffmpeg') and 'libx264' in subprocess.run(['ffmpeg', '-hide_banner', '-encoders'], capture_output=True, text=True).stdout:
+    src = os.path.join(OUT, 'ka-src.h264')
+    plan = x264_plan(src)
+    rc0, err0, orig = framemd5(src, 'h264')
+    r = run('keepalive', plan, pause={30: 3.5}, ack_idle=1.5)
+    ka = line(r.status, 'keepalive:')
+    rc, err, got = framemd5(r.P('mlb.ts'), 'mpegts')
+    n_ka, n_gap = num(ka, 'wyslane'), num(ka, 'w przerwie')   # the gap's, plus any after the last picture (silent too)
+    check(rc0 == 0 and len(orig) == len(plan), 'keepalive: source decodes (%d pictures)' % len(orig))
+    check(2 <= n_gap <= 4 and n_ka - n_gap <= 2 and 'stan=gotowe' in ka and num(ka, 'bledy') == 0 and num(ka, 'przesuniete') == len(plan) - 30,
+          'keepalive: 2-4 pictures in a 3.5 s pause at 1000 ms, the 60 phone pictures after it shifted: %r' % ka)
+    check(rc == 0 and err == '', 'keepalive: the TS decodes without an error %s' % err[:200])
+    check(len(got) == len(orig) + n_ka, 'keepalive: %d pictures out = %d phone + %d keep-alive' % (len(got), len(orig), n_ka))
+    check(got == orig[:30] + [orig[29]] * n_gap + orig[30:] + [orig[-1]] * (n_ka - n_gap),
+          'keepalive: phone pictures identical, keep-alive pictures = the picture before the pause')
+    check(r.acks == len(plan) and r.other == 0, 'keepalive: one ACK per phone picture only (%d/%d)' % (r.acks, len(plan)))
+    check(any('przerwa od telefonu' in x and 'keepalive=%d' % n_gap in x for x in r.status.split('\n')),
+          'keepalive: the gap event names the pictures sent')
+    r = run('keepalive-off', plan, pause={30: 3.5}, ack_idle=1.5, extra='PMCP_AA_KEEPALIVE_MS=0\n')
+    rc, err, got = framemd5(r.P('mlb.ts'), 'mpegts')
+    check('keepalive: co=0ms wyslane=0' in r.status and 'stan=wylaczone' in r.status and got == orig,
+          'keepalive: PMCP_AA_KEEPALIVE_MS=0 in aa-extra.conf (GEM switch) = the phone stream untouched')
+    r = run('keepalive-synth', plan_synth([(1, 1, 20000, 20000, False), (20, 0, 1500, 6000, False)], seed=91), pause={10: 2.5})
+    check('keepalive: co=1000ms wyslane=0' in r.status and 'stan=gotowe' not in line(r.status, 'keepalive:'),
+          'keepalive: a stream it cannot follow gets none: %r' % line(r.status, 'keepalive:'))
+else:
+    check(False, 'keepalive: ffmpeg with libx264 needed for section 17')
 
 print('runs kept in', OUT)
 print('FAILED CHECKS: %d' % len(fails))
