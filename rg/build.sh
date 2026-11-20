@@ -32,6 +32,8 @@
 # ChangeDataRate, navigation MapViewerKombiNotifierModel, navsd ActiveRgType).
 # Since A171 (experimental, AA 1.1) -aa-r also runs rg/lanes/aa11.py: with Android Auto, road name, lanes and destination
 # distance / time only while KombiView says the AID does not show the AA map (TestAa11).
+# -aa-r also runs rg/lanes/component.py: route-guidance display component 1 (wireless CarPlay, omonob's notes) is
+# accepted as well as 16 (wired CarPlay, AA hook); driver and iap2.cfg unchanged (TestComponent).
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # do not write __pycache__ into upstream/tomasz (review 2)
 
@@ -157,6 +159,9 @@ if [ "$MODE" != base ]; then
         # AA 1.1 (experimental, A171): AA road name, lanes, destination only while the AID does not show the AA map
         python3 -I "$H/lanes/aa11.py" "$LB" "$H/lanes" || fail "aa11.py"
         ID=pmcp-$PL-rg-lanes-asfm-aa-r-aa11-1; WHAT="$WHAT + AA 1.1 road, lanes, destination off the AA map"
+        # wireless CarPlay sends guidance with display component 1 (omonob's notes); accept it as well as 16
+        python3 -I "$H/lanes/component.py" "$LB" "$H/lanes" || fail "component.py"
+        ID=pmcp-$PL-rg-lanes-asfm-aa-r-aa11-c1-1; WHAT="$WHAT + display component 1"
     fi
 fi
 
@@ -202,7 +207,7 @@ EOF
 java -cp "$W/patcher:$CP" RefCheck "$STOCK_JAR" "$W/pmcp-rg.jar"
 javac -nowarn -cp "$W/patched:$STOCK_JAR" -d "$W/tests" "$LB/TestLive.java" ${EXTRA:+"$TL"} \
     $([ $AA = yes ] && echo "$LB/TestAa.java") \
-    $([ $R146 = yes ] && echo "$LB/TestAa11.java $LB/TestReroute.java $LB/TestSourceName.java $LB/TestUturnSide.java $LB/TestPlaceholder.java $LB/TestQuietQnx.java $LB/TestPmcp146.java") $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
+    $([ $R146 = yes ] && echo "$LB/TestAa11.java $LB/TestReroute.java $LB/TestSourceName.java $LB/TestUturnSide.java $LB/TestPlaceholder.java $LB/TestQuietQnx.java $LB/TestPmcp146.java $LB/TestComponent.java") $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
     $([ $MAN = yes ] && echo "$LB/TestManeuvers.java")
 java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestLive > "$W/tests/result.json" || { cat "$W/tests/result.json"; fail "TestLive"; }
 cat "$W/tests/result.json"; echo
@@ -245,7 +250,7 @@ fi
 if [ $R146 = yes ]; then
     # each in its own JVM (static evidence counters and LiveBridge.INSTANCE start fresh)
     for t in TestAa11:AA11_PASS TestReroute:REROUTE_PASS TestSourceName:SOURCE_NAME_PASS TestUturnSide:UTURN_SIDE_PASS TestPlaceholder:PLACEHOLDER_PASS \
-             TestQuietQnx:QUIET_FACTORY_J9_PASS TestPmcp146:PMCP146_PASS; do
+             TestQuietQnx:QUIET_FACTORY_J9_PASS TestPmcp146:PMCP146_PASS TestComponent:COMPONENT_PASS; do
         c=${t%%:*}; m=${t#*:}
         java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.$c > "$W/tests/$c.txt" 2>&1 || { cat "$W/tests/$c.txt"; fail "$c"; }
         grep -q "^$m " "$W/tests/$c.txt" || fail "$c: no $m"; cat "$W/tests/$c.txt"
