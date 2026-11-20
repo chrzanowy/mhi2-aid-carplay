@@ -53,6 +53,8 @@ build bridge-host-lib $CF -DMOST_HOST_SIM -include $HERE/shim/host_shim.h -I "$R
     -o "$B/bridge-host-lib" "$ROOT/src/pmcp_most_lib.c" "$KIT" "$HERE/shim/host_shim.c" "$AAM/ts_mux.c" \
     "$AAM/most_writer.c" "$AAM/test/host_mlb.c"
 build producer -std=gnu99 -O2 -Wall -Wextra -Werror -o "$B/producer" "$HERE/producer.c"
+# stage 5: the MOST supervisor v1 (src/pmcp_most_sup.c) with the contract library
+build supervisor-host $CF -I "$ROOT/contract" -o "$B/pmcp-most-sup" "$ROOT/src/pmcp_most_sup.c" "$ROOT/contract/pmcp_most_producer.c"
 chmod +x "$HERE/fake_dmdt.sh"
 
 H264=${PMCP_TEST_H264:-$ROOT/../../../passat-mhi2-carplay/build/car-logs-20261110b/aa-stream.h264}
@@ -71,4 +73,6 @@ echo "== stage 2 (bridge-host-lib, AA MOST output library)"
 PMCP_TEST_BRIDGE=bridge-host-lib python3 -I "$HERE/harness.py" "$B" "$TOOLS" "$H264" "$@"; rc2=$?
 if [ -z "$AA_DIFF" ]; then echo "ok     aa/most unchanged against origin/release-candidate, aa/ clean"; rc3=0
 else echo "FAILED aa/most differs from origin/release-candidate or aa/ has local changes:"; echo "$AA_DIFF"; rc3=1; fi
-[ $rc1 = 0 ] && [ $rc2 = 0 ] && [ $rc3 = 0 ]
+echo "== stage 5 (MOST supervisor v1)"
+python3 -I "$HERE/sup_test.py" "$B/pmcp-most-sup"; rc4=$?
+[ $rc1 = 0 ] && [ $rc2 = 0 ] && [ $rc3 = 0 ] && [ $rc4 = 0 ]
