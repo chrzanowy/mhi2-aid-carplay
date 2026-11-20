@@ -1915,6 +1915,27 @@ PEOF
         [ ! -e "$SDB/pmcp/payload/dm" ] && ok "release card: no encoder json payload" || bad "release card carries dm payload"
     fi
 
+    # WL project's HMI hook (A220): experimental cards only, a regular Java package, not in main menu 4
+    echo "[59] package wl (WL HMI hook): experimental cards only, not in main 4, own JAR, full Java lifecycle"
+    if [ -n "$(jsha wl)" ]; then
+        WL=$(jid wl); WLF=$(jf wl)
+        [ "$WLF" = "pmcp-wl-$(jsha wl | cut -c1-8).jar" ] && [ "$(h "$SDB/pmcp/payload/jars/$WLF")" = "$(jsha wl)" ] && ok "payload: $WLF" || bad "wl payload"
+        grep -q 'java-on_wl' "$SDB/pmcp/menu/features-on.sh" && bad "wl in main menu 4" || ok "wl is not in main menu 4"
+        [ -f "$SDB/pmcp/menu/java-on-wl.sh" ] && [ -f "$SDB/pmcp/menu/java-off-wl.sh" ] && ok "wl on/off buttons" || bad "wl buttons"
+        start_unit; run map-install map-square-fps40; rc_is 0; run java-on nai; rc_is 0
+        run java-on wl; rc_is 0; expect_out "PMCP_JAVA_ON_OK package=wl set=$NAI+$WL" "java-on wl: set nai+wl"
+        [ -f "$U/eso/hmi/lsd/jars/$WLF" ] && ok "wl JAR on the unit" || bad "wl JAR missing"
+        o=$(unit_boot); case "$o" in "boot=trial set=$NAI+$WL jars="*"/X/lsd/jars/$WLF") ok "next start: trial, wl loaded last" ;; *) bad "boot: $o" ;; esac
+        run java-confirm; rc_is 0
+        run java-off wl; rc_is 0; [ ! -e "$U/eso/hmi/lsd/jars/$WLF" ] && [ "$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT")" = "$NAI" ] \
+            && ok "java-off wl: JAR removed, set nai" || bad "java-off wl"
+        run java-on wl; rc_is 0
+        restore_exact "restore with wl: exact factory tree"
+    else
+        ls "$SDB/pmcp/menu" | grep -q 'java-on-wl' && bad "release card has wl buttons" || ok "release card: no wl buttons"
+        grep -q '^JAR_wl ' "$SDB/pmcp/pmcp.sh" && bad "release card carries the wl JAR" || ok "release card: no wl JAR"
+    fi
+
     [ -s "$W/noexec" ] && { bad "pmcp.sh called a command the unit does not have ($(wc -l < "$W/noexec" | tr -d ' ') runs)"; sort -u "$W/noexec" | head -5 | sed 's/^/       | /'; } \
         || ok "no run of this card's pmcp.sh called a command missing on the unit (printf, tr, cut)"
 done

@@ -20,7 +20,7 @@ import sys
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "profiles")
 HEX64 = re.compile(r"^[0-9a-f]{64}\Z")
 ID = re.compile(r"^[A-Z0-9]+\Z")
-PACKAGES = {"nai", "np", "rg", "zoom", "dn", "sl", "ui", "aa"}
+PACKAGES = {"nai", "np", "rg", "zoom", "dn", "sl", "ui", "aa", "wl"}
 STOCK_KEYS = {"IAP2DRV", "IAP2CFG", "LSD", "DIO", "GAL", "DMJSON"}
 LSD_STATES = {"stock", "toolbox_nai"}
 KEYS = {"schema": int, "id": str, "cluster": str, "version_tag": str, "label": str, "car": str, "train": str, "train_full": str,

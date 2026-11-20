@@ -65,6 +65,12 @@ JAVA_PACKAGES_ALL = [("nai", "nai: AID map stays while the iPhone navigates (Nav
                       ("sl", "sl: native VW map speed limit in the AID road text (optional, output off until enabled)"),
                       # in main 4: the settings page in App-Connect settings, also "Save" for a trial start (ui/README.md)
                       ("ui", "ui: AID navigation configuration in App-Connect settings, saves trial starts without the card")]
+# Experimental cards only: the wireless CarPlay HMI hook of the WL project (separate private repo; the JAR is pinned
+# here and lives outside git, build/wl-<sha8>/pmcp-wl.jar). Not in main menu 4; inactive without a WL session file.
+# WL commit 1ab5abd (hmi/ = 39f2fe8), two identical builds (A220); replaces one factory class: the SI HsmTarget
+WL_JAR_PIN = ("build/wl-b786472e/pmcp-wl.jar", "b786472e3c68e9093b05f4a989504ada28253968ab519d5718f9afee2cc724b4", 33326)
+if os.environ.get("PMCP_BUILD_EXPERIMENTAL") == "1" and WL_JAR_PIN:
+    JAVA_PACKAGES_ALL.append(("wl", "wl: wireless CarPlay HMI hook (experimental; inactive without a WL session)"))
 # only what the profile supports reaches the card, the GEM menu and the settings page
 JAVA_PACKAGES = [x for x in JAVA_PACKAGES_ALL if x[0] in FW["packages"]]
 # The GEM menu is the same for every profile: a package or Android Auto that the profile does not have keeps its button,
@@ -179,6 +185,8 @@ if IS_EXP and PROFILE_ID == "MU1161":
     PAYLOAD_BY_PROFILE["MU1161"].update({
         "PMCP_MOST": (PROJ / PMCP_MOST_PIN[0], PMCP_MOST_PIN[1], PMCP_MOST_PIN[2], "pmcp-most/altscreen-most-bridge"),
         "PMCP_MOST_SUP": (PROJ / PMCP_MOST_SUP_PIN[0], PMCP_MOST_SUP_PIN[1], PMCP_MOST_SUP_PIN[2], "pmcp-most/pmcp-most-sup"),
+        # the WL HMI hook (Java package wl, experimental only; see WL_JAR_PIN)
+        "JAR_wl": (PROJ / WL_JAR_PIN[0], WL_JAR_PIN[1], WL_JAR_PIN[2], "jars/pmcp-wl-%s.jar" % WL_JAR_PIN[1][:8]),
         # mathsls's WRAPPER + the contract owner block (src=wired kind=proxy, wired.session): live with pmcp-most only
         "PMCP_MOST_WRAPPER": (PROJ / "installer/pmcp-most/dio_manager.wrapper.sh",
                               "52031e8435dfed0329cb8d6fd83b6de184b0bee07529fa370c321c3e2d7d4859", 4301,
@@ -621,7 +629,7 @@ FEATURE_NAMES = [("rg", "route guidance"), ("zoom", "zoom"), ("dn", "day/night")
 FEATURES_NOTE = "" if not UNSUPPORTED else 'echo "Not yet supported on this unit (%s), skipped: %s."\n' % (
     FW["id"], ", ".join(t for n, t in FEATURE_NAMES if n in UNSUPPORTED) or ", ".join(UNSUPPORTED))
 FEATURES = ["features-reset"] + (["rg-update"] if "rg" in FW["packages"] else []) + ["java-update"] \
-    + (["rg-system-on"] if "rg" in FW["packages"] else []) + ["java-on_" + n for n, _ in JAVA_PACKAGES if n != "sl"]
+    + (["rg-system-on"] if "rg" in FW["packages"] else []) + ["java-on_" + n for n, _ in JAVA_PACKAGES if n not in ("sl", "wl")]
 
 
 def menu_script(args, label):
