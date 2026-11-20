@@ -122,8 +122,9 @@ PAYLOAD_BY_PROFILE["MU1161"] = {
     # /ramdisk/pmcp-kombi-view.log) + rg/lanes/aa11.py (AA 1.1, A171: AA road name, lanes, destination only while the AID
     # does not show the AA map; KombiView.mapShown() = datapool 1110045). v1.7.x had the same file as
     # pmcp-guidance7.jar (experimental card 9c0c4493, in the car 2026-11-12, A174); earlier ones pmcp-guidance*.jar.
+    # A220: + rg/lanes/component.py (route-guidance display component 1 as well as 16, wireless CarPlay); was 308714b2.
     "JAR_rg": (PROJ / "build/rg-mu1161-lanes-uturn-asf-m-aa-r-aa11/pmcp-rg.jar",
-               "308714b29b1e7350f98771e78e34abd776cdb710123b2e9beb5c135bd3a8c04b", 64481, "jars/pmcp-rg-308714b2.jar"),
+               "2f244229b5a726dd1c9348efb70b70da42d362006f6cb34cca37c7c961618fd1", 64498, "jars/pmcp-rg-2f244229.jar"),
     "JAR_zoom": (PROJ / "build/extras-mu1161-v2/pmcp-zoom.jar",
                  "046f48210dbee3177fbaa2a25f69154b56055f59b074fced1a0202700dd78d7b", 4740, "jars/pmcp-zoom-046f4821.jar"),
     "JAR_dn": (PROJ / "build/extras-mu1161-v2/pmcp-dn.jar",
