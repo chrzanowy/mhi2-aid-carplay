@@ -63,7 +63,7 @@ feeder starts no `altscreen-most-bridge` and makes no ring:
   a write error or a 5 s refused block in the first `PMCP_AA_RECLAIM_S` of uptime (180, 0 = off) takes MOST back, at
   most `PMCP_AA_RECLAIM_MAX` times (3): dmdt release again, the same open and devctl sequence, the discontinuity flag
   on the next AU, then SPS/PPS and the last IDR again. The status line `ponowne przejecie MOST:` counts it.
-- v16 (A203-AA, Niobe): the user's "AA breaks when I shift into reverse". After tomasz-twardzicki's MU1367 v1.5.3 the
+- v16 (A203-AA): the user's "AA breaks when I shift into reverse". After tomasz-twardzicki's MU1367 v1.5.3 the
   main thread is raised to `PMCP_AA_PRIO` (14, 0 = off) at start, never lowered: the reverse camera drives the CPU to
   ~100% and the VW navigation threads run at 10, the priority the feeder inherited from gal. The MOST writer thread, the
   guardian and (ring) the bridge inherit 14; the capture thread goes back to the old priority. Status line `priorytet:`.

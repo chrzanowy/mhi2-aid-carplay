@@ -34,7 +34,19 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
   does not starve the bridge (after tomasz-twardzicki MU1367 v1.5.3). `events.log` is now rotated like the bridge's
   log (`events.log.1`, both together at most 64 KB) instead of stopping at 64 KB; "CP save log" includes both files.
 
-## Unreleased (release-candidate)
+## v1.8.0 (2026-11-20)
+
+Installer version `pmcp-0.8.0-mu1161-791-<build id>`. Tested in the car on 2026-11-20 with an experimental card of this
+tree (fc73b3b5): CarPlay and Android Auto on the AID, reverse gear three times with each, a cold start.
+
+**Updating from v1.7.x:** 2 ("already installed"), 3 if you use Android Auto (new AA set in place, the chosen output
+stays), 4 (the Java packages move to their new file names in place); then restart (trial start), connect the phone and
+5 in that start.
+
+**Known issue (Android Auto):** when the phone sends no picture for about 18 s (it does that, for example, during a long
+time on another main screen), the AID can lose the Android Auto map and keep switching it off and on; it comes back when
+the phone is reconnected. A fix (the feeder keeps the picture alive while the phone is silent) is being tested for the
+next release.
 
 - **Android Auto feeder v16 (reverse gear):** the feeder raises itself to priority 14 (above the VW navigation threads,
   below the MOST driver), so a reverse camera that takes the CPU no longer starves the cluster stream on our side; it
