@@ -556,7 +556,9 @@ PY
     case "$feat" in "menu/diag.sh menu/timeline.sh menu/rglast.sh menu/navdiag.sh menu/cp-log-save.sh "*) ok "diagnostics: diagnostics and the CarPlay log first" ;; *) bad "diagnostics: $feat" ;; esac
     case "$feat" in *java-*|*rg-system*|*rg-update*) bad "diagnostics still has on/off or update buttons: $feat" ;; *) ok "diagnostics: no on/off, no update buttons" ;; esac
     onoff=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen features/,/^screen aa_advanced/p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-    case "$onoff" in "menu/rg-system-on.sh menu/rg-system-off.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh menu/java-off-nai.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh "|"menu/java-on-nai.sh "*"menu/java-off-ui.sh ") ok "features: RG system on/off, then every package on, then off (ui last)" ;; *) bad "features: $onoff" ;; esac
+    # experimental cards: the WL package wl after ui (A220)
+    _wl=""; [ -n "$(jsha wl)" ] && _wl="menu/java-on-wl.sh "; _wlo=""; [ -n "$_wl" ] && _wlo="menu/java-off-wl.sh "
+    case "$onoff" in "menu/rg-system-on.sh menu/rg-system-off.sh menu/java-on-nai.sh "*"menu/java-on-sl.sh menu/java-on-ui.sh ${_wl}menu/java-off-nai.sh "*"menu/java-off-sl.sh menu/java-off-ui.sh ${_wlo}"|"menu/java-on-nai.sh "*"menu/java-off-ui.sh ${_wlo}") ok "features: RG system on/off, then every package on, then off (ui${_wl:+, then wl} last)" ;; *) bad "features: $onoff" ;; esac
     for _m in rg-update java-update; do
         [ ! -e "$SDB/pmcp/menu/$_m.sh" ] && ! grep -q "menu/$_m.sh" "$SDB/esd/Launcher-sda0.esd" && ok "no GEM button $_m (main 4 and 10 do it)" || bad "GEM button $_m still there"
     done
