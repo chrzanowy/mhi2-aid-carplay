@@ -48,6 +48,10 @@
 #   pmcp.sh bridge-status       read-only: the bridge lines of status, this start's owner and wired.session, the end of
 #                               pmcp-most's log (GEM experimental)
 #   (on experimental cards aa-capture is on GEM experimental too, not on aa_advanced)
+#   pmcp.sh most-sup pmcp|mathsls  MOST supervisor v1 (stage 5, bridge/src/pmcp_most_sup.c) or mathsls's at the path the
+#                               wrappers start (carplay-cluster-supervisor); pmcp needs Bridge pmcp-most; the running
+#                               supervisor is stopped (it gives the MOST channel back), the chosen one starts with the
+#                               next phone connection; "bridge mathsls" puts mathsls's supervisor back too
 #   pmcp.sh dm-path pmcp|factory  MOST supervisor stage 5 (docs 23): the factory VW encoder (displaymanager) opens the MOST
 #                               channel through our link /dev/pmcp-isoTX2 (made by the lsd.sh block at every start) or its
 #                               factory path; displaymanager.json, from the next unit start; needs this card's Java set
@@ -1522,6 +1526,7 @@ map_files_ok() {
         esac
 #@@EXP_BEGIN
         [ "$_y_k" = BRIDGE ] && [ -n "`bridge_active`" ] && continue
+        [ "$_y_k" = SUPERVISOR ] && [ -n "`sup_active`" ] && continue
 #@@EXP_END
         matches "$ROOT/$_y_f" "$_y_h" "$_y_s" || return 1
     done <<EOF
@@ -1707,7 +1712,7 @@ do_cp_log_save() {
            # of this start), its own log (64 KB + one older .1, written by the bridge) and the contract files
            # (owner, wired.session, the bridge's consumer status), all in /ramdisk of this start
            echo "--- MOST bridge: ${_l_br:-not a file of this card} (chosen: ${_l_bm:-mathsls, default})"
-           for _l_x in pmcp-most/events.log.1 pmcp-most/events.log pmcp-most/bridge.log.1 pmcp-most/bridge.log most-src/owner most-src/wired.session most-src/consumer; do
+           for _l_x in pmcp-most/events.log.1 pmcp-most/events.log pmcp-most/bridge.log.1 pmcp-most/bridge.log pmcp-most/sup.log.1 pmcp-most/sup.log most-src/owner most-src/wired.session most-src/wireless.session most-src/isotx2 most-src/consumer; do
                [ -s "$RAMDISK/$_l_x" ] || continue
                echo "--- $_l_x (first 2000 lines)"; sed -n '1,2000p' "$RAMDISK/$_l_x" 2>/dev/null
            done
@@ -2291,6 +2296,83 @@ do_status() {
 # none = mathsls). restore removes all of it with carplaymaps and $PERSIST.
 BRIDGE_DIR="$ROOT/bridge"
 BRIDGE_MARK="$PERSIST/most-bridge"
+SUP_MARK="$PERSIST/most-sup"
+
+# sup_active -> mathsls | pmcp | nothing (another file, or none, at the wrappers' supervisor path)
+sup_active() {
+    set -- `manifest_get SUPERVISOR`
+    if matches "$ROOT/carplay-cluster-supervisor" "$1" "$2"; then echo mathsls; return 0; fi
+    set -- `manifest_get PMCP_MOST_SUP`
+    [ -n "$1" ] && matches "$ROOT/carplay-cluster-supervisor" "$1" "$2" && echo pmcp
+    return 0
+}
+
+# stop the running supervisor (both programs run from the same path): on SIGTERM it stops the bridge and gives the MOST
+# channel back; the wrapper starts the chosen one at the next dio_manager start (next phone connection)
+sup_stop() {
+    [ -n "${PMCP_TEST_ROOT:-}" ] && return 0
+    if [ -n "$MMX" ]; then on -f mmx slay -f carplay-cluster-supervisor >/dev/null 2>&1 || true
+    else slay -f carplay-cluster-supervisor >/dev/null 2>&1 || true; fi
+}
+
+# sup_set mathsls|pmcp: that verified supervisor at the wrappers' path (kept copies in $BRIDGE_DIR, one rename), then the
+# marker ($SUP_MARK: pmcp; none = mathsls). Needs remount_rw. Says nothing when it is already in place.
+sup_set() {
+    case "$1" in mathsls) _ss_key=SUPERVISOR; _ss_copy=carplay-cluster-supervisor.mathsls; _ss_mark="" ;;
+                 pmcp) _ss_key=PMCP_MOST_SUP; _ss_copy=pmcp-most-sup; _ss_mark=pmcp ;; esac
+    set -- `manifest_get $_ss_key`; _ss_sha=$1; _ss_size=$2
+    mkdir -p "$BRIDGE_DIR" || fail "BRIDGE_DIR_FAILED"
+    bridge_keep SUPERVISOR carplay-cluster-supervisor.mathsls
+    bridge_keep PMCP_MOST_SUP pmcp-most-sup
+    if ! matches "$ROOT/carplay-cluster-supervisor" "$_ss_sha" "$_ss_size"; then
+        rm -f "$ROOT/carplay-cluster-supervisor.pmcp-new" 2>/dev/null
+        cp "$BRIDGE_DIR/$_ss_copy" "$ROOT/carplay-cluster-supervisor.pmcp-new" || fail "SUPERVISOR_STAGE_FAILED"
+        chmod 755 "$ROOT/carplay-cluster-supervisor.pmcp-new" || fail "CHMOD_FAILED"
+        check "$ROOT/carplay-cluster-supervisor.pmcp-new" "$_ss_sha" "$_ss_size" STAGED_SUPERVISOR
+        if ! mv -f "$ROOT/carplay-cluster-supervisor.pmcp-new" "$ROOT/carplay-cluster-supervisor" 2>/dev/null; then
+            sup_stop
+            mv -f "$ROOT/carplay-cluster-supervisor.pmcp-new" "$ROOT/carplay-cluster-supervisor" || fail "SUPERVISOR_ACTIVATION_FAILED_OLD_KEPT"
+        fi
+        _ss_changed=yes
+    fi
+    if [ -n "$_ss_mark" ]; then
+        mkdir -p "$PERSIST" 2>/dev/null
+        echo "$_ss_mark" > "$SUP_MARK.pmcp-new" 2>/dev/null || fail "SUPERVISOR_MARKER_WRITE_FAILED"
+        mv -f "$SUP_MARK.pmcp-new" "$SUP_MARK" || fail "SUPERVISOR_MARKER_WRITE_FAILED"
+    else
+        rm -f "$SUP_MARK" "$SUP_MARK.pmcp-new" 2>/dev/null
+        [ ! -e "$SUP_MARK" ] || fail "SUPERVISOR_MARKER_REMOVE_FAILED"
+    fi
+    [ "`sup_active`" = "$1" ] || fail "POST_SUPERVISOR_SWITCH"
+}
+
+do_most_sup() {
+    case "$ARG" in mathsls|pmcp) ;; *) fail "MOST_SUP_MUST_BE_pmcp_OR_mathsls" ;; esac
+    selftest
+    firmware_identity
+    detect_state
+    [ "$MAPOK" = yes ] && pmcp_root || fail "MOST_SUP_NEEDS_PMCP_MAP_STATE_$STATE"
+    for _ms_k in SUPERVISOR PMCP_MOST_SUP; do
+        set -- `manifest_get $_ms_k`
+        [ -n "$1" ] || fail "MOST_SUP_SWITCH_NOT_ON_THIS_CARD"
+        check "$PAYLOAD/$3" "$1" "$2" "$_ms_k"
+    done
+    [ "$ARG" = mathsls ] || [ "`bridge_active`" = pmcp-most ] || fail "MOST_SUP_PMCP_NEEDS_BRIDGE_PMCP_MOST_FIRST"
+    _ms_mark=""; [ "$ARG" = pmcp ] && _ms_mark=pmcp
+    if [ "`sup_active`" = "$ARG" ] && [ "`cat "$SUP_MARK" 2>/dev/null`" = "$_ms_mark" ] && [ ! -e "$SUP_MARK.pmcp-new" ]; then
+        say "PMCP_MOST_SUP_OK supervisor=$ARG (already in use, nothing changed)"
+        return 0
+    fi
+    remount_rw
+    _ss_changed=no
+    sup_set "$ARG"
+    flush
+    sup_stop
+    _ms_key=SUPERVISOR; [ "$ARG" = pmcp ] && _ms_key=PMCP_MOST_SUP
+    set -- `manifest_get $_ms_key`
+    say "PMCP_MOST_SUP_OK supervisor=$ARG (`first8 $1`)"
+    say "The running supervisor was stopped (MOST channel back to the VW map); the chosen one starts with the next phone connection (unplug and plug the iPhone)."
+}
 
 # bridge_active -> mathsls | pmcp-most | nothing (another file, or none, at the supervisor's path)
 bridge_active() {
@@ -2346,8 +2428,10 @@ do_bridge() {
     set -- `manifest_get $_br_wkey`; _br_wsha=$1; _br_wsize=$2; _br_wpath=$3
     _br_mark=""; [ "$ARG" = pmcp-most ] && _br_mark=pmcp-most
     _br_now=`cat "$BRIDGE_MARK" 2>/dev/null`
+    _br_sup_ok=yes
+    [ "$ARG" = mathsls ] && [ -n "`manifest_get PMCP_MOST_SUP`" ] && [ "`sup_active`" != mathsls ] && _br_sup_ok=no
     if [ "`bridge_active`" = "$ARG" ] && matches "$DIO" "$_br_wsha" "$_br_wsize" && [ "$_br_now" = "$_br_mark" ] \
-        && [ ! -e "$BRIDGE_MARK.pmcp-new" ]; then
+        && [ ! -e "$BRIDGE_MARK.pmcp-new" ] && [ $_br_sup_ok = yes ]; then
         say "PMCP_BRIDGE_OK bridge=$ARG (already in use, nothing changed)"
         return 0
     fi
@@ -2389,6 +2473,13 @@ do_bridge() {
     fi
     [ "`bridge_active`" = "$ARG" ] || fail "POST_BRIDGE_SWITCH_BRIDGE"
     matches "$DIO" "$_br_wsha" "$_br_wsize" && [ -x "$DIO" ] || fail "POST_BRIDGE_SWITCH_WRAPPER"
+    # 4. mathsls's bridge runs under mathsls's supervisor only (ours is for pmcp-most)
+    if [ "$ARG" = mathsls ] && [ -n "`manifest_get PMCP_MOST_SUP`" ] && [ "`sup_active`" != mathsls ]; then
+        _ss_changed=no
+        sup_set mathsls
+        sup_stop
+        say "MOST supervisor: mathsls again (with the mathsls bridge)"
+    fi
     flush
     set -- `manifest_get $_br_key`
     say "PMCP_BRIDGE_OK bridge=$ARG (`first8 $1`)"
@@ -2410,6 +2501,12 @@ bridge_status() {
     say "  dio_manager wrapper: $_bs_w; chosen: ${_bs_m:-mathsls (default)}"
     if [ "${_bs_m:-mathsls}" != "${_bs_a:-?}" ] || [ -e "$BRIDGE_MARK.pmcp-new" ]; then
         say "  the switch was interrupted: press the same Bridge button again"
+    fi
+    _bs_s=`sup_active`; _bs_sm=`cat "$SUP_MARK" 2>/dev/null`
+    [ -n "$_bs_s" ] || _bs_s="not a file of this card (MOST supervisor: mathsls, or pmcp, replaces it)"
+    say "  MOST supervisor: $_bs_s; chosen: ${_bs_sm:-mathsls (default)}"
+    if [ "${_bs_sm:-mathsls}" != "$_bs_s" ] || [ -e "$SUP_MARK.pmcp-new" ]; then
+        say "  the supervisor switch was interrupted: press the same MOST supervisor button again"
     fi
     _bs_c=`cat "$RAMDISK/most-src/consumer" 2>/dev/null`
     [ -n "$_bs_c" ] && say "  bridge status (this start): $_bs_c"
@@ -2433,6 +2530,9 @@ do_bridge_status() {
     done
     if [ -s "$RAMDISK/pmcp-most/events.log" ]; then
         say "--- pmcp-most/events.log (last 15 lines):"; tail -n 15 "$RAMDISK/pmcp-most/events.log" 2>/dev/null | sed 's/^/  /'
+    fi
+    if [ -s "$RAMDISK/pmcp-most/sup.log" ]; then
+        say "--- pmcp-most/sup.log (MOST supervisor, last 10 lines):"; tail -n 10 "$RAMDISK/pmcp-most/sup.log" 2>/dev/null | sed 's/^/  /'
     fi
     if [ -s "$RAMDISK/pmcp-most/bridge.log" ]; then
         say "--- pmcp-most/bridge.log (last 15 lines):"; tail -n 15 "$RAMDISK/pmcp-most/bridge.log" 2>/dev/null | sed 's/^/  /'
@@ -2622,6 +2722,7 @@ case "$ACTION" in
 #@@EXP_BEGIN
     bridge)        do_bridge ;;
     bridge-status) do_bridge_status ;;
+    most-sup)      do_most_sup ;;
     dm-path)       do_dm_path ;;
     dm-link)       do_dm_link ;;
     dm-diag)       do_dm_diag ;;

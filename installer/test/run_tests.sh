@@ -512,7 +512,7 @@ PY
         case "$args" in
             verify|status|restore|confirm|retry|aa-install|cp-log-save|log-clear|"map-install map-square-fps40"|java-retry|java-confirm|java-update|aa-remove|aa-on|aa-confirm|aa-retry|aa-status|aa-log-save|rg-system-on|rg-system-off|rg-update|speedlimit-status|"speedlimit-mode turnto"|"speedlimit-mode street"|"speedlimit-mode off"|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
             "aa-output direct"|"aa-output ring") ;;
-            "aa-capture 60"|"aa-capture off"|"aa-regrant on"|"aa-regrant off"|"aa-keepalive on"|"aa-keepalive off"|"bridge pmcp-most"|"bridge mathsls"|bridge-status|dm-diag|"dm-path pmcp"|"dm-path factory"|"dm-link drop"|"dm-link make")
+            "aa-capture 60"|"aa-capture off"|"aa-regrant on"|"aa-regrant off"|"aa-keepalive on"|"aa-keepalive off"|"bridge pmcp-most"|"bridge mathsls"|bridge-status|"most-sup pmcp"|"most-sup mathsls"|dm-diag|"dm-path pmcp"|"dm-path factory"|"dm-link drop"|"dm-link make")
                 case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) ;; *) bad "experimental button on a release card: $args" ;; esac ;;
             *) bad "unexpected button command in $(basename "$m"): $args" ;;
         esac
@@ -582,7 +582,7 @@ PY
             && ok "aa_advanced (experimental card): the release entries only" || bad "aa_advanced: $aa"
         # A199 (user 2026-11-15): the MOST bridge serves CarPlay, AA and wireless, so its buttons and the AA record live on
         # their own screen experimental
-        _br=""; [ -e "$SDB/pmcp/payload/pmcp-most/altscreen-most-bridge" ] && _br="menu/bridge-pmcp-most.sh menu/bridge-mathsls.sh menu/bridge-status.sh "
+        _br=""; [ -e "$SDB/pmcp/payload/pmcp-most/altscreen-most-bridge" ] && _br="menu/bridge-pmcp-most.sh menu/bridge-mathsls.sh menu/bridge-status.sh menu/most-sup-pmcp.sh menu/most-sup-mathsls.sh "
         xp=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen experimental/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
         [ "$xp" = "${_br}menu/dm-diag.sh menu/dm-path-pmcp.sh menu/dm-path-factory.sh menu/dm-link-drop.sh menu/dm-link-make.sh menu/aa-capture-60.sh menu/aa-capture-off.sh menu/aa-regrant-on.sh menu/aa-regrant-off.sh menu/aa-keepalive-on.sh menu/aa-keepalive-off.sh " ] \
             && ok "experimental:${_br:+ MOST bridge switch and status,} VW encoder path/link/diag, AA record on/off, AA cluster re-grant on/off" || bad "experimental: $xp"
@@ -1644,6 +1644,7 @@ PEOF
         start_unit; run map-install map-square-fps40; rc_is 0
         run bridge pmcp-most; rc_is 1; expect_out "PMCP_FAIL=UNKNOWN_ACTION_bridge" "release card: no bridge action"
         run bridge-status; rc_is 1; expect_out "PMCP_FAIL=UNKNOWN_ACTION_bridge-status" "release card: no bridge-status action"
+        run most-sup pmcp; rc_is 1; expect_out "PMCP_FAIL=UNKNOWN_ACTION_most-sup" "release card: no most-sup action"
         run status; grep -q "MOST bridge" "$W/out" && bad "release status shows a MOST bridge line" || ok "release status: no MOST bridge line"
         restore_exact "release card: restore gives the exact factory tree"
     else
@@ -1769,6 +1770,38 @@ PEOF
         [ "$before" = "$(snapshot "$W/unit" | grep -v '/ramdisk/' | grep -v '/persist/pmcp/gem.log')" ] && ok "corrupted payload: nothing changed" || bad "corrupted payload changed files"
         cp "$W/pm.bak" "$W/sd/payload/pmcp-most/altscreen-most-bridge"
         restore_exact "restore after a refused switch (pmcp-most active): exact factory tree"
+
+        echo "  - MOST supervisor switch (most-sup pmcp|mathsls, stage 5)"
+        SV="$U/carplaymaps/carplay-cluster-supervisor"; SM="$W/unit/mnt/persist/pmcp/most-sup"
+        SU_M=$(msha SUPERVISOR); SU_P=$(msha PMCP_MOST_SUP)
+        [ -n "$SU_P" ] && [ "$(h "$SDB/pmcp/payload/pmcp-most/pmcp-most-sup")" = "$SU_P" ] && ok "payload: pmcp-most-sup pinned" || bad "pmcp-most-sup payload"
+        start_unit; run map-install map-square-fps40; rc_is 0
+        before=$(snapshot "$W/unit" | grep -v '/ramdisk/' | grep -v '/persist/pmcp/gem.log')
+        run most-sup pmcp; rc_is 1; expect_out "MOST_SUP_PMCP_NEEDS_BRIDGE_PMCP_MOST_FIRST" "our supervisor needs the pmcp-most bridge"
+        [ "$before" = "$(snapshot "$W/unit" | grep -v '/ramdisk/' | grep -v '/persist/pmcp/gem.log')" ] && ok "refused: nothing changed" || bad "refused most-sup changed files"
+        run most-sup mathsls; rc_is 0; expect_out "PMCP_MOST_SUP_OK supervisor=mathsls (already in use, nothing changed)" "mathsls: already"
+        run bridge pmcp-most; rc_is 0
+        run most-sup pmcp; rc_is 0; expect_out "PMCP_MOST_SUP_OK supervisor=pmcp (${SU_P:0:8})" "switch to our supervisor"
+        [ "$(h "$SV")" = "$SU_P" ] && [ -x "$SV" ] && [ "$(cat "$SM")" = pmcp ] && ok "ours at the wrappers' path, marker pmcp" || bad "most-sup pmcp files"
+        [ "$(h "$U/carplaymaps/bridge/carplay-cluster-supervisor.mathsls")" = "$SU_M" ] && [ "$(h "$U/carplaymaps/bridge/pmcp-most-sup")" = "$SU_P" ] \
+            && ok "both supervisors kept in carplaymaps/bridge" || bad "kept supervisor copies"
+        run status; expect_out "MOST supervisor: pmcp; chosen: pmcp" "status: our supervisor"
+        run map-install map-square-fps40; rc_is 0; expect_out "already installed" "2 with our supervisor: already installed"
+        run most-sup pmcp; rc_is 0; expect_out "already in use, nothing changed" "pmcp again: already"
+        echo pmcp > "$SM.x"; rm -f "$SM"
+        run status; expect_out "the supervisor switch was interrupted" "marker missing: status says interrupted"
+        rm -f "$SM.x"; run most-sup pmcp; rc_is 0; [ "$(cat "$SM")" = pmcp ] && ok "pressing pmcp again finishes it" || bad "marker not back"
+        run bridge mathsls; rc_is 0; expect_out "MOST supervisor: mathsls again" "bridge mathsls also puts mathsls's supervisor back"
+        [ "$(h "$SV")" = "$SU_M" ] && [ ! -e "$SM" ] && ok "mathsls supervisor and no marker" || bad "supervisor after bridge mathsls"
+        run bridge mathsls; rc_is 0; expect_out "already in use, nothing changed" "bridge mathsls again: already"
+        run bridge pmcp-most; run most-sup pmcp; rc_is 0
+        mkdir -p "$W/unit/ramdisk/pmcp-most"; echo "up_ms=1 supervisor-started pid=7" > "$W/unit/ramdisk/pmcp-most/sup.log"
+        run cp-log-save; rc_is 0; grep -qx "up_ms=1 supervisor-started pid=7" "$U/carplaymaps/logs/cp-log-1.txt" && ok "cp log: supervisor log" || bad "cp log: sup.log"
+        run bridge-status; rc_is 0; expect_out "^  up_ms=1 supervisor-started pid=7$" "bridge-status: supervisor log tail"
+        cp "$SDB/pmcp/payload/pmcp-most/pmcp-most-sup" "$W/sup.bak"; printf 'X' >> "$W/sd/payload/pmcp-most/pmcp-most-sup"
+        run most-sup mathsls; rc_is 1; expect_out "HASH_MISMATCH_PMCP_MOST_SUP" "corrupted payload: refused"
+        cp "$W/sup.bak" "$W/sd/payload/pmcp-most/pmcp-most-sup"
+        restore_exact "restore with our supervisor: exact factory tree"
     fi
 
     # MOST supervisor stage 5 (docs 23, A218): the factory VW encoder's MOST path. Every card: the lsd.sh block makes the

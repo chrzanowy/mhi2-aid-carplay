@@ -15,7 +15,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=$(mkdir -p "$1" && cd "$1" && pwd)
 AA=${PMCP_MOST_AA:-0}
 LIB=${PMCP_MOST_LIB:-0}
-docker run --rm --network=none --platform=linux/amd64 -e AA="$AA" -e LIB="$LIB" -v "$HERE/src":/src:ro \
+SUP=${PMCP_MOST_SUP:-0}   # 1: the MOST supervisor v1 (src/pmcp_most_sup.c + contract library) -> OUTDIR/pmcp-most-sup
+docker run --rm --network=none --platform=linux/amd64 -e AA="$AA" -e LIB="$LIB" -e SUP="$SUP" -v "$HERE/src":/src:ro \
     -v "$HERE/contract":/contract:ro -v "$HERE/../aa/most":/aamost:ro -v "$OUT":/out -w /src \
     qnx65-armv7-toolchain:8.5 bash -c '
 set -e
@@ -24,7 +25,9 @@ P=arm-unknown-nto-qnx6.5.0eabi
 CFLAGS="-O2 -Wall -Wextra -Werror -Wno-unused-function -std=gnu99 -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 -ffile-prefix-map=/src=. -ffile-prefix-map=/contract=contract -ffile-prefix-map=/aamost=aa/most"
 build() { # output, extra flags
     o=$1; shift
-    if [ "$LIB" = 1 ]; then
+    if [ "$SUP" = 1 ]; then
+        $P-gcc $CFLAGS "$@" -I/contract pmcp_most_sup.c /contract/pmcp_most_producer.c -o "$o"
+    elif [ "$LIB" = 1 ]; then
         $P-gcc $CFLAGS "$@" -I/contract -I/aamost pmcp_most_lib.c pmcp_gate.c /aamost/ts_mux.c /aamost/most_writer.c \
             -lsocket -o "$o"
     else
@@ -32,6 +35,14 @@ build() { # output, extra flags
     fi
     $P-strip "$o"
 }
+if [ "$SUP" = 1 ]; then
+    build /out/pmcp-most-sup; build /tmp/second
+    cmp /out/pmcp-most-sup /tmp/second || { echo "NOT REPRODUCIBLE"; exit 1; }
+    echo "reproducible: two builds identical"
+    $P-readelf -d /out/pmcp-most-sup | grep NEEDED
+    $P-readelf -W -D -s /out/pmcp-most-sup | awk "\$8 == \"UND\" && \$9 != \"\" {print \$9}" | sed "s/@.*//" | sort -u > /out/pmcp-most-sup.imports.txt
+    exit 0
+fi
 build /out/altscreen-most-bridge
 build /tmp/second
 cmp /out/altscreen-most-bridge /tmp/second || { echo "NOT REPRODUCIBLE"; exit 1; }
@@ -46,7 +57,8 @@ for f in /out/altscreen-most-bridge*; do
     echo "imports: $(wc -l < "$f.imports.txt")"
 done
 '
-for f in "$OUT"/altscreen-most-bridge*; do
+for f in "$OUT"/altscreen-most-bridge* "$OUT"/pmcp-most-sup; do
+    [ -e "$f" ] || continue
     case $f in *.txt) continue;; esac
     echo "$(basename "$f"): $(wc -c < "$f" | tr -d ' ') bytes, sha256 $(shasum -a 256 "$f" | cut -d' ' -f1)"
 done

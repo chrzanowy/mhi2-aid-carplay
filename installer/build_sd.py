@@ -171,9 +171,13 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
 # Since 2026-11-16 (A203): stage 2 (PMCP_MOST_LIB=1, src/pmcp_most_lib.c on the AA MOST output library); stage 1c was 8c104a06.
 # 2026-11-18: stage 2 with thread priority 14 and the rotated event file (was 175eee71).
 PMCP_MOST_PIN = ("build/pmcp-most-93bad193/altscreen-most-bridge", "93bad193f7351eecdb6808e8ffd96ae5e8b31caf8e2ab08802e6d57e46dab79c", 38172)
+# MOST supervisor v1 (stage 5, bridge/src/pmcp_most_sup.c; PMCP_MOST_SUP=1 bridge/build.sh OUTDIR, OUTDIR =
+# <this project>/build/pmcp-most-sup-<first 8 of the sha256>): experimental cards only, pmcp.sh most-sup pmcp|mathsls
+PMCP_MOST_SUP_PIN = ("build/pmcp-most-sup-5abcab20/pmcp-most-sup", "5abcab2035dfd6b63bd7ec75941846e647d3d604099ed14500f6dbffe690965f", 22188)
 if IS_EXP and PROFILE_ID == "MU1161":
     PAYLOAD_BY_PROFILE["MU1161"].update({
         "PMCP_MOST": (PROJ / PMCP_MOST_PIN[0], PMCP_MOST_PIN[1], PMCP_MOST_PIN[2], "pmcp-most/altscreen-most-bridge"),
+        "PMCP_MOST_SUP": (PROJ / PMCP_MOST_SUP_PIN[0], PMCP_MOST_SUP_PIN[1], PMCP_MOST_SUP_PIN[2], "pmcp-most/pmcp-most-sup"),
         # mathsls's WRAPPER + the contract owner block (src=wired kind=proxy, wired.session): live with pmcp-most only
         "PMCP_MOST_WRAPPER": (PROJ / "installer/pmcp-most/dio_manager.wrapper.sh",
                               "52031e8435dfed0329cb8d6fd83b6de184b0bee07529fa370c321c3e2d7d4859", 4301,
@@ -586,7 +590,10 @@ EXP_MENU = [] if not IS_EXP else ([
     # the MOST bridge the CarPlay supervisor starts (also the AA output "CarPlay bridge"); no card confirm, no trial
     ("bridge-pmcp-most", "bridge pmcp-most", "Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)"),
     ("bridge-mathsls", "bridge mathsls", "Bridge: use mathsls (default MOST bridge; from the next phone connection)"),
-    ("bridge-status", "bridge-status", "Bridge status: which bridge, owner, last lines of its log (read-only)")]
+    ("bridge-status", "bridge-status", "Bridge status: which bridge, owner, last lines of its log (read-only)"),
+    # MOST supervisor v1 (stage 5): ours with pmcp-most only; "Bridge: use mathsls" puts mathsls's supervisor back too
+    ("most-sup-pmcp", "most-sup pmcp", "MOST supervisor: pmcp (experimental, needs Bridge pmcp-most; from the next phone connection)"),
+    ("most-sup-mathsls", "most-sup mathsls", "MOST supervisor: mathsls (default; from the next phone connection)")]
     if "PMCP_MOST" in PAYLOAD else []) + [
     # MOST supervisor stage 5 (docs 23, A218): the factory VW encoder's MOST path. dm-path from the next unit start;
     # dm-link only for this start (the lsd.sh block makes the link again at every start); dm-diag read-only
