@@ -141,7 +141,7 @@ def validate(p, pid):
 
 
 HEX40 = re.compile(r"^[0-9a-f]{40}\Z")
-HISTORY_KEYS = {"schema", "java_renamed_note", "java_renamed", "rg_known_note", "rg_known"}
+HISTORY_KEYS = {"schema", "java_renamed_note", "java_renamed", "rg_known_note", "rg_known", "lsd_known_note", "lsd_known"}
 
 
 def _hist_hashes(h, h1, size, what):
@@ -159,7 +159,7 @@ def validate_history(h, pid):
         fail("%s history: keys differ from the schema %s" % (pid, sorted(HISTORY_KEYS)))
     if h["schema"] != 2:
         fail("%s history: schema %r" % (pid, h["schema"]))
-    for k in ("java_renamed_note", "rg_known_note"):
+    for k in ("java_renamed_note", "rg_known_note", "lsd_known_note"):
         if not isinstance(h[k], str):
             fail("%s history: %s is not a string" % (pid, k))
     if not isinstance(h["java_renamed"], dict):
@@ -177,6 +177,13 @@ def validate_history(h, pid):
             fail("%s history: rg_known note is not a string" % pid)
     _unique([json.dumps({x: y for x, y in e.items() if x != "note"}, sort_keys=True) for e in h["rg_known"]],
             "%s history rg_known" % pid)
+    if not isinstance(h["lsd_known"], list) or not all(isinstance(e, dict) for e in h["lsd_known"]):
+        fail("%s history: lsd_known is not a list of objects" % pid)
+    for e in h["lsd_known"]:
+        if set(e) - {"note"} != {"sha256", "sha1", "size"}:
+            fail("%s history: lsd_known entry needs sha256, sha1, size: %r" % (pid, e))
+        _hist_hashes(e["sha256"], e["sha1"], e["size"], pid + " history lsd_known")
+    _unique([e["sha256"] for e in h["lsd_known"]], "%s history lsd_known" % pid)
     return h
 
 

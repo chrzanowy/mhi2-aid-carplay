@@ -190,6 +190,9 @@ JAVA_RENAMED = sorted(HIST["java_renamed"].items())
 # Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): (kind, sha256, sha1, size), only their
 # hashes go to the card, so no earlier build is needed here. List and notes: history.json "rg_known".
 RG_KNOWN = [(e["kind"], e["sha256"], e["sha1"], e["size"]) for e in HIST["rg_known"]]
+# Earlier lsd.sh files of ours (factory lsd.sh + an earlier block) that java-update replaces in place (pmcp.sh LSD_KNOWN,
+# history.json "lsd_known"): (sha256, sha1, size)
+LSD_KNOWN = [(e["sha256"], e["sha1"], e["size"]) for e in HIST["lsd_known"]]
 if PROFILE_ID not in PAYLOAD_BY_PROFILE:
     sys.exit("no PAYLOAD pins for profile %s in build_sd.py (PAYLOAD_BY_PROFILE)" % PROFILE_ID)
 PAYLOAD = {k: v for k, v in PAYLOAD_BY_PROFILE[PROFILE_ID].items()
@@ -748,6 +751,12 @@ def main():
         pairs[h] = h1
         known.append("%s %s %d" % (kind, h, size))
     renamed = "\n".join("%s %s" % kv for kv in JAVA_RENAMED)
+    lsd_known = []
+    for h, h1, size in LSD_KNOWN:
+        if h == sha(lsd_patched):
+            sys.exit("history lsd_known lists this card's own lsd.sh %s" % h[:8])
+        pairs[h] = h1
+        lsd_known.append("%s %d" % (h, size))
     for key, h, size, rel in rows:
         data = (pm / "payload" / rel).read_bytes()
         assert sha(data) == h and len(data) == size, key
@@ -758,6 +767,7 @@ def main():
     menu_text = esd_block("@@VERSION@@", *menus) + "".join(n + "\n" + menu_script(a, l) for scr in menus for n, a, l in scr)
     global PMCP_VERSION
     PMCP_VERSION = PMCP_BASE_VERSION + "-" + sha((manifest + "\n" + "\n".join(known) + "\n" + renamed + "\n"
+                                                  + "\n".join(lsd_known) + "\n"
                                                   + template_for_id((HERE / "template/pmcp.sh.in").read_text())
                                                   + menu_text).encode())[:8]
     tpl = render_template((HERE / "template/pmcp.sh.in").read_text())
@@ -767,6 +777,7 @@ def main():
         "@@PMCP_VERSION@@": PMCP_VERSION, "@@MANIFEST@@": manifest,
         "@@SELFTEST_SHA@@": sha(selftest), "@@SELFTEST_SIZE@@": str(len(selftest)),
         "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_RENAMED@@": renamed,
+        "@@LSD_KNOWN@@": "\n".join(lsd_known),
         "@@STOCK_JXE_SIZE@@": str(FW["lsd_jxe"]["size"]), "@@PROFILE_ID@@": FW["id"], "@@PROFILE_CLUSTER@@": FW["cluster"],
         "@@STOCK_GAL_SHA@@": STOCK["GAL"][1], "@@STOCK_GAL_SIZE@@": str(STOCK["GAL"][2]),
         "@@STOCK_LSD_SHA@@": STOCK["LSD"][1], "@@STOCK_LSD_SIZE@@": str(STOCK["LSD"][2]),

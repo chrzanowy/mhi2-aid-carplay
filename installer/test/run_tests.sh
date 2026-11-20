@@ -80,7 +80,7 @@ unit_boot() {
     { echo "BASE_DIR=/X; BOOTCLASSPATH=-Xbootclasspath/a:/ifs/lsd.jxe; RUN_MODE=${1:-}"
       sed -n '/^# >>> pmcp: CarPlay AID mod/,/^# <<< pmcp/p' "$W/unit/mnt/app/eso/hmi/lsd/lsd.sh" \
         | sed -e "s#/mnt/app/carplaymaps#$W/unit/mnt/app/carplaymaps#g" -e "s#/mnt/persist/pmcp#$W/unit/mnt/persist/pmcp#g" \
-              -e "s|( .PMCP_DIR/rg/rgi-observer.*) &|:|"
+              -e "s|( .PMCP_DIR/rg/rgi-observer.*) &|:|" -e "s|^ln -Ps .*|:|"
       echo 'echo "boot=$PMCP_USE set=$PMCP_SET jars=$PMCP_JARS"'; } > "$W/unit-boot.sh"
     $SH "$W/unit-boot.sh" 2>&1 | tail -1
 }
@@ -184,7 +184,7 @@ for SH in "$@"; do
     prof get mu1161 train; prof_is 1 "get: a lower-case id is an error"
     prof get "$PMCP_PROFILE" no.such.key; prof_is 1 "get: unknown key is an error"
     prof pins "$PMCP_PROFILE"; prof_is 0 "pins"
-    [ "$(wc -l < "$W/pout" | tr -d ' ')" = 6 ] && [ "$(sed -n 1p "$W/pout" | cut -d' ' -f1)" = "$(pf lsd_jxe.file)" ] && ok "pins: lsd.jxe and the five stock files" || bad "pins: $(cat "$W/pout")"
+    [ "$(wc -l < "$W/pout" | tr -d ' ')" = 7 ] && [ "$(sed -n 1p "$W/pout" | cut -d' ' -f1)" = "$(pf lsd_jxe.file)" ] && ok "pins: lsd.jxe and the six stock files" || bad "pins: $(cat "$W/pout")"
     # the pinned backup files really are what the profile says (the build and install.sh trust these)
     pins_bad=0
     while read -r rel want; do
@@ -512,7 +512,7 @@ PY
         case "$args" in
             verify|status|restore|confirm|retry|aa-install|cp-log-save|log-clear|"map-install map-square-fps40"|java-retry|java-confirm|java-update|aa-remove|aa-on|aa-confirm|aa-retry|aa-status|aa-log-save|rg-system-on|rg-system-off|rg-update|speedlimit-status|"speedlimit-mode turnto"|"speedlimit-mode street"|"speedlimit-mode off"|"install "*|"switch "*|"java-on "*|"java-off "*) ;;
             "aa-output direct"|"aa-output ring") ;;
-            "aa-capture 60"|"aa-capture off"|"aa-regrant on"|"aa-regrant off"|"aa-keepalive on"|"aa-keepalive off"|"bridge pmcp-most"|"bridge mathsls"|bridge-status)
+            "aa-capture 60"|"aa-capture off"|"aa-regrant on"|"aa-regrant off"|"aa-keepalive on"|"aa-keepalive off"|"bridge pmcp-most"|"bridge mathsls"|bridge-status|dm-diag|"dm-path pmcp"|"dm-path factory"|"dm-link drop"|"dm-link make")
                 case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) ;; *) bad "experimental button on a release card: $args" ;; esac ;;
             *) bad "unexpected button command in $(basename "$m"): $args" ;;
         esac
@@ -584,8 +584,8 @@ PY
         # their own screen experimental
         _br=""; [ -e "$SDB/pmcp/payload/pmcp-most/altscreen-most-bridge" ] && _br="menu/bridge-pmcp-most.sh menu/bridge-mathsls.sh menu/bridge-status.sh "
         xp=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen experimental/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-        [ "$xp" = "${_br}menu/aa-capture-60.sh menu/aa-capture-off.sh menu/aa-regrant-on.sh menu/aa-regrant-off.sh menu/aa-keepalive-on.sh menu/aa-keepalive-off.sh " ] \
-            && ok "experimental:${_br:+ MOST bridge switch and status,} AA record on/off, AA cluster re-grant on/off" || bad "experimental: $xp"
+        [ "$xp" = "${_br}menu/dm-diag.sh menu/dm-path-pmcp.sh menu/dm-path-factory.sh menu/dm-link-drop.sh menu/dm-link-make.sh menu/aa-capture-60.sh menu/aa-capture-off.sh menu/aa-regrant-on.sh menu/aa-regrant-off.sh menu/aa-keepalive-on.sh menu/aa-keepalive-off.sh " ] \
+            && ok "experimental:${_br:+ MOST bridge switch and status,} VW encoder path/link/diag, AA record on/off, AA cluster re-grant on/off" || bad "experimental: $xp"
         sed '/^screen experimental/,$d' "$SDB/esd/Launcher-sda0.esd" | grep -q 'menu/bridge-\|menu/aa-capture-\|menu/aa-regrant-\|menu/aa-keepalive-\|rg-aa' && bad "experimental buttons outside the experimental screen" || ok "experimental buttons only on the experimental screen"
         grep -qi 'rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says rg-aa" || ok "menu: no rg-aa" ;;
     *)
@@ -1796,6 +1796,25 @@ PEOF
     start_unit; run map-install map-square-fps40; rc_is 0; run java-on nai; rc_is 0
     echo "changed by someone else" >> "$DMJF"; cp "$DMJF" "$W/dmj.other"
     run restore; rc_is 0; cmp -s "$DMJF" "$W/dmj.other" && ok "restore leaves a displaymanager.json that is not ours" || bad "restore touched a foreign json"
+    echo "  - an earlier card's lsd.sh (v1.4.2-v1.8.0 block bff3fbf4): java-update replaces it in place, one trial"
+    sed '/^# MOST supervisor (stage 5/,/^ln -Ps /d' "$LSDP" > "$W/lsd-old.sh"
+    [ "$(h "$W/lsd-old.sh")" = bff3fbf48872780e40d780f61a4e96a554d2b09edbb3f985c405f831eca6e8e5 ] \
+        && ok "this card's block minus the link lines = the v1.4.2-v1.8.0 lsd.sh (history lsd_known)" || bad "earlier lsd.sh: $(h "$W/lsd-old.sh")"
+    start_unit; run map-install map-square-fps40; rc_is 0; run java-on nai; rc_is 0; run java-on zoom; rc_is 0
+    SID=$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT"); unit_boot > /dev/null; run java-confirm; rc_is 0
+    cat "$W/lsd-old.sh" > "$U/eso/hmi/lsd/lsd.sh"
+    run status; expect_out "Unit state: JAVA" "earlier lsd.sh: still JAVA (the set works as it is)"
+    expect_out "lsd.sh of an earlier card (4. Install additional features replaces it)" "status names the earlier lsd.sh"
+    o=$(unit_boot); case "$o" in "boot=yes set=$SID "*) ok "earlier lsd.sh: the confirmed set loads" ;; *) bad "boot with earlier lsd.sh: $o" ;; esac
+    run java-on dn; rc_is 1; expect_out "JAVA_SET_HAS_AN_EARLIER_LSD_SH_RUN_JAVA_UPDATE_FIRST" "java-on waits for java-update"
+    run java-update; rc_is 0; expect_out "PMCP_JAVA_UPDATE_OK set=$SID" "java-update: same set"
+    expect_out "lsd.sh: an earlier card's block replaced by this card's" "java-update says lsd.sh was replaced"
+    [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = "$(h "$LSDP")" ] && ok "this card's lsd.sh in place" || bad "lsd.sh not replaced"
+    [ ! -e "$W/unit/mnt/persist/pmcp/ok.$SID" ] && [ ! -e "$W/unit/mnt/persist/pmcp/trial.$SID" ] && ok "trial and confirm markers of the set reset" || bad "markers: $(ls "$W/unit/mnt/persist/pmcp")"
+    o=$(unit_boot); case "$o" in "boot=trial set=$SID "*) ok "next start: one trial with the new lsd.sh" ;; *) bad "boot after update: $o" ;; esac
+    run java-confirm; rc_is 0; run java-update; rc_is 1; expect_out "JAVA_UPDATE_ALREADY_CURRENT" "java-update again: already current"
+    run status; grep -q "lsd.sh of an earlier card" "$W/out" && bad "status still names an earlier lsd.sh" || ok "status: lsd.sh current"
+    restore_exact "restore after the lsd.sh update: exact factory tree"
     if sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh" | grep -q '^DM_JSON '; then
         echo "  - experimental: dm-path, dm-link, dm-diag"
         for b in dm-diag dm-path-pmcp dm-path-factory dm-link-drop dm-link-make; do

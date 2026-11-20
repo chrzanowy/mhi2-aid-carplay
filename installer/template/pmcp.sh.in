@@ -15,7 +15,8 @@
 #   pmcp.sh rg-update           RG on with an older pmcp driver/reader (RG_KNOWN): replace them in place by this card's
 #                               ones; the factory copies are checked, kept and stay the way back (rg-system-off)
 #   pmcp.sh java-update         Java set with earlier versions of this card's packages: one new set with this card's
-#                               packages (rglu, rg-aa and the other earlier rg variants become rg), one trial boot
+#                               packages (rglu, rg-aa and the other earlier rg variants become rg), one trial boot; an
+#                               earlier card's lsd.sh (LSD_KNOWN) is replaced by this card's in the same step
 #   pmcp.sh aa-remove           Android Auto off: factory gal back (only from a copy with the factory hash), its files and
 #                               markers removed
 # Android Auto on the AID (aa/README.md), installed separately from CarPlay (main menu 3, details on aa_advanced):
@@ -110,6 +111,11 @@ RG_KNOWN='
 # list of hashes.
 JAVA_RENAMED='
 @@JAVA_RENAMED@@
+'
+# Earlier lsd.sh files of ours (factory lsd.sh + an earlier version of our block, "sha256 size" per line): a Java set
+# with one of them works as it is; java-update (main menu 4) replaces it in place by this card's, with one trial start.
+LSD_KNOWN='
+@@LSD_KNOWN@@
 '
 GAWK_SIZE=487088
 
@@ -485,6 +491,14 @@ EOF
     return 0
 }
 
+# lsd_known -> yes when the live lsd.sh is an earlier card's of ours (LSD_KNOWN), nothing otherwise
+lsd_known() {
+    echo "$LSD_KNOWN" | while read _k_s _k_z; do
+        [ -n "$_k_s" ] || continue
+        if matches "$LSD" "$_k_s" "$_k_z"; then echo yes; break; fi
+    done
+}
+
 # AA 1.0 (A153, conditions of the CP review): Android Auto never touches the Java part, so main menu 3 does not wait for
 # 4 when only the Java part is of a version this card does not support (e.g. a package this card does not know), and
 # only when that part is plainly ours: map and route guidance system fine, lsd.sh factory or ours, and with ours the set
@@ -493,7 +507,7 @@ java_part_tolerable() {
     [ "$MAPOK" = yes ] && [ "$RGSYS" != unknown ] && [ "$JAVAPART" = mixed ] || return 1
     matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" && return 0
     set -- `manifest_get LSD_JAVA`
-    matches "$LSD" "$1" "$2" || return 1
+    matches "$LSD" "$1" "$2" || [ "`lsd_known`" = yes ] || return 1
     _t_line=`cat "$ROOT/HMI_BOOT" 2>/dev/null`
     _t_known=`java_catalog | while read _t_a _t_f; do echo "$_t_f"; done`
     set -f
@@ -522,7 +536,7 @@ java_part_tolerable() {
 # state -> STOCK | VIDEO | JAVA | PARTIAL | UNKNOWN (reason in STATE_WHY)
 #   VIDEO: stage A (wrapper active, factory lsd.sh, no JAR of ours)   JAVA: stage A + lsd.sh block + a consistent JAR set
 detect_state() {
-    STATE=UNKNOWN; STATE_WHY=""; RGSYS=unknown; JAVA_OLD_SET=""; JAVA_STRAY=""; AASYS=unknown; AAMODE=""
+    STATE=UNKNOWN; STATE_WHY=""; RGSYS=unknown; JAVA_OLD_SET=""; JAVA_STRAY=""; AASYS=unknown; AAMODE=""; LSD_OLD=""
     CORE_STATE=UNKNOWN; MAPOK=no; JAVAPART=mixed
     set -- `manifest_get WRAPPER`; W_SHA=$1; W_SIZE=$2
     set -- `manifest_get LSD_JAVA`; LJ_SHA=$1; LJ_SIZE=$2
@@ -559,6 +573,9 @@ detect_state() {
         JAVAPART=none
     elif matches "$LSD" "$LJ_SHA" "$LJ_SIZE" && java_set_consistent; then
         JAVAPART=set
+    elif [ "`lsd_known`" = yes ] && java_set_consistent; then
+        # an earlier card's lsd.sh: the set works as it is; java-update brings this card's lsd.sh
+        JAVAPART=set; LSD_OLD=yes
     fi
     CORE_STATE=PARTIAL
     if [ $MAPOK = yes ] && [ "$RGSYS" != unknown ]; then
@@ -1613,7 +1630,7 @@ do_features_reset() {
     # and lsd.sh must be the factory one or ours (another mod's lsd.sh is not replaced)
     if [ "$_x_java" = mixed ]; then
         set -- `manifest_get LSD_JAVA`
-        matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" || matches "$LSD" "$1" "$2" \
+        matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" || matches "$LSD" "$1" "$2" || [ "`lsd_known`" = yes ] \
             || fail "FEATURES_RESET_LSD_SH_IS_NOT_OURS_NOTHING_CHANGED"
     fi
     if [ "$RGSYS" = unknown ]; then
@@ -1735,6 +1752,7 @@ do_java_on() {
     cur=`current_set`
     [ "$STATE" = VIDEO ] && cur=""
     [ -z "$JAVA_OLD_SET" ] || fail "JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST"
+    [ -z "$LSD_OLD" ] || fail "JAVA_SET_HAS_AN_EARLIER_LSD_SH_RUN_JAVA_UPDATE_FIRST"
     case " $cur " in *" $ARG "*) fail "JAVA_PACKAGE_ALREADY_ON_$ARG" ;; esac
     case "$ARG" in rg) [ "$RGSYS" = on ] || fail "JAVA_RG_NEEDS_RG_SYSTEM_ON_$RGSYS" ;; esac
     # new set in catalog order, so the same packages always give the same set id
@@ -1783,6 +1801,7 @@ do_java_off() {
     detect_state
     [ "$STATE" = JAVA ] || fail "JAVA_OFF_NEEDS_JAVA_STATE_$STATE"
     [ -z "$JAVA_OLD_SET" ] || fail "JAVA_SET_HAS_OLD_PACKAGES_RUN_JAVA_UPDATE_FIRST"
+    [ -z "$LSD_OLD" ] || fail "JAVA_SET_HAS_AN_EARLIER_LSD_SH_RUN_JAVA_UPDATE_FIRST"
     cur=`current_set`
     case " $cur " in *" $ARG "*) ;; *) fail "JAVA_PACKAGE_NOT_ON_$ARG" ;; esac
     new=""
@@ -1860,7 +1879,7 @@ do_java_update() {
         [ -n "$STATE_WHY" ] && say "  $STATE_WHY"
         [ "$AASYS" = unknown ] && fail "JAVA_UPDATE_NEEDS_ANDROID_AUTO_REPLACED_FIRST_PRESS_3"
         fail "JAVA_UPDATE_NEEDS_JAVA_STATE_$STATE" ;; esac
-    if [ -z "$JAVA_OLD_SET" ]; then
+    if [ -z "$JAVA_OLD_SET" ] && [ -z "$LSD_OLD" ]; then
         [ -n "$JAVA_STRAY" ] || fail "JAVA_UPDATE_ALREADY_CURRENT"
         # only unreferenced JARs left (an interrupted update after its HMI_BOOT switch): remove them, the set stays
         remount_rw
@@ -1885,8 +1904,18 @@ EOF
     for n in `java_catalog | while read a b; do echo $a; done`; do
         case " $want " in *" $n "*) new="$new${new:+ }$n" ;; esac
     done
+    _u_lsd=$LSD_OLD; _u_id=`boot_set_id`
+    if [ -n "$_u_lsd" ]; then
+        set -- `manifest_get LSD_JAVA`; LJ_SHA=$1; LJ_SIZE=$2; LJ_PATH=$3
+        check "$PAYLOAD/$LJ_PATH" "$LJ_SHA" "$LJ_SIZE" LSD_JAVA
+    fi
     remount_rw
-    rm -f "$ROOT/HMI_BOOT.pmcp-new" 2>/dev/null
+    rm -f "$ROOT/HMI_BOOT.pmcp-new" "$LSD.pmcp-new" 2>/dev/null
+    if [ -n "$_u_lsd" ]; then
+        cp "$PAYLOAD/$LJ_PATH" "$LSD.pmcp-new" || fail "LSD_STAGE_FAILED"
+        chmod 755 "$LSD.pmcp-new" || fail "CHMOD_FAILED"
+        check "$LSD.pmcp-new" "$LJ_SHA" "$LJ_SIZE" STAGED_LSD_JAVA
+    fi
     staged=""
     for n in $new; do
         set -- `manifest_get "JAR_$n"`; J_SHA=$1; J_SIZE=$2; J_PATH=$3; J_FILE=${3##*/}
@@ -1901,7 +1930,14 @@ EOF
     stage_set_files "$new"
     # Order: new JARs (not referenced yet), HMI_BOOT (new set id = a fresh trial boot), then the old JARs go.
     for f in $staged; do mv "$JARS/$f.pmcp-new" "$JARS/$f" || fail "JAR_ACTIVATION_FAILED_RUN_RESTORE"; done
+    # an earlier lsd.sh: this card's in one rename (both blocks read HMI_BOOT the same way, so either order is a working
+    # start), before the set file
+    if [ -n "$_u_lsd" ]; then mv "$LSD.pmcp-new" "$LSD" || fail "LSD_ACTIVATION_FAILED_RUN_JAVA_UPDATE_AGAIN"; fi
     commit_set_files || fail "SET_ACTIVATION_FAILED_RUN_RESTORE"
+    # only lsd.sh changed (same packages, same set id): its trial and confirm markers go, so the next start is a trial
+    if [ -n "$_u_lsd" ] && [ "`boot_set_id`" = "$_u_id" ]; then
+        rm -f "$PERSIST/ok.$_u_id" "$PERSIST/trial.$_u_id" || fail "TRIAL_MARKER_RESET_FAILED"
+    fi
     newfiles=`cat "$ROOT/HMI_BOOT"`
     for f in $oldfiles $JAVA_STRAY; do
         case " $newfiles " in *" $f "*) continue ;; esac
@@ -1909,9 +1945,10 @@ EOF
     done
     rm -f "$PERSIST/DISABLED" 2>/dev/null
     detect_state
-    [ "$STATE" = JAVA ] && [ -z "$JAVA_OLD_SET" ] && [ -z "$JAVA_STRAY" ] || fail "POST_JAVA_UPDATE_STATE_${STATE}_RUN_JAVA_UPDATE_AGAIN"
+    [ "$STATE" = JAVA ] && [ -z "$JAVA_OLD_SET" ] && [ -z "$JAVA_STRAY" ] && [ -z "$LSD_OLD" ] || fail "POST_JAVA_UPDATE_STATE_${STATE}_RUN_JAVA_UPDATE_AGAIN"
     flush
     say "  was:$want (from: $cur)"
+    [ -n "$_u_lsd" ] && say "  lsd.sh: an earlier card's block replaced by this card's"
     say "PMCP_JAVA_UPDATE_OK set=`boot_set_id`"
     say "Reboot the unit. The first boot is a trial: if everything works, press 5. Confirm in GEM during that boot."
     say "Without it, or if the screen does not come back (hold the volume knob ~10 s), the next boot is factory."
@@ -2222,6 +2259,7 @@ do_status() {
     [ "$STATE" = JAVA ] && say "Java set: `boot_set_id`"
     [ -n "$JAVA_OLD_SET" ] && say "  packages of an earlier card: $JAVA_OLD_SET (4. Install additional features replaces them)"
     [ -n "$JAVA_STRAY" ] && say "  unused JAR files (not loaded): $JAVA_STRAY (4. Install additional features removes them)"
+    [ -n "$LSD_OLD" ] && say "  lsd.sh of an earlier card (4. Install additional features replaces it)"
     say "Route guidance system: $RGSYS"
     [ "$RGSYS" = old ] && say "  driver or reader of an earlier card (4. Install additional features replaces them)"
     say "Android Auto: $AASYS${AAMODE:+ mode=$AAMODE}"

@@ -106,7 +106,7 @@ bootsim() {
     { echo 'BASE_DIR=/X; BOOTCLASSPATH=-Xbootclasspath/a:/ifs/lsd.jxe; RUN_MODE='
       sed -n '/^# >>> pmcp: CarPlay AID mod/,/^# <<< pmcp/p' "$L" \
         | sed -e "s#/mnt/app/carplaymaps#$W/bs/mnt/app/carplaymaps#g" -e "s#/mnt/persist/pmcp#$W/bs/mnt/persist/pmcp#g" \
-              -e "s|( .PMCP_DIR/rg/rgi-observer.*) &|:|"
+              -e "s|( .PMCP_DIR/rg/rgi-observer.*) &|:|" -e "s|^ln -Ps .*|:|"
       echo 'echo "boot=$PMCP_USE"'; } > "$W/bs.sh"
     $SH "$W/bs.sh" 2>&1 | tail -1
 }
