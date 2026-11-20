@@ -273,6 +273,24 @@ its `pmcp.sh` and build id are the same as without it). Background: `bridge/READ
 - Tests: `run_tests.sh` section [57] (release card: none of it; experimental card: switch both ways, wrapper lines,
   CarPlay log, restore exact).
 
+### Experimental: the VW encoder's MOST path (MOST supervisor stage 5)
+
+The factory VW encoder (`/eso/bin/apps/displaymanager`) writes the cluster map to the MOST channel `/dev/mlb/isoTX2`;
+the path comes from `/etc/eso/production/displaymanager.json` (`most_encoder.device`), read once at its start. It
+checks the path with `access()` before every open: a missing path = no open, no hardware encoder start, one log line.
+
+- Every card: the lsd.sh block runs `ln -Ps /dev/mlb/isoTX2 /dev/pmcp-isoTX2` at every start (first line of the block,
+  outside every condition, also in update mode and with `DISABLED`). Nothing uses the link while the json is factory.
+- `pmcp.sh dm-path pmcp` (experimental cards, state JAVA): the factory json is checked and kept in
+  `carplaymaps/rollback/displaymanager.json`, then our json (only that line changed, one byte longer) is staged,
+  verified and renamed into place. From the next unit start the encoder opens the channel only through the link.
+  `dm-path factory` puts the verified factory file back.
+- `pmcp.sh dm-link drop|make`: this start only (the process manager's namespace). An encoder that already holds the
+  channel keeps it until the next AID view change.
+- `pmcp.sh dm-diag`: read-only; path, link, `pidin` of the encoder, its `sloginfo` lines; saved to `logs/dm-diag-N.txt`.
+- The factory json comes back (when ours: copy in rollback/) in restore, before the factory lsd.sh in the last
+  `java-off` and in main menu 4's reset, and on the rescue card (by size: factory 5983 B, ours 5984 B).
+
 ## Host tests
 
 `installer/test/run_tests.sh SD_BUILD mksh ksh` (with `PMCP_RESCUE_SD=<rescue card>`): the unit's file tree from the backup (real

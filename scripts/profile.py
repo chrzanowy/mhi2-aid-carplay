@@ -21,7 +21,7 @@ ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 HEX64 = re.compile(r"^[0-9a-f]{64}\Z")
 ID = re.compile(r"^[A-Z0-9]+\Z")
 PACKAGES = {"nai", "np", "rg", "zoom", "dn", "sl", "ui", "aa"}
-STOCK_KEYS = {"IAP2DRV", "IAP2CFG", "LSD", "DIO", "GAL"}
+STOCK_KEYS = {"IAP2DRV", "IAP2CFG", "LSD", "DIO", "GAL", "DMJSON"}
 LSD_STATES = {"stock", "toolbox_nai"}
 KEYS = {"schema": int, "id": str, "cluster": str, "version_tag": str, "label": str, "car": str, "train": str, "train_full": str,
         "mu": str, "backup_dir": str, "appimg": str, "system": str, "lsd_jxe": dict, "lsd_jar_sha256": list,
@@ -206,7 +206,7 @@ def load_history(pid):
 def pins(p):
     """Files the build reads from the unit's M.I.B. backup folder, with their pins (stock paths: appimg, or system for @system/)."""
     out = [(p["lsd_jxe"]["file"], p["lsd_jxe"]["sha256"])]
-    for k in ("LSD", "DIO", "IAP2DRV", "IAP2CFG", "GAL"):
+    for k in ("LSD", "DIO", "IAP2DRV", "IAP2CFG", "GAL", "DMJSON"):
         path, h, _ = p["stock"][k]
         out.append((p["system"] + "/" + path[len("@system/"):] if path.startswith("@system/") else p["appimg"] + "/" + path, h))
     return out

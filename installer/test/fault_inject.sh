@@ -36,6 +36,8 @@ fresh_unit() {
         "$U/armle/lib/dll" "$W/unit/mnt/system/etc/mm"
     cp "$BK/armle/lib/dll/ipod-drvr-iap2.so" "$U/armle/lib/dll/"
     cp "$BKSYS/mm/iap2.cfg" "$W/unit/mnt/system/etc/mm/"
+    mkdir -p "$W/unit/mnt/system/etc/eso/production" "$W/unit/dev/mlb"
+    cp "$BKSYS/eso/production/displaymanager.json" "$W/unit/mnt/system/etc/eso/production/"
     mkfile -n $JXE_SIZE "$W/unit/ifs/lsd.jxe" 2>/dev/null || truncate -s $JXE_SIZE "$W/unit/ifs/lsd.jxe"
     cp "$BK/eso/bin/apps/dio_manager" "$U/eso/bin/apps/dio_manager"
     cp "$BK/eso/bin/apps/gal" "$U/eso/bin/apps/gal"

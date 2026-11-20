@@ -21,7 +21,8 @@
     "IAP2CFG": ["@system/mm/iap2.cfg", "1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37", 5951],
     "LSD": ["eso/hmi/lsd/lsd.sh", "97bbd4ecb51045b34c2a41955d9f53e1f144d174bff1aa8560e911525808e8d8", 16567],
     "DIO": ["eso/bin/apps/dio_manager", "609e42723ab3e36c7be5ceade81e03672ba4acd251f8eeb8b100e074aaf3c250", 686249],
-    "GAL": ["eso/bin/apps/gal", "3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9", 1269219]
+    "GAL": ["eso/bin/apps/gal", "3b422d47a16dd473dc426aa3a88348bfee0da0e7585993a3566df242339346f9", 1269219],
+    "DMJSON": ["@system/eso/production/displaymanager.json", "0374c1f236a947a4d728085034e2c96d21f6f0dc4a727bcc379468612bb1ded0", 5983]
   },
   "lsd_sh_states": ["stock"],
   "mathsls_payload": "MU1161/791_AID12.3/payload",

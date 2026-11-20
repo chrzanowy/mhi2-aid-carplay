@@ -98,6 +98,8 @@ fresh_unit() {
         "$W/unit/mnt/app/armle/lib/dll" "$W/unit/mnt/system/etc/mm"
     cp "$BK/armle/lib/dll/ipod-drvr-iap2.so" "$W/unit/mnt/app/armle/lib/dll/"
     cp "$BKSYS/mm/iap2.cfg" "$W/unit/mnt/system/etc/mm/"
+    mkdir -p "$W/unit/mnt/system/etc/eso/production" "$W/unit/dev/mlb"
+    cp "$BKSYS/eso/production/displaymanager.json" "$W/unit/mnt/system/etc/eso/production/"
     mkfile -n $JXE_SIZE "$W/unit/ifs/lsd.jxe" 2>/dev/null || truncate -s $JXE_SIZE "$W/unit/ifs/lsd.jxe"
     cp "$BK/eso/bin/apps/dio_manager" "$W/unit/mnt/app/eso/bin/apps/dio_manager"
     cp "$BK/eso/bin/apps/gal" "$W/unit/mnt/app/eso/bin/apps/gal"
@@ -703,6 +705,19 @@ PY
     rescue
     grep -q "RESULT=UNSURE" "$W/med/PMCP_RESCUE_LOG.txt" && ok "lsd.sh missing: RESULT=UNSURE, not OK" || bad "missing lsd.sh reported OK"
 
+    # experimental dm-path pmcp (A218): displaymanager.json on our link; the rescue card puts the factory file back by size
+    fresh_unit; run install map-clean; rc_is 0; run java-on nai; rc_is 0
+    DMJR="$W/unit/mnt/system/etc/eso/production/displaymanager.json"; DMJS=$(h "$DMJR")
+    cp "$DMJR" "$U/carplaymaps/rollback/displaymanager.json"
+    sed 's#"device" : "/dev/mlb/isoTX2",#"device" : "/dev/pmcp-isoTX2",#' "$DMJR" > "$W/dmj"; cat "$W/dmj" > "$DMJR"
+    rescue
+    [ "$(h "$DMJR")" = "$DMJS" ] && ok "dm-path pmcp: factory displaymanager.json back" || bad "displaymanager.json not restored"
+    grep -q "RESULT=OK" "$W/med/PMCP_RESCUE_LOG.txt" && ok "RESULT=OK" || bad "no RESULT=OK after the json"
+    fresh_unit; run install map-clean; rc_is 0; run java-on nai; rc_is 0
+    sed 's#"device" : "/dev/mlb/isoTX2",#"device" : "/dev/pmcp-isoTX2",#' "$DMJR" > "$W/dmj"; cat "$W/dmj" > "$DMJR"
+    rescue
+    grep -q "RESULT=UNSURE" "$W/med/PMCP_RESCUE_LOG.txt" && ok "our json without the factory copy: RESULT=UNSURE" || bad "json without copy reported OK"
+
     echo "[17] main screen 4: install additional features (the real menu script, one set, one trial)"
     # feat: main menu 4 (the real menu script); allon: what the old button 3 did, now 2 then 4 (map, then features)
     feat() {
@@ -1091,7 +1106,7 @@ PEOF
     [ "$before" = "$(snapshot "$W/unit")" ] && ok "log card: unit unchanged (read-only)" || bad "log card changed the unit"
     [ "$(ls "$W/med3/PMCP_LOGS" | grep -c '^aa-log-[1-5].txt$')" = 5 ] && cmp -s "$L1" "$W/med3/PMCP_LOGS/aa-log-1.txt" \
         && ok "log card: five logs copied, identical" || bad "log card copies: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
-    tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" | head -1 | grep -q "^RESULT=OK copied=5 aa_logs=5 cp_logs=0$" && ok "log card: RESULT=OK" || bad "log card result: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
+    tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" | head -1 | grep -q "^RESULT=OK copied=5 aa_logs=5 cp_logs=0 dm_diag=0$" && ok "log card: RESULT=OK" || bad "log card result: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
     : > "$U/carplaymaps/logs/._aa-log-1.txt"; mkdir -p "$U/carplaymaps/logs/odd"; : > "$U/carplaymaps/logs/odd/x"
     mkdir -p "$P"; : > "$U/carplaymaps/logs/aa-log-9.txt.pmcp-new"; echo "boot set=x" >> "$P/boot.log"; echo "boot set=old" > "$P/boot.log.1"
     : > "$P/aa-stream.h264"; : > "$P/aa-stream.h264.idx"; : > "$P/wifi-test.log"; : > "$P/wifi-test.log.1"
@@ -1290,7 +1305,7 @@ PEOF
     for n in 4 5; do run cp-log-save; done; run cp-log-save; rc_is 1; expect_out "CP_LOGS_FULL_5" "sixth refused"
     rm -rf "$W/med3"; logcard
     [ "$(ls "$W/med3/PMCP_LOGS" | grep -c '^cp-log-[1-5].txt$')" = 5 ] && cmp -s "$L2" "$W/med3/PMCP_LOGS/cp-log-2.txt" && ok "log card: CarPlay logs copied" || bad "log card: $(ls "$W/med3/PMCP_LOGS" | tr '\n' ' ')"
-    grep -q "^RESULT=OK copied=5 aa_logs=0 cp_logs=5$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: RESULT=OK with cp_logs=5" || bad "log card result"
+    grep -q "^RESULT=OK copied=5 aa_logs=0 cp_logs=5 dm_diag=0$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: RESULT=OK with cp_logs=5" || bad "log card result"
     run log-clear; rc_is 0; [ ! -e "$U/carplaymaps/logs" ] && ok "main menu 9 removes the CarPlay logs" || bad "cp logs left"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
     echo "[37] main menu 3 and 4 with unsupported Android Auto AND unsupported Java files at once (no dead end)"
@@ -1347,7 +1362,7 @@ PEOF
     echo "x event=aap.nav_msg msg_id=0x8006 bytes=1" > "$W/unit/ramdisk/pmcp-gal-hook.log"
     run aa-log-save; rc_is 0
     rm -rf "$W/med3"; logcard
-    grep -q "^RESULT=OK copied=2 aa_logs=1 cp_logs=1$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: one AA and one CarPlay log" || bad "log card: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
+    grep -q "^RESULT=OK copied=2 aa_logs=1 cp_logs=1 dm_diag=0$" "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt" && ok "log card: one AA and one CarPlay log" || bad "log card: $(tail -2 "$W/med3/PMCP_LOGS/PMCP_LOGS_RESULT.txt")"
     run restore; rc_is 0; [ "$factory" = "$(snapshot "$W/unit" | grep -v '/ramdisk/')" ] && ok "restore: exact factory tree" || bad "tree after restore"
 
     echo "[40] package ui (AID navigation configuration page, Save of trial starts): own JAR, in main 4, java-off and restore exact, shares the mode file"
@@ -1754,6 +1769,98 @@ PEOF
         [ "$before" = "$(snapshot "$W/unit" | grep -v '/ramdisk/' | grep -v '/persist/pmcp/gem.log')" ] && ok "corrupted payload: nothing changed" || bad "corrupted payload changed files"
         cp "$W/pm.bak" "$W/sd/payload/pmcp-most/altscreen-most-bridge"
         restore_exact "restore after a refused switch (pmcp-most active): exact factory tree"
+    fi
+
+    # MOST supervisor stage 5 (docs 23, A218): the factory VW encoder's MOST path. Every card: the lsd.sh block makes the
+    # link, and restore / the last java-off / the rescue card put the factory displaymanager.json back when it is ours
+    # (verified copy in rollback/). Experimental cards: dm-path pmcp|factory, dm-link drop|make, dm-diag.
+    echo "[58] VW encoder MOST path: link in lsd.sh, factory displaymanager.json back on every card, dm-* (experimental)"
+    DMJF="$W/unit/mnt/system/etc/eso/production/displaymanager.json"
+    DMF=0374c1f236a947a4d728085034e2c96d21f6f0dc4a727bcc379468612bb1ded0
+    LSDP="$SDB/pmcp/payload/lsd/lsd.sh"
+    grep -qx 'ln -Ps /dev/mlb/isoTX2 /dev/pmcp-isoTX2 2>/dev/null' "$LSDP" && ok "lsd.sh block makes the encoder link" || bad "no link line in lsd.sh"
+    l_ln=$(grep -n '^ln -Ps /dev/mlb/isoTX2 ' "$LSDP" | cut -d: -f1); l_if=$(grep -n 'RUN_MODE}" != swdl' "$LSDP" | cut -d: -f1)
+    [ -n "$l_ln" ] && [ -n "$l_if" ] && [ "$l_ln" -lt "$l_if" ] && ok "link line before the update-mode / DISABLED condition" || bad "link line order ($l_ln/$l_if)"
+    # what dm-path pmcp leaves, made by hand (also for release cards, which cannot make it)
+    dm_ours() {
+        cp "$DMJF" "$U/carplaymaps/rollback/displaymanager.json"
+        sed 's#"device" : "/dev/mlb/isoTX2",#"device" : "/dev/pmcp-isoTX2",#' "$DMJF" > "$W/dmj"; cat "$W/dmj" > "$DMJF"
+    }
+    start_unit; run map-install map-square-fps40; rc_is 0; run java-on nai; rc_is 0
+    dm_ours; [ "$(wc -c < "$DMJF" | tr -d ' ')" = 5984 ] && ok "setup: our displaymanager.json is one byte longer" || bad "setup size"
+    run status; expect_out "VW encoder MOST path: pmcp" "status shows the encoder path"
+    run java-off nai; rc_is 0; [ "$(h "$DMJF")" = $DMF ] && [ ! -e "$U/carplaymaps/rollback/displaymanager.json" ] \
+        && ok "last java-off: factory displaymanager.json back first (the factory lsd.sh makes no link)" || bad "java-off left our json"
+    run java-on nai; rc_is 0; dm_ours
+    restore_exact "restore with our displaymanager.json: exact factory tree"
+    start_unit; run map-install map-square-fps40; rc_is 0; run java-on nai; rc_is 0
+    echo "changed by someone else" >> "$DMJF"; cp "$DMJF" "$W/dmj.other"
+    run restore; rc_is 0; cmp -s "$DMJF" "$W/dmj.other" && ok "restore leaves a displaymanager.json that is not ours" || bad "restore touched a foreign json"
+    if sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh" | grep -q '^DM_JSON '; then
+        echo "  - experimental: dm-path, dm-link, dm-diag"
+        for b in dm-diag dm-path-pmcp dm-path-factory dm-link-drop dm-link-make; do
+            [ -f "$SDB/pmcp/menu/$b.sh" ] && grep -q "$b" "$SDB/esd/Launcher-sda0.esd" || bad "button $b missing"
+        done; ok "five VW encoder buttons on the experimental screen"
+        start_unit; run map-install map-square-fps40; rc_is 0
+        before=$(snapshot "$W/unit" | grep -v '/persist/pmcp/gem.log')
+        run dm-path pmcp; rc_is 1; expect_out "DM_PATH_PMCP_NEEDS_JAVA_STATE_VIDEO" "dm-path pmcp without this card's Java set: refused"
+        [ "$before" = "$(snapshot "$W/unit" | grep -v '/persist/pmcp/gem.log')" ] && ok "refused: nothing changed" || bad "refused dm-path changed files"
+        run java-on nai; rc_is 0
+        run dm-path pmcp; rc_is 0; expect_out "PMCP_DM_PATH_OK path=pmcp (from the next unit start" "dm-path pmcp"
+        DMP=$(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh" | sed -n 's/^DM_JSON \([0-9a-f]*\) .*/\1/p')
+        [ "$(h "$DMJF")" = "$DMP" ] && [ "$(h "$U/carplaymaps/rollback/displaymanager.json")" = $DMF ] \
+            && ok "our displaymanager.json live, verified factory copy kept" || bad "dm-path pmcp files"
+        [ "$(grep -c 'isoTX2' "$DMJF")" = 1 ] && grep -q '"device" : "/dev/pmcp-isoTX2",' "$DMJF" && [ "$(wc -c < "$DMJF" | tr -d ' ')" = 5984 ] \
+            && ok "only the MOST encoder device changed (one byte longer)" || bad "json content"
+        diff "$U/carplaymaps/rollback/displaymanager.json" "$DMJF" | grep -c '^[<>]' | grep -qx 2 && ok "one line differs from the factory file" || bad "json diff"
+        [ -z "$(find "$W/unit" -name '*.pmcp-new' -o -name '*.pmcp-restore')" ] && ok "no staging leftovers" || bad "leftovers"
+        before=$(snapshot "$W/unit" | grep -v '/persist/pmcp/gem.log')
+        run dm-path pmcp; rc_is 0; expect_out "path=pmcp (already, nothing changed)" "dm-path pmcp again: already"
+        [ "$before" = "$(snapshot "$W/unit" | grep -v '/persist/pmcp/gem.log')" ] && ok "again: no file changed" || bad "second press changed files"
+        run status; expect_out "VW encoder MOST path: pmcp" "status: pmcp path"
+        echo "  - dm-link (this start only; a plain symlink in the fake unit)"
+        mkdir -p "$W/unit/dev/mlb"; rm -f "$W/unit/dev/pmcp-isoTX2"
+        before=$(snapshot "$W/unit" | grep -v '/persist/pmcp/gem.log')
+        run dm-link make; rc_is 0; expect_out "PMCP_DM_LINK_OK link=present (was missing; this start only) path=pmcp" "dm-link make"
+        [ -L "$W/unit/dev/pmcp-isoTX2" ] && [ "$(readlink "$W/unit/dev/pmcp-isoTX2")" = "$W/unit/dev/mlb/isoTX2" ] && ok "link to the MOST device" || bad "link"
+        run dm-link make; rc_is 0; expect_out "link=present (was present" "dm-link make again: fine"
+        run dm-link drop; rc_is 0; expect_out "PMCP_DM_LINK_OK link=missing (was present" "dm-link drop"
+        expect_out "keeps it until the next AID view change" "drop: says the held channel stays"
+        [ ! -L "$W/unit/dev/pmcp-isoTX2" ] && ok "link removed" || bad "link left"
+        run dm-link drop; rc_is 0; expect_out "link=missing (was missing" "drop again: fine"
+        [ "$before" = "$(snapshot "$W/unit" | grep -v '/persist/pmcp/gem.log')" ] && ok "dm-link writes no file" || bad "dm-link changed files"
+        run dm-link sideways; rc_is 1; expect_out "DM_LINK_MUST_BE_drop_OR_make" "dm-link: bad argument"
+        echo "  - dm-diag (read-only, one file for the log card)"
+        run dm-link make; before=$(snapshot "$W/unit" | grep -v '/persist/pmcp/gem.log')
+        run dm-diag; rc_is 0; expect_out "PMCP_DM_DIAG_OK file=logs/dm-diag-1.txt" "dm-diag saved"
+        expect_out "VW encoder MOST path: pmcp; link: present" "dm-diag: path and link on screen"
+        D58="$U/carplaymaps/logs/dm-diag-1.txt"
+        grep -q '"device" : "/dev/pmcp-isoTX2",' "$D58" && [ "$(tail -1 "$D58")" = "--- end" ] && ok "dm-diag file: json line, complete" || bad "dm-diag file"
+        [ "$before" = "$(snapshot "$W/unit" | grep -v '/persist/pmcp/gem.log' | grep -v '/carplaymaps/logs/')" ] && ok "dm-diag writes only its log file" || bad "dm-diag changed other files"
+        rm -rf "$W/lc58" "$W/lcm"; mkdir -p "$W/lc58/net" "$W/lcm"; ln -s "$W/unit" "$W/lc58/net/mmx"
+        PMCP_LOGCARD_TEST_ROOT="$W/lc58" $SH "$PROJ/installer/logcard/pmcp-logs.sh" "$W/lcm" >/dev/null 2>&1
+        cmp -s "$W/lcm/PMCP_LOGS/dm-diag-1.txt" "$D58" && grep -q "RESULT=OK .*dm_diag=1" "$W/lcm/PMCP_LOGS/PMCP_LOGS_RESULT.txt" \
+            && ok "log card copies dm-diag-1.txt" || bad "log card: dm-diag"
+        run log-clear; rc_is 0; [ ! -e "$D58" ] && ok "main menu 9 deletes it" || bad "log-clear left dm-diag"
+        run dm-path factory; rc_is 0; expect_out "PMCP_DM_PATH_OK path=factory (from the next unit start)" "dm-path factory"
+        [ "$(h "$DMJF")" = $DMF ] && [ ! -e "$U/carplaymaps/rollback/displaymanager.json" ] && ok "factory json back, copy removed" || bad "dm-path factory files"
+        run dm-path factory; rc_is 0; expect_out "path=factory (already, nothing changed)" "dm-path factory again: already"
+        run dm-path pmcp; rc_is 0
+        cp "$W/sd/payload/dm/displaymanager.json" "$W/dm.bak"; printf 'X' >> "$W/sd/payload/dm/displaymanager.json"
+        run dm-path factory; rc_is 0; run dm-path pmcp; rc_is 1; expect_out "HASH_MISMATCH_DM_JSON" "corrupted payload: refused"
+        [ "$(h "$DMJF")" = $DMF ] && ok "corrupted payload: factory json stays" || bad "corrupted payload changed json"
+        cp "$W/dm.bak" "$W/sd/payload/dm/displaymanager.json"
+        run dm-path pmcp; rc_is 0
+        restore_exact "restore after dm-path pmcp: exact factory tree"
+        start_unit; run map-install map-square-fps40; run java-on nai
+        echo "changed by someone else" >> "$DMJF"
+        run dm-path pmcp; rc_is 1; expect_out "DM_JSON_NOT_FACTORY_NOTHING_CHANGED_other" "foreign json: dm-path pmcp refused"
+        run dm-path factory; rc_is 1; expect_out "DM_JSON_NOT_OURS_NOTHING_CHANGED" "foreign json: dm-path factory refused"
+    else
+        ls "$SDB/pmcp/menu" | grep -q '^dm-' && bad "release card has dm buttons" || ok "release card: no dm buttons"
+        start_unit; run map-install map-square-fps40; rc_is 0
+        run dm-path pmcp; rc_is 1; expect_out "PMCP_FAIL=UNKNOWN_ACTION_dm-path" "release card: no dm-path action"
+        [ ! -e "$SDB/pmcp/payload/dm" ] && ok "release card: no encoder json payload" || bad "release card carries dm payload"
     fi
 
     [ -s "$W/noexec" ] && { bad "pmcp.sh called a command the unit does not have ($(wc -l < "$W/noexec" | tr -d ' ') runs)"; sort -u "$W/noexec" | head -5 | sed 's/^/       | /'; } \

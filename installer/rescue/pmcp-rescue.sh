@@ -17,6 +17,8 @@
 #   4. package E system part (patched iAP2 driver, iap2.cfg [ident]) back to the factory copies kept in
 #      /mnt/app/carplaymaps/rollback, by size (only if live = our size and copy = factory size); the reader stops
 #      because SYSTEM_ON is removed. mm-ipod is not the HMI, but CarPlay itself must work after a rescue.
+#   5. the factory VW encoder's displaymanager.json (experimental "dm-path pmcp": its MOST path on our link, which only our
+#      lsd.sh block makes) back to the factory copy in /mnt/app/carplaymaps/rollback, by size like iap2.cfg.
 # The video part (dio_manager wrapper, /mnt/app/carplaymaps) stays; "Remove everything" in GEM removes it later.
 # On a unit without pmcp it changes nothing and only writes the log (test before stage B).
 #
@@ -52,6 +54,9 @@ FACTORY_DRV_SIZE=739925
 OUR_DRV_SIZES="743196 743272"
 FACTORY_CFG_SIZE=5951
 OUR_CFG_SIZE=6079
+DMJ="$N/mnt/system/etc/eso/production/displaymanager.json"
+FACTORY_DMJ_SIZE=5983
+OUR_DMJ_SIZE=5984
 
 log() { echo "$*" >> "$RAM" 2>/dev/null; }
 # flush: the card and the unit's files sit on MMX (/net/mmx...), and update mode runs this script on RCC, which has no
@@ -92,7 +97,8 @@ has_pmcp_block() {
 
 state() {
     for f in "$LSD" "$ROOT/rollback/lsd.sh" "$JARS/NavActiveIgnore.jar" "$JARS"/pmcp-*.jar "$PERSIST/DISABLED" "$PERSIST/last-boot" \
-        "$DRV" "$ROOT/rollback/ipod-drvr-iap2.so" "$CFG" "$ROOT/rollback/iap2.cfg" "$ROOT/rg/SYSTEM_ON"; do
+        "$DRV" "$ROOT/rollback/ipod-drvr-iap2.so" "$CFG" "$ROOT/rollback/iap2.cfg" "$ROOT/rg/SYSTEM_ON" \
+        "$DMJ" "$ROOT/rollback/displaymanager.json"; do
         if [ -e "$f" ]; then log "  jest: $f (`size_of "$f"` B)"; else log "  brak: $f"; fi
     done
 }
@@ -127,6 +133,10 @@ attempt() {
         [ -n "${PMCP_RESCUE_TEST_ROOT:-}" ] || mount -uw "$N/mnt/system" 2>/dev/null
         restore_by_size "$CFG" "$ROOT/rollback/iap2.cfg" "$OUR_CFG_SIZE" "$FACTORY_CFG_SIZE" 644
     fi
+    if [ "`size_of "$DMJ"`" = "$OUR_DMJ_SIZE" ]; then
+        [ -n "${PMCP_RESCUE_TEST_ROOT:-}" ] || mount -uw "$N/mnt/system" 2>/dev/null
+        restore_by_size "$DMJ" "$ROOT/rollback/displaymanager.json" "$OUR_DMJ_SIZE" "$FACTORY_DMJ_SIZE" 644
+    fi
     if [ "`size_of "$LSD"`" != "$FACTORY_LSD_SIZE" ] && [ "`size_of "$ROOT/rollback/lsd.sh"`" = "$FACTORY_LSD_SIZE" ] \
         && ! has_pmcp_block "$ROOT/rollback/lsd.sh"; then
         rm -f "$LSD.pmcp-rescue" 2>/dev/null
@@ -152,6 +162,7 @@ done_ok() {
     has_pmcp_block "$LSD" && return 1
     for _s in $OUR_DRV_SIZES; do [ "`size_of "$DRV"`" != "$_s" ] || return 1; done
     [ "`size_of "$CFG"`" != "$OUR_CFG_SIZE" ] || return 1
+    [ "`size_of "$DMJ"`" != "$OUR_DMJ_SIZE" ] || return 1
     return 0
 }
 

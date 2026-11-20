@@ -77,6 +77,13 @@ for f in "$LOGS"/cp-log-*.txt; do
     CP=$((CP + 1))
     copy_one "$f" "${f##*/}"
 done
+# experimental cards: GEM "VW encoder: MOST path, link, its log lines" (pmcp.sh dm-diag, MOST supervisor stage 5)
+DM=0
+for f in "$LOGS"/dm-diag-*.txt; do
+    [ -f "$f" ] || continue
+    DM=$((DM + 1))
+    copy_one "$f" "${f##*/}"
+done
 [ -f "$PERSIST/boot.log.1" ] && copy_one "$PERSIST/boot.log.1" pmcp-boot-log-1.txt
 [ -f "$PERSIST/boot.log" ] && copy_one "$PERSIST/boot.log" pmcp-boot-log.txt
 [ -f "$PERSIST/last-boot" ] && copy_one "$PERSIST/last-boot" pmcp-last-boot.txt
@@ -93,10 +100,10 @@ log "markers in /mnt/persist/pmcp: `ls "$PERSIST" 2>&1`"
 flush
 if [ $FAILED -gt 0 ]; then
     log "RESULT=FAILED copied=$COPIED failed=$FAILED aa_logs=$AA cp_logs=$CP"
-elif [ $((AA + CP)) -eq 0 ]; then
+elif [ $((AA + CP + DM)) -eq 0 ]; then
     log "RESULT=NO_LOGS copied=$COPIED (run AA save log or CP save log in GEM first)"
 else
-    log "RESULT=OK copied=$COPIED aa_logs=$AA cp_logs=$CP"
+    log "RESULT=OK copied=$COPIED aa_logs=$AA cp_logs=$CP dm_diag=$DM"
 fi
 log "=== PMCP LOGS end"
 flush

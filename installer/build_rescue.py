@@ -64,6 +64,7 @@ What it does: insert it in slot SD1 and wait up to 60 s. The unit enters update 
   2. removes our Java files (NavActiveIgnore.jar, pmcp-*.jar),
   3. writes /mnt/persist/pmcp/DISABLED (nothing of ours loads at start),
   4. puts back the factory iAP2 driver and iap2.cfg if the route guidance system was on.
+  5. puts back the factory displaymanager.json if an experimental card changed the VW encoder's MOST path.
 The map picture stays. Afterwards, in the green menu: "Remove everything (back to factory files)".
 The unit also re-installs M.I.B. 3.6.0 on the way, as when M.I.B. was installed.
 

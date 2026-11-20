@@ -5,6 +5,19 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (experimental)
 
+- **VW encoder MOST path (MOST supervisor stage 5, experimental cards only):** the factory VW encoder (`displaymanager`)
+  reads its MOST channel path from `displaymanager.json` once at start and checks it with `access()` before every open:
+  a missing path means no open attempt at all (today it retries the busy channel about 20 times a second, starting and
+  stopping its hardware encoder each time). GEM `experimental`: "VW encoder: MOST through our link (from the next unit
+  start)" points it at `/dev/pmcp-isoTX2`; "VW encoder: factory MOST path (default, from the next unit start)" puts the
+  factory file back; "VW encoder link: remove (this start only; test)" / "... make again (this start only)" and
+  "VW encoder: MOST path, link, its log lines and open files (read-only, saved for the log card)" (`logs/dm-diag-N.txt`,
+  copied by the log card, deleted by main menu 9). Needs this card's Java set. **Every card:** the lsd.sh block makes the
+  link `/dev/pmcp-isoTX2` → `/dev/mlb/isoTX2` at every start (unused while the encoder has its factory path; a new
+  `lsd.sh`, so main menu 4 brings a new Java set with one trial start), and "8. Remove everything", the last "Java off",
+  main menu 4's reset and the rescue card put the factory `displaymanager.json` back (from the verified copy) before any
+  factory `lsd.sh`. Before using an older card (v1.8.0 or earlier) on a unit with the link path, press "VW encoder:
+  factory MOST path" first. Analysis: `docs 23`, `build/displaymanager-20261120/REPORT.md`.
 - **Own MOST bridge, switchable (experimental cards only):** the pmcp-most build of the CarPlay MOST bridge (`bridge/`)
   ships next to mathsls's bridge. GEM `pmcp_advanced` → `experimental` (new screen, experimental cards only): "Bridge: use pmcp-most (experimental, new MOST bridge; from the
   next phone connection)" and "Bridge: use mathsls (default MOST bridge; from the next phone connection)"; no card

@@ -47,6 +47,11 @@
 #   pmcp.sh bridge-status       read-only: the bridge lines of status, this start's owner and wired.session, the end of
 #                               pmcp-most's log (GEM experimental)
 #   (on experimental cards aa-capture is on GEM experimental too, not on aa_advanced)
+#   pmcp.sh dm-path pmcp|factory  MOST supervisor stage 5 (docs 23): the factory VW encoder (displaymanager) opens the MOST
+#                               channel through our link /dev/pmcp-isoTX2 (made by the lsd.sh block at every start) or its
+#                               factory path; displaymanager.json, from the next unit start; needs this card's Java set
+#   pmcp.sh dm-link drop|make   this start only (RAM): remove the link (the encoder finds no MOST path) or make it again
+#   pmcp.sh dm-diag             read-only: path, link, the encoder's log lines and open files; saved to logs/dm-diag-N.txt
 #@@EXP_END
 #   pmcp.sh speedlimit-mode MODE  optional native VW limit (package sl): off (default); turnto = before the street that rg
 #                               writes to TurnToInfo (needs rg); street = trial, in CurrentPositionInfo only
@@ -87,6 +92,8 @@ STOCK_DRV_SHA="@@STOCK_DRV_SHA@@"
 STOCK_DRV_SIZE="@@STOCK_DRV_SIZE@@"
 STOCK_CFG_SHA="@@STOCK_CFG_SHA@@"
 STOCK_CFG_SIZE="@@STOCK_CFG_SIZE@@"
+STOCK_DMJ_SHA="@@STOCK_DMJ_SHA@@"
+STOCK_DMJ_SIZE="@@STOCK_DMJ_SIZE@@"
 STOCK_GAL_SHA="@@STOCK_GAL_SHA@@"
 STOCK_GAL_SIZE="@@STOCK_GAL_SIZE@@"
 # Every SHA-256 above (manifest, IDs, factory files) -> the SHA-1 the unit actually computes (factory sha1sum, hash_of).
@@ -144,6 +151,8 @@ SL_STATE="$MMX/ramdisk/pmcp-speedlimit.state"
 SL_LOCK="$MMX/ramdisk/pmcp-speedlimit.lock"
 DRV="$APP/armle/lib/dll/ipod-drvr-iap2.so"
 CFG="$MMX/mnt/system/etc/mm/iap2.cfg"
+# the factory VW encoder's (displaymanager) configuration: its MOST device path (MOST supervisor stage 5, docs 23)
+DMJ="$MMX/mnt/system/etc/eso/production/displaymanager.json"
 RGDIR="$ROOT/rg"
 GAL="$APP/eso/bin/apps/gal"
 AADIR="$ROOT/aa"
@@ -1563,6 +1572,7 @@ java_reset() {
     _z_line=`cat "$ROOT/HMI_BOOT" 2>/dev/null`
     clear_speedlimit_mode
     if ! matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"; then
+        dm_json_off   # the factory lsd.sh makes no link for the encoder's MOST path
         rm -f "$LSD.pmcp-rb" 2>/dev/null
         cp "$ROOT/rollback/lsd.sh" "$LSD.pmcp-rb" || fail "LSD_RESTORE_STAGE_FAILED"
         chmod 755 "$LSD.pmcp-rb" || fail "CHMOD_FAILED"
@@ -1784,7 +1794,9 @@ do_java_off() {
     # back silently with a later java-on rg
     if [ "$ARG" = rg ] && [ "`cat "$SL_MODE" 2>/dev/null`" = turnto ]; then clear_speedlimit_mode; fi
     if [ -z "$new" ]; then
-        # last package: factory lsd.sh first (switch off), then remove the JAR and set files
+        # last package: factory lsd.sh first (switch off), then remove the JAR and set files; before it the VW encoder's
+        # factory MOST path (the factory lsd.sh makes no link)
+        dm_json_off
         cp "$ROOT/rollback/lsd.sh" "$LSD.pmcp-rb" || fail "LSD_RESTORE_STAGE_FAILED"
         chmod 755 "$LSD.pmcp-rb" || fail "CHMOD_FAILED"
         check "$LSD.pmcp-rb" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE" STAGED_FACTORY_LSD
@@ -2076,6 +2088,33 @@ do_rg_system_off() {
     say "A full unit reboot is required."
 }
 
+# The factory VW encoder's displaymanager.json (MOST supervisor stage 5): only experimental cards change it (dm-path pmcp),
+# but every card puts the factory file back before any factory lsd.sh (whose missing link would leave the encoder without
+# a MOST path) and in restore. Ours only while the verified factory copy is in rollback/ (dm-path pmcp keeps it there):
+# a file someone else changed is left alone.
+dm_json_off() {
+    rm -f "$DMJ.pmcp-new" "$DMJ.pmcp-restore" 2>/dev/null
+    [ -f "$ROOT/rollback/displaymanager.json" ] || return 0
+    if ! matches "$DMJ" "$STOCK_DMJ_SHA" "$STOCK_DMJ_SIZE"; then
+        check "$ROOT/rollback/displaymanager.json" "$STOCK_DMJ_SHA" "$STOCK_DMJ_SIZE" SAVED_FACTORY_DM_JSON
+        remount_sys
+        cp "$ROOT/rollback/displaymanager.json" "$DMJ.pmcp-restore" && chmod 644 "$DMJ.pmcp-restore" || fail "DM_JSON_RESTORE_STAGE_FAILED"
+        check "$DMJ.pmcp-restore" "$STOCK_DMJ_SHA" "$STOCK_DMJ_SIZE" STAGED_FACTORY_DM_JSON
+        mv "$DMJ.pmcp-restore" "$DMJ" || fail "DM_JSON_RESTORE_FAILED"
+        remount_sys_ro
+        say "VW encoder: factory MOST path back (displaymanager.json, from the next unit start)"
+    fi
+    remount_rw
+    rm -f "$ROOT/rollback/displaymanager.json" || fail "DM_JSON_COPY_REMOVE_FAILED"
+}
+
+# dm_path_state -> factory | pmcp (ours, factory copy kept) | other
+dm_path_state() {
+    if matches "$DMJ" "$STOCK_DMJ_SHA" "$STOCK_DMJ_SIZE"; then echo factory
+    elif [ -f "$ROOT/rollback/displaymanager.json" ]; then echo pmcp
+    else echo other; fi
+}
+
 do_restore() {
     selftest
     firmware_identity
@@ -2091,6 +2130,8 @@ do_restore() {
     esac
     remount_rw
     stop_runtime
+    # the VW encoder's factory MOST path first: the factory lsd.sh below makes no link
+    dm_json_off
     # Idempotent: each live file is replaced only if it is not already the factory file. lsd.sh first:
     # it is what the HMI reads at start.
     if ! matches "$LSD" "$STOCK_LSD_SHA" "$STOCK_LSD_SIZE"; then
@@ -2184,6 +2225,8 @@ do_status() {
     say "Route guidance system: $RGSYS"
     [ "$RGSYS" = old ] && say "  driver or reader of an earlier card (4. Install additional features replaces them)"
     say "Android Auto: $AASYS${AAMODE:+ mode=$AAMODE}"
+    _st_dm=`dm_path_state`
+    [ "$_st_dm" = factory ] || say "VW encoder MOST path: $_st_dm (displaymanager.json; factory: dm-path factory or 8. Remove everything)"
 #@@EXP_BEGIN
     bridge_status
 #@@EXP_END
@@ -2360,6 +2403,127 @@ do_bridge_status() {
     fi
     return 0
 }
+
+# ---------------------------------------------------------------- VW encoder MOST path (experimental cards only)
+# MOST supervisor stage 5 (docs 23, build/displaymanager-20261120/REPORT.md): displaymanager reads its MOST device path
+# once at start and checks it with access() before every open: a missing path = no open, no NV encoder, one log line.
+# The lsd.sh block makes the link /dev/pmcp-isoTX2 -> /dev/mlb/isoTX2 at every start (all cards); "dm-path pmcp" points
+# the encoder at it, so removing the link (dm-link drop, later the supervisor) keeps the encoder off the channel. Removing
+# the link does not take back a channel the encoder holds: it lets go at the next AID view change.
+DM_LINK=/dev/pmcp-isoTX2
+DM_DEV=/dev/mlb/isoTX2
+# commands on MMX's own namespace (the link is MMX's process manager's); tests: a plain symlink under the fake unit
+if [ -n "${PMCP_TEST_ROOT:-}" ]; then
+    DMN="$PMCP_TEST_ROOT"
+    dmx() { "$@"; }
+    dm_ln() { ln -s "$DMN$DM_DEV" "$DMN$DM_LINK"; }
+else
+    DMN=""
+    dmx() { if [ -n "$MMX" ]; then on -f mmx "$@"; else "$@"; fi; }
+    dm_ln() { dmx ln -Ps "$DM_DEV" "$DM_LINK"; }
+fi
+# dm_link_state -> present | missing (the link itself, whether or not the MOST driver is up)
+dm_link_state() {
+    if dmx ls -ld "$DMN$DM_LINK" >/dev/null 2>&1; then echo present; else echo missing; fi
+}
+
+do_dm_path() {
+    case "$ARG" in pmcp|factory) ;; *) fail "DM_PATH_MUST_BE_pmcp_OR_factory" ;; esac
+    selftest
+    firmware_identity
+    detect_state
+    pmcp_root || fail "DM_PATH_NEEDS_PMCP_INSTALL_STATE_$STATE"
+    _dp_s=`dm_path_state`
+    if [ "$ARG" = factory ]; then
+        [ "$_dp_s" = other ] && fail "DM_JSON_NOT_OURS_NOTHING_CHANGED"
+        if [ "$_dp_s" = factory ] && [ ! -e "$ROOT/rollback/displaymanager.json" ]; then
+            say "PMCP_DM_PATH_OK path=factory (already, nothing changed)"; return 0
+        fi
+        dm_json_off
+        [ "`dm_path_state`" = factory ] || fail "POST_DM_PATH_FACTORY_`dm_path_state`"
+        flush
+        say "PMCP_DM_PATH_OK path=factory (from the next unit start)"
+        return 0
+    fi
+    # pmcp: only with this card's lsd.sh (JAVA: its block makes the link at every start)
+    [ "$STATE" = JAVA ] || fail "DM_PATH_PMCP_NEEDS_JAVA_STATE_$STATE (main menu 4 first)"
+    set -- `manifest_get DM_JSON`; _dp_sha=$1; _dp_size=$2; _dp_path=$3
+    [ -n "$_dp_sha" ] || fail "DM_JSON_NOT_ON_THIS_CARD"
+    check "$PAYLOAD/$_dp_path" "$_dp_sha" "$_dp_size" DM_JSON
+    if [ "$_dp_s" = pmcp ] && matches "$DMJ" "$_dp_sha" "$_dp_size"; then
+        say "PMCP_DM_PATH_OK path=pmcp (already, nothing changed)"; return 0
+    fi
+    [ "$_dp_s" = factory ] || fail "DM_JSON_NOT_FACTORY_NOTHING_CHANGED_$_dp_s"
+    remount_rw
+    rm -f "$ROOT/rollback/displaymanager.json.pmcp-new" "$DMJ.pmcp-new" 2>/dev/null
+    say "Saving the factory displaymanager.json"
+    cp "$DMJ" "$ROOT/rollback/displaymanager.json.pmcp-new" || fail "DM_JSON_BACKUP_FAILED"
+    check "$ROOT/rollback/displaymanager.json.pmcp-new" "$STOCK_DMJ_SHA" "$STOCK_DMJ_SIZE" SAVED_FACTORY_DM_JSON
+    mv "$ROOT/rollback/displaymanager.json.pmcp-new" "$ROOT/rollback/displaymanager.json" || fail "DM_JSON_BACKUP_FAILED"
+    remount_sys
+    cp "$PAYLOAD/$_dp_path" "$DMJ.pmcp-new" && chmod 644 "$DMJ.pmcp-new" || fail "DM_JSON_STAGE_FAILED"
+    check "$DMJ.pmcp-new" "$_dp_sha" "$_dp_size" STAGED_DM_JSON
+    mv "$DMJ.pmcp-new" "$DMJ" || fail "DM_JSON_ACTIVATION_FAILED_RUN_DM_PATH_FACTORY"
+    remount_sys_ro
+    [ "`dm_path_state`" = pmcp ] || fail "POST_DM_PATH_PMCP_`dm_path_state`"
+    flush
+    say "PMCP_DM_PATH_OK path=pmcp (from the next unit start; link now: `dm_link_state`)"
+    say "No VW map on the AID after the restart: dm-path factory, restart (or 8. Remove everything, or the rescue card)."
+}
+
+do_dm_link() {
+    case "$ARG" in drop|make) ;; *) fail "DM_LINK_MUST_BE_drop_OR_make" ;; esac
+    firmware_identity
+    _dl_s=`dm_link_state`
+    if [ "$ARG" = drop ]; then
+        [ "$_dl_s" = present ] && { dmx rm -f "$DMN$DM_LINK" >/dev/null 2>&1 || fail "DM_LINK_REMOVE_FAILED"; }
+        [ "`dm_link_state`" = missing ] || fail "DM_LINK_STILL_PRESENT"
+    else
+        [ "$_dl_s" = missing ] && { dm_ln >/dev/null 2>&1 || fail "DM_LINK_MAKE_FAILED"; }
+        [ "`dm_link_state`" = present ] || fail "DM_LINK_STILL_MISSING"
+    fi
+    say "PMCP_DM_LINK_OK link=`dm_link_state` (was $_dl_s; this start only) path=`dm_path_state`"
+    [ "`dm_path_state`" = pmcp ] || say "  the encoder uses its factory path: the link changes nothing until dm-path pmcp and a restart"
+    [ "$ARG" = drop ] && say "  an encoder that holds the channel keeps it until the next AID view change"
+    return 0
+}
+
+# read-only; the copy for the log card: logs/dm-diag-N.txt (main menu 9 deletes it with the other logs)
+do_dm_diag() {
+    firmware_identity
+    detect_state
+    pmcp_root || fail "DM_DIAG_NEEDS_PMCP_INSTALL_STATE_$STATE"
+    _dd_n=1
+    while [ -e "$ROOT/logs/dm-diag-$_dd_n.txt" ]; do
+        _dd_n=$((_dd_n + 1))
+        [ $_dd_n -le $CP_LOG_MAX ] || fail "DM_DIAG_LOGS_FULL_${CP_LOG_MAX}_USE_THE_LOG_CARD_THEN_MAIN_MENU_9_DELETE_SAVED_LOGS"
+    done
+    remount_rw
+    mkdir -p "$ROOT/logs" || fail "DM_DIAG_DIR_FAILED"
+    _dd_f="$ROOT/logs/dm-diag-$_dd_n.txt"
+    rm -f "$_dd_f.pmcp-new" 2>/dev/null
+    if ! { echo "pmcp $PMCP_VERSION dm-diag `date 2>/dev/null`"
+           echo "--- state: $STATE; MOST path: `dm_path_state`; link $DM_LINK: `dm_link_state`"
+           echo "--- ls -ld $DM_LINK $DM_DEV"; dmx ls -ld "$DMN$DM_LINK" "$DMN$DM_DEV" 2>&1
+           echo "--- displaymanager.json most_encoder"; grep -n 'isoTX2' "$DMJ" 2>&1
+           echo "--- pidin -p displaymanager fd"; dmx pidin -p displaymanager fd 2>&1
+           echo "--- pidin -p displaymanager times"; dmx pidin -p displaymanager times 2>&1
+           echo "--- pidin -p devp-iso-mmx-mib2 fd"; dmx pidin -p devp-iso-mmx-mib2 fd 2>&1 | sed -n '1,40p'
+           echo "--- sloginfo: encoder and MOST channel lines (last 400)"
+           dmx sloginfo 2>/dev/null | grep -E 'CMOSTEncoderInterface|MOSTEncoder|isoTX2|does not exists|O_WRONLY' 2>/dev/null | tail -n 400
+           echo "--- end"; } > "$_dd_f.pmcp-new" 2>/dev/null; then
+        rm -f "$_dd_f.pmcp-new" 2>/dev/null
+        fail "DM_DIAG_WRITE_FAILED"
+    fi
+    mv "$_dd_f.pmcp-new" "$_dd_f" || fail "DM_DIAG_RENAME_FAILED"
+    flush
+    say "VW encoder MOST path: `dm_path_state`; link: `dm_link_state`"
+    _dd_e=`grep -c 'error open' "$_dd_f" 2>/dev/null`
+    _dd_x=`grep -c 'does not exists' "$_dd_f" 2>/dev/null`
+    say "  failed opens in the log: ${_dd_e:-0}; path missing: ${_dd_x:-0}"
+    say "  isoTX2 open by displaymanager now: `dmx pidin -p displaymanager fd 2>/dev/null | grep -c 'isoTX2'`"
+    say "PMCP_DM_DIAG_OK file=logs/dm-diag-$_dd_n.txt (log card; main menu 9 deletes it)"
+}
 #@@EXP_END
 say "pmcp $PMCP_VERSION: $ACTION $ARG"
 #@@NOAA_BEGIN
@@ -2420,6 +2584,9 @@ case "$ACTION" in
 #@@EXP_BEGIN
     bridge)        do_bridge ;;
     bridge-status) do_bridge_status ;;
+    dm-path)       do_dm_path ;;
+    dm-link)       do_dm_link ;;
+    dm-diag)       do_dm_diag ;;
 #@@EXP_END
     speedlimit-mode) do_speedlimit_mode ;;
     speedlimit-status) do_speedlimit_status ;;

@@ -277,6 +277,10 @@ TUNING_SHA = {
 # Never in update mode (RUN_MODE=swdl), so the rescue card always meets a factory HMI (review 1, finding 3).
 # Any missing tool or unwritable marker means a factory boot. /mnt/persist/pmcp/DISABLED (rescue card) disables it.
 LSD_PRE = r"""# >>> pmcp: CarPlay AID mod. Removing this block gives factory behaviour.
+# MOST supervisor (stage 5, docs 23): the factory encoder's MOST path as a link in the process manager's namespace, made
+# at every start (also update mode and DISABLED), before the MOST driver exists. Unused while displaymanager.json has the
+# factory path; with "dm-path pmcp" (experimental cards) the encoder opens the MOST channel through this link only.
+ln -Ps /dev/mlb/isoTX2 /dev/pmcp-isoTX2 2>/dev/null
 PMCP_DIR=/mnt/app/carplaymaps
 PMCP_P=/mnt/persist/pmcp
 PMCP_JARS=""
@@ -335,6 +339,19 @@ def read_pinned(path, want_sha, want_size, label=""):
     if len(data) != want_size or (want_sha and sha(data) != want_sha):
         sys.exit("input mismatch: %s %s size=%d sha=%s" % (label, path, len(data), sha(data)))
     return data
+
+
+DM_FACTORY_DEVICE = b'"device" : "/dev/mlb/isoTX2",'
+DM_PMCP_DEVICE = b'"device" : "/dev/pmcp-isoTX2",'
+
+
+def patch_dm_json(stock):
+    """displaymanager.json with the MOST encoder's device on our link; nothing else changes."""
+    if stock.count(b"isoTX2") != 1 or stock.count(DM_FACTORY_DEVICE) != 1 or b"pmcp" in stock:
+        sys.exit("displaymanager.json structure unexpected (MOST encoder device)")
+    out = stock.replace(DM_FACTORY_DEVICE, DM_PMCP_DEVICE)
+    assert len(out) == len(stock) + 1
+    return out
 
 
 def patch_lsd(stock):
@@ -568,6 +585,13 @@ EXP_MENU = [] if not IS_EXP else ([
     ("bridge-mathsls", "bridge mathsls", "Bridge: use mathsls (default MOST bridge; from the next phone connection)"),
     ("bridge-status", "bridge-status", "Bridge status: which bridge, owner, last lines of its log (read-only)")]
     if "PMCP_MOST" in PAYLOAD else []) + [
+    # MOST supervisor stage 5 (docs 23, A218): the factory VW encoder's MOST path. dm-path from the next unit start;
+    # dm-link only for this start (the lsd.sh block makes the link again at every start); dm-diag read-only
+    ("dm-diag", "dm-diag", "VW encoder: MOST path, link, its log lines and open files (read-only, saved for the log card)"),
+    ("dm-path-pmcp", "dm-path pmcp", "VW encoder: MOST through our link (from the next unit start)"),
+    ("dm-path-factory", "dm-path factory", "VW encoder: factory MOST path (default, from the next unit start)"),
+    ("dm-link-drop", "dm-link drop", "VW encoder link: remove (this start only; test)"),
+    ("dm-link-make", "dm-link make", "VW encoder link: make again (this start only)"),
     ("aa-capture-60", "aa-capture 60", "AA record: first 60 s of the phone video at each connection (for the log card)"),
     ("aa-capture-off", "aa-capture off", "AA record: off"),
     # A203-AA reverse-gear test: the AA hook re-grants the cluster after a main-screen focus change (aa-extra.conf)
@@ -622,7 +646,7 @@ def esd_block(version, top, feat, onoff, aa, exp):
     out += kv("2. features: route guidance system and single packages on/off.")
     out += kv("3. aa_advanced: Android Auto details and logs.")
     if exp:
-        out += kv("4. experimental: MOST bridge switch and status, AA video record (experimental cards only).")
+        out += kv("4. experimental: MOST bridge switch and status, VW encoder MOST path, AA video record (experimental cards only).")
     out += ['screen diagnostics pmcp_advanced', '']
     for n, _, l in feat:
         out += sc(n, l)
@@ -698,6 +722,13 @@ def main():
     (pm / "payload/lsd/lsd.sh").parent.mkdir(parents=True, exist_ok=True)
     (pm / "payload/lsd/lsd.sh").write_bytes(lsd_patched)
     rows.append(("LSD_JAVA", sha(lsd_patched), len(lsd_patched), "lsd/lsd.sh"))
+    if IS_EXP:
+        # experimental cards (dm-path pmcp): the factory displaymanager.json with only the MOST encoder's device changed to
+        # the link the lsd.sh block makes (one line, one byte longer: the rescue card tells the two apart by size)
+        dm_pmcp = patch_dm_json(stock["DMJSON"])
+        (pm / "payload/dm/displaymanager.json").parent.mkdir(parents=True, exist_ok=True)
+        (pm / "payload/dm/displaymanager.json").write_bytes(dm_pmcp)
+        rows.append(("DM_JSON", sha(dm_pmcp), len(dm_pmcp), "dm/displaymanager.json"))
 
     selftest = bytes(range(256)) * 3 + b"\n\n\0\r\nend-without-newline"
     (pm / "bin/selftest.bin").write_bytes(selftest)
@@ -742,6 +773,7 @@ def main():
         "@@STOCK_DIO_SHA@@": STOCK["DIO"][1], "@@STOCK_DIO_SIZE@@": str(STOCK["DIO"][2]),
         "@@STOCK_DRV_SHA@@": STOCK["IAP2DRV"][1], "@@STOCK_DRV_SIZE@@": str(STOCK["IAP2DRV"][2]),
         "@@STOCK_CFG_SHA@@": STOCK["IAP2CFG"][1], "@@STOCK_CFG_SIZE@@": str(STOCK["IAP2CFG"][2]),
+        "@@STOCK_DMJ_SHA@@": STOCK["DMJSON"][1], "@@STOCK_DMJ_SIZE@@": str(STOCK["DMJSON"][2]),
     }.items():
         assert k in tpl, k
         tpl = tpl.replace(k, v)
