@@ -2318,6 +2318,7 @@ sup_stop() {
 # sup_set mathsls|pmcp: that verified supervisor at the wrappers' path (kept copies in $BRIDGE_DIR, one rename), then the
 # marker ($SUP_MARK: pmcp; none = mathsls). Needs remount_rw. Says nothing when it is already in place.
 sup_set() {
+    _ss_name=$1
     case "$1" in mathsls) _ss_key=SUPERVISOR; _ss_copy=carplay-cluster-supervisor.mathsls; _ss_mark="" ;;
                  pmcp) _ss_key=PMCP_MOST_SUP; _ss_copy=pmcp-most-sup; _ss_mark=pmcp ;; esac
     set -- `manifest_get $_ss_key`; _ss_sha=$1; _ss_size=$2
@@ -2343,7 +2344,7 @@ sup_set() {
         rm -f "$SUP_MARK" "$SUP_MARK.pmcp-new" 2>/dev/null
         [ ! -e "$SUP_MARK" ] || fail "SUPERVISOR_MARKER_REMOVE_FAILED"
     fi
-    [ "`sup_active`" = "$1" ] || fail "POST_SUPERVISOR_SWITCH"
+    [ "`sup_active`" = "$_ss_name" ] || fail "POST_SUPERVISOR_SWITCH"
 }
 
 do_most_sup() {
