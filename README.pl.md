@@ -32,7 +32,7 @@ W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy proj
 | Tytuł i wykonawca utworu na AID (CarPlay; Android Auto od v1.7.0) | działa |
 | Przełączanie dzień/noc mapy na liczniku | działa |
 | Ograniczenie prędkości z telefonu (`showSpeedLimit=yes`) | na tym radiu nic nie pokazuje |
-| Android Auto 1.1 (od v1.7.0; 1.0 w v1.6.0, w v1.5.x otwarta alfa 0.1): obraz Google Maps na AID przez własny zapis MOST pmcp, strzałki VW z Google Maps; nazwa drogi, pasy i cel, gdy AID nie pokazuje mapy Android Auto | działa, z jednym znanym problemem: [Android Auto](#android-auto-na-aid-android-auto-11) |
+| Android Auto 1.1 (od v1.7.0; 1.0 w v1.6.0, w v1.5.x otwarta alfa 0.1): obraz Google Maps na AID przez własny zapis MOST pmcp, strzałki VW z Google Maps; nazwa drogi, pasy i cel, gdy AID nie pokazuje mapy Android Auto | działa (ograniczenia: [Android Auto](#android-auto-na-aid-android-auto-11)) |
 | Strona ustawień w radiu (v1.5.1, paczka `ui`): App-Connect → Settings → AID navigation configuration; „Save: everything works” zatwierdza start próbny bez karty SD | nowe w v1.5.1, [opis po angielsku](ui/README.md) |
 | Opcjonalnie (v1.4.1, paczka `sl`; przyciski trybu poprawione w v1.4.2 od amjad-alarori, od v1.5.1 tryb ustawiany na stronie ustawień): limit z map samego auta VW przed nazwą ulicy albo próbnie w CurrentPositionInfo | 50 → 70 km/h potwierdzone w e-Golfie (AID 795A); na AID 791 jeszcze nie sprawdzone. [Opis po angielsku](docs/en/16-native-speed-limits.md) |
 
@@ -120,6 +120,9 @@ czytnik i paczki Java (`rglu`, `rg`, eksperymentalne `rg-aa` → `rg` z tej kart
 aktualizuje na miejscu znane mu Android Auto z wcześniejszej karty eksperymentalnej, a Android Auto, którego nie
 obsługuje, zastępuje zestawem z tej karty. Przy przejściu z v1.0–v1.3 zrób też nową kartę 2: karty ratunkowe sprzed
 v1.4 nie przywracają sterownika iAP2 z v1.4.
+**Z v1.8.0:** 2 („already installed”), 3, jeśli używasz Android Auto (feeder v17 na miejscu, wybrane wyjście zostaje), 4
+(JAR prowadzenia po trasie i skrypt startowy `lsd.sh` na miejscu; `sl`, `ui` i tryb ograniczeń prędkości zostają); potem
+restart (start próbny), podłącz telefon i 5 (albo „Save” na stronie ustawień) w tym starcie.
 **Z v1.7.0 albo v1.7.1:** 2 („already installed”), 3, jeśli używasz Android Auto (nowy zestaw Android Auto na miejscu,
 wybrane wyjście zostaje), 4 (paczki Java dostają nowe nazwy plików na miejscu; `sl`, `ui` i tryb ograniczeń prędkości
 zostają); potem restart (start próbny), telefon i 5 (albo „Save” na stronie ustawień) w tym starcie.
@@ -233,9 +236,10 @@ Wyjście: „AA output: pmcp MOST writer (default, from the next connection)” 
 from the next connection)” w `aa_advanced` (także na stronie ustawień). Działa od następnego podłączenia telefonu, bez
 restartu i bez 5.
 
-Znany problem i ograniczenia:
-- po wyjściu z Android Auto na ekranie głównym i powrocie telefon może zwolnić obraz na AID, a rzadko go zatrzymać (AID
-  pokazuje ekran ładowania): podłącz telefon ponownie;
+Ograniczenia:
+- znany problem z v1.8.0 (AID gubił mapę Android Auto, gdy telefon nie wysyłał obrazu przez około 15-18 s, np. po dłuższym
+  czasie na innym ekranie głównym) poprawia v1.9.0 (feeder v17); gdyby AID nadal pokazał ekran ładowania, podłącz
+  telefon ponownie;
 - strumień rusza około 5 s po podłączeniu telefonu;
 - brak strzałki VW na pierwszym kroku trasy;
 - nazwa drogi to to, co Google Maps wysyła jako drogę: na niektórych krokach jest to kierunek („w kierunku: …”) albo

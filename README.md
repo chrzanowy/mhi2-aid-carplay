@@ -32,7 +32,7 @@ This repository holds only what is specific to this head unit. It builds on the 
 | Track title and artist on the AID (CarPlay; Android Auto since v1.7.0) | works |
 | Day/night switching of the cluster map | works |
 | Speed limit from the phone (`showSpeedLimit=yes`) | shows nothing on this unit |
-| Android Auto 1.1 (since v1.7.0; 1.0 in v1.6.0, 0.1 open alpha in v1.5.x): Google Maps picture on the AID through pmcp's own MOST writer, VW arrows from Google Maps; road name, lanes and destination while the AID does not show the Android Auto map | works, with one known issue: [Android Auto](#android-auto-on-the-aid-android-auto-11) |
+| Android Auto 1.1 (since v1.7.0; 1.0 in v1.6.0, 0.1 open alpha in v1.5.x): Google Maps picture on the AID through pmcp's own MOST writer, VW arrows from Google Maps; road name, lanes and destination while the AID does not show the Android Auto map | works (limits: [Android Auto](#android-auto-on-the-aid-android-auto-11)) |
 | Settings page on the unit (v1.5.1, package `ui`): App-Connect > Settings > AID navigation configuration; "Save: everything works" confirms a trial start without the SD card | new in v1.5.1, [details](ui/README.md) |
 | Optional (v1.4.1, package `sl`; mode buttons fixed in v1.4.2 by amjad-alarori, mode set on the settings page since v1.5.1): the car's own VW map speed limit in front of the street name, or a trial in CurrentPositionInfo | 50 → 70 km/h confirmed on an e-Golf (AID 795A); not yet tried on AID 791. [Details](docs/en/16-native-speed-limits.md) |
 
@@ -119,6 +119,9 @@ changed" (a card with the same features), nothing changed: no restart and no 5 n
 (`rglu`, `rg`, the experimental `rg-aa` → this card's `rg`) by this card's. Button 3 updates an earlier experimental
 card's Android Auto that it knows in place and replaces Android Auto it does not support by this card's. Make a new
 card 2 as well when coming from v1.0-v1.3: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
+**From v1.8.0:** 2 ("already installed"), 3 if you use Android Auto (feeder v17 in place, the chosen output stays), 4
+(the route guidance JAR and the start script `lsd.sh` in place; `sl`, `ui` and the speed-limit mode stay); then restart
+(trial start), connect the phone and 5 (or "Save" on the settings page) in that start.
 **From v1.7.0 or v1.7.1:** 2 ("already installed"), 3 if you use Android Auto (the new Android Auto set in place, the
 chosen output stays), 4 (the Java packages move to their new file names in place; `sl`, `ui` and the speed-limit mode
 stay); then restart (trial start), connect the phone and 5 (or "Save" on the settings page) in that start.
@@ -252,9 +255,10 @@ Output: "AA output: pmcp MOST writer (default, from the next connection)" or "AA
 the next connection)" in `aa_advanced` (also on the settings page). It applies at the next phone connection, with no
 restart and no 5.
 
-Known issue and limits:
-- after leaving Android Auto on the main screen and coming back, the phone may slow the AID picture down and, rarely,
-  stop it (the AID shows its loading screen): plug the phone in again;
+Limits:
+- the v1.8.0 known issue (the AID lost the Android Auto map after the phone sent no picture for about 15-18 s, for
+  example after a long time on another main screen) is fixed in v1.9.0 by feeder v17; should the AID still show its
+  loading screen, plug the phone in again;
 - the stream starts about 5 s after the phone connects;
 - no VW arrow at the very first step of a route;
 - the road name is what Google Maps sends as the road: at some steps that is its direction text ("towards …") or the

@@ -47,8 +47,26 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
   does not starve the bridge (after tomasz-twardzicki MU1367 v1.5.3). `events.log` is now rotated like the bridge's
   log (`events.log.1`, both together at most 64 KB) instead of stopping at 64 KB; "CP save log" includes both files.
 
-## Unreleased (release-candidate)
+## v1.9.0 (2026-11-22)
 
+Installer version `pmcp-0.9.0-mu1161-791-<build id>`. Tested in the car on 2026-11-22 with an experimental card of this
+tree (0f0b4875): CarPlay with route guidance and Android Auto on the AID, the Java set and the AA set confirmed, the
+earlier `lsd.sh` replaced in place with one trial start. The release card has none of the experimental buttons.
+
+**Updating from v1.8.0:** 2 ("already installed"), 3 if you use Android Auto (feeder v17 in place, the chosen output
+stays), 4 (the route guidance JAR and `lsd.sh` in place); then restart (trial start), connect the phone and 5 in that
+start.
+
+- **Route guidance accepts display component 1 as well as 16:** the iAP2 route-guidance messages are no longer dropped
+  when the phone addresses them to component 1 (reported for wireless CarPlay); other components are still dropped.
+  Cable CarPlay (component 16) is unchanged. `rg` JAR `2f244229…` (was `308714b2…`).
+- **Earlier `lsd.sh` replaced in place:** the installer now knows the `lsd.sh` of v1.4.2-v1.8.0 (history `lsd_known`); an
+  earlier one with a consistent Java set counts as installed ("7. Status" names it) and "4. Install additional features"
+  replaces it in place, with one trial start. The new `lsd.sh` block also tries to make the link `/dev/pmcp-isoTX2` →
+  `/dev/mlb/isoTX2` at every start (preparation for a later MOST release; nothing uses it, the VW encoder keeps its
+  factory path; in the car the link is not created yet, which changes nothing for this release).
+  "8. Remove everything", the last "Java off", main menu 4's reset and the rescue card put the factory
+  `displaymanager.json` back from the verified copy (no change on units where it was never changed).
 - **Android Auto feeder v17 (map lost on the instrument cluster):** standing still, the phone sends the cluster picture
   only when it changes and can stay silent for 18 s; after about 15 s without a frame the cluster dropped the AA map and
   kept retrying every 5 s until the phone was plugged in again (the known issue of v1.8.0). The feeder now gives the

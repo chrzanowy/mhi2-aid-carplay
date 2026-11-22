@@ -112,8 +112,8 @@ CZĘŚĆ 2 - W AUCIE
   Żeby usunąć wszystko: "8. Remove everything (back to factory files)", potem restart.
   "7. Status (read-only)" pokazuje, co jest zainstalowane.
 
-  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.7.1):
-    Z v1.7.x: 2 pisze "already installed"; 3 (Android Auto) i 4 aktualizują na miejscu,
+  AKTUALIZACJA z wcześniejszej wersji (v1.0 - v1.8.0):
+    Z v1.7.x albo v1.8.0: 2 pisze "already installed"; 3 (Android Auto) i 4 aktualizują na miejscu,
     więc kroki 5 i 6 są potrzebne.
     1. Zrób KARTĘ 1 z tej paczki. W aucie: "1. Check card and unit (read-only)".
        Oczekiwane: PMCP_VERIFY_OK state=JAVA. "7. Status (read-only)" może pokazać
