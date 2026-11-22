@@ -58,6 +58,9 @@ NAI=$(jid nai); NP=$(jid np); RG=$(jid rg); ZOOM=$(jid zoom); DN=$(jid dn); UI=$
 jf() { sed -n "s#^JAR_$1 [0-9a-f]* [0-9]* jars/##p" "$SDB/pmcp/pmcp.sh"; }
 NPF=$(jf np); RGF=$(jf rg); ZOOMF=$(jf zoom); DNF=$(jf dn); SLF=$(jf sl); UIF=$(jf ui)
 msha() { sed -n "s/^$1 \([0-9a-f]*\) .*/\1/p" "$SDB/pmcp/pmcp.sh"; }
+# the dio_manager wrapper button 2 installs: pmcp-most's (writes the MOST owner) on cards with pmcp-most (A227), else
+# mathsls's (8c12f697 since v1.0)
+WR_LIVE=$(msha PMCP_MOST_WRAPPER); [ -n "$WR_LIVE" ] || WR_LIVE=$(msha WRAPPER)
 # A188: make this card's package $1 in the unit's set an "earlier card's" version. Part name $2 (default $1, e.g. rgluasfm
 # for a renamed package), JAR file $3 (default pmcp-<name>-old.jar), content one byte longer and sha8 0a1b2c3d, or with
 # $4=same the same content under the other file name (an earlier card's name for this card's package). The set's
@@ -286,7 +289,7 @@ PY
     run install map-clean; rc_is 0; expect_out "PMCP_INSTALL_OK stage=A variant=map-clean" "install ok"
     [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = $STOCK_LSD ] && ok "lsd.sh still factory" || bad "lsd.sh changed in stage A"
     [ ! -e "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" ] && ok "no NAI jar in stage A" || bad "NAI jar in stage A"
-    [ "$(h "$U/eso/bin/apps/dio_manager")" = 8c12f6974adf9c8c9eb746e7d033e7fb35a9605e49c31ff2129e8ba938b2633d ] && ok "dio_manager is wrapper" || bad "dio_manager"
+    [ "$(h "$U/eso/bin/apps/dio_manager")" = "$WR_LIVE" ] && ok "dio_manager is this card's default wrapper" || bad "dio_manager"
     [ "$(h "$U/carplaymaps/stock_first/dio_manager.real")" = 609e42723ab3e36c7be5ceade81e03672ba4acd251f8eeb8b100e074aaf3c250 ] && ok "factory dio saved" || bad "factory dio copy"
     [ "$(h "$U/carplaymaps/core.so")" = c5f4870427d6d24bf78908497beb27e4e881d64374b58c564e7395d809efe2f4 ] && ok "core.so map-clean" || bad "core.so"
     [ -e "$U/carplaymaps/CLUSTER_AUTO_ENABLE" ] && ok "auto-enable marker" || bad "marker"
@@ -689,7 +692,7 @@ PY
     [ "$(h "$U/eso/hmi/lsd/lsd.sh")" = $STOCK_LSD ] && ok "JAVA unit: factory lsd.sh back" || bad "lsd.sh not restored"
     [ ! -e "$U/eso/hmi/lsd/jars/NavActiveIgnore.jar" ] && ok "JAR removed" || bad "JAR left"
     [ -e "$W/unit/mnt/persist/pmcp/DISABLED" ] && ok "DISABLED written" || bad "no DISABLED"
-    [ -e "$U/carplaymaps/core.so" ] && [ "$(h "$U/eso/bin/apps/dio_manager")" = 8c12f6974adf9c8c9eb746e7d033e7fb35a9605e49c31ff2129e8ba938b2633d ] \
+    [ -e "$U/carplaymaps/core.so" ] && [ "$(h "$U/eso/bin/apps/dio_manager")" = "$WR_LIVE" ] \
         && ok "video part left in place" || bad "video part touched"
     grep -q "RESULT=OK" "$W/med/PMCP_RESCUE_LOG.txt" && ok "RESULT=OK" || bad "no RESULT=OK"
     run restore; rc_is 0; expect_out "PMCP_RESTORE_OK" "GEM restore after rescue"
@@ -755,7 +758,7 @@ PY
     o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*"$RGF"*"$DNF:/X/lsd/jars/$UIF") ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$ALL" "one confirm for everything"
     allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
-    grep -q "PMCP_FAIL" "$W/out" && bad "second press prints PMCP_FAIL for skipped steps (A222)" || ok "second press: no PMCP_FAIL line for skipped steps"
+    grep -q "^ *PMCP_FAIL=" "$W/out" && bad "second press prints PMCP_FAIL for skipped steps (A222)" || ok "second press: no PMCP_FAIL line for skipped steps"
     expect_out "(nothing to do, skipped)" "second press: skipped steps say so"
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "remove everything: factory state"
     [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37 ] && ok "factory iap2.cfg back" || bad "cfg after restore"

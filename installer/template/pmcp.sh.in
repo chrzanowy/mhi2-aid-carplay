@@ -1714,6 +1714,7 @@ do_cp_log_save() {
     _l_f="$ROOT/logs/cp-log-$_l_n.txt"
     rm -f "$_l_f.pmcp-new" 2>/dev/null
     _l_br=`bridge_active`; _l_bm=`cat "$BRIDGE_MARK" 2>/dev/null`; _l_bw=`bridge_wanted`
+    _l_bc="card default"; [ -n "$_l_bm" ] && _l_bc="chosen by the user"
     if ! { echo "pmcp $PMCP_VERSION cp-log-save `date 2>/dev/null`"
            echo "--- state: $STATE (map $MAPOK, Java $JAVAPART, route guidance $RGSYS, Android Auto $AASYS)"
            [ -n "$STATE_WHY" ] && echo "    $STATE_WHY"
@@ -1742,7 +1743,7 @@ do_cp_log_save() {
            # MOST bridge: which one, pmcp-most's event file (32 KB + one older .1, from all bridge runs
            # of this start), its own log (64 KB + one older .1, written by the bridge) and the contract files
            # (owner, wired.session, the bridge's consumer status), all in /ramdisk of this start
-           echo "--- MOST bridge: ${_l_br:-not a file of this card} (wanted: $_l_bw, ${_l_bm:+chosen by the user}${_l_bm:-card default}); supervisor: `sup_active`"
+           echo "--- MOST bridge: ${_l_br:-not a file of this card} (wanted: $_l_bw, $_l_bc); supervisor: `sup_active`"
            for _l_x in pmcp-most/events.log.1 pmcp-most/events.log pmcp-most/bridge.log.1 pmcp-most/bridge.log pmcp-most/sup.log.1 pmcp-most/sup.log most-src/owner most-src/wired.session most-src/wireless.session most-src/isotx2 most-src/consumer; do
                [ -s "$RAMDISK/$_l_x" ] || continue
                echo "--- $_l_x (first 2000 lines)"; sed -n '1,2000p' "$RAMDISK/$_l_x" 2>/dev/null
