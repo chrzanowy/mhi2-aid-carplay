@@ -54,6 +54,12 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
   until the next phone session. The feeder's guardian now starts before the channel is taken, so it always gives it
   back. Found by the car simulator; host test added. New AA set: one trial start, then "5. Confirm". Feeder `b574ffe9…`
   (was `7a578e1a…`).
+- **Main menu 4 and 10: steps with nothing to do are no longer shown as PMCP_FAIL:** an already-done step
+  (`*_ALREADY_*`) prints "(nothing to do, skipped)" only; before, every such step printed a `PMCP_FAIL=…ALREADY…` line
+  although the whole button succeeded.
+- **MOST supervisor (experimental cards): `ln` is `/bin/ln`:** MU1161 has no `/proc/boot/ln` (in the car the link step
+  ended with status 127); a missing `ln` is logged as `dm-link-make-failed no-ln` and the giveback goes on. Binary
+  `a545d5b1` (was `5abcab20`).
 
 ## v1.9.0 (2026-11-22)
 
