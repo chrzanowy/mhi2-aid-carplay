@@ -240,56 +240,49 @@ The rescue card is for emergencies after Confirm; testing it first is optional.
 
 Step-by-step guide for the car: [09-in-car-guide.md](09-in-car-guide.md).
 
-## Experimental: own MOST bridge (pmcp-most)
+## Own MOST bridge (pmcp-most), default since v2.0
 
-Experimental cards only (`PMCP_BUILD_EXPERIMENTAL=1`); a release card has none of this (no button, no payload, no code:
-its `pmcp.sh` and build id are the same as without it). Background: `bridge/README.md`.
+Every MU1161 card (A227; until v1.9.0 experimental cards only). Background: `bridge/README.md`, `docs 23`. Confirmed in
+the car on 2026-11-22 (A222) with an experimental card: CarPlay over the cable and over wireless (WL), no dropped frames,
+the MOST channel back to the VW map after the phone left. Still open before the release: a cold start and the cable
+unplug test without the WL receiver.
 
-- Payload: `PMCP_MOST` = our build of the bridge (`bridge/build.sh`, pinned in `build_sd.py` `PMCP_MOST_PIN`) and
-  `PMCP_MOST_WRAPPER` = `installer/pmcp-most/dio_manager.wrapper.sh`, mathsls's `dio_manager.wrapper.sh` unchanged plus
-  one block before the `exec`: it writes the MOST contract owner `v=1 src=wired pid=<its pid> gen=<previous+1, 0
-  skipped> since_ms=0 kind=proxy` and `wired.session` (`v=1 state=start gen=<same> pid=<same> ts_ms=0 reason=start`)
-  to `/ramdisk/most-src/` (tmp + rename). The `exec` keeps the pid, so the owner lives as long as dio_manager. The
-  unit shell has no millisecond clock, so the times are 0 (the contract's 10 s age rule then does not apply).
-- GEM `pmcp_advanced` → `experimental` (experimental cards only): "Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)" and
-  "Bridge: use mathsls (default MOST bridge; from the next phone connection)" (`pmcp.sh bridge pmcp-most|mathsls`).
-  No trial, no Confirm. The mathsls supervisor starts `/mnt/app/carplaymaps/altscreen-most-bridge` (fixed path, no
-  arguments) at each start of the map stream; the button puts the chosen verified binary there with one rename, so it
-  runs from the next phone connection. pmcp-most also gets its wrapper (from the next unit start). mathsls puts the
-  mathsls wrapper back: the default is exactly the release card's file set.
-- Kept on the unit: `carplaymaps/bridge/` (both bridges and the pmcp-most wrapper, verified; the source of every switch).
-  Choice: marker `/mnt/persist/pmcp/most-bridge` (`pmcp-most`; none = mathsls). "7. Status" shows the active bridge
-  with its sha8, the wrapper, the choice and this start's bridge status (`/ramdisk/most-src/consumer`).
-- "CP save log" adds `/ramdisk/pmcp-most/bridge.log.1`, `bridge.log`, and `most-src/owner`, `wired.session` and
-  `consumer`. These files are in `/ramdisk`, so "9. Delete saved logs" has nothing new to delete.
-- "8. Remove everything" removes it all (carplaymaps, the marker); the tree is the factory one again. "2. Install
-  CarPlay" keeps the chosen bridge. A release card sees the pmcp-most wrapper as mixed map files (its 2 then removes
-  everything and installs again): press "Bridge: use mathsls" before going back to a release card.
-- Power loss during a switch: the supervisor's path always holds one of the two verified bridges, dio_manager one of
-  the two verified wrappers (`fault_inject.sh`, `PMCP_FAULT_SCOPE=bridge`); the same button again finishes it.
-- "Bridge status: which bridge, owner, last lines of its log (read-only)" (`pmcp.sh bridge-status`), on the same
-  screen: the bridge lines of "7. Status", this start's `owner` and `wired.session` and the last 15 lines of
-  `pmcp-most/bridge.log`. It changes nothing. The screen also has "AA record" (moved from `aa_advanced`).
-- Tests: `run_tests.sh` section [57] (release card: none of it; experimental card: switch both ways, wrapper lines,
-  CarPlay log, restore exact).
-
-### Experimental: the VW encoder's MOST path (MOST supervisor stage 5)
-
-The factory VW encoder (`/eso/bin/apps/displaymanager`) writes the cluster map to the MOST channel `/dev/mlb/isoTX2`;
-the path comes from `/etc/eso/production/displaymanager.json` (`most_encoder.device`), read once at its start. It
-checks the path with `access()` before every open: a missing path = no open, no hardware encoder start, one log line.
-
-- Every card: the lsd.sh block runs `ln -Ps /dev/mlb/isoTX2 /dev/pmcp-isoTX2` at every start (first line of the block,
-  outside every condition, also in update mode and with `DISABLED`). Nothing uses the link while the json is factory.
-- `pmcp.sh dm-path pmcp` (experimental cards, state JAVA): the factory json is checked and kept in
-  `carplaymaps/rollback/displaymanager.json`, then our json (only that line changed, one byte longer) is staged,
-  verified and renamed into place. From the next unit start the encoder opens the channel only through the link.
-  `dm-path factory` puts the verified factory file back.
-- `pmcp.sh dm-link drop|make`: this start only (the process manager's namespace). An encoder that already holds the
-  channel keeps it until the next AID view change.
-- `pmcp.sh dm-diag`: read-only; path, link, `pidin` of the encoder, its `sloginfo` lines; saved to `logs/dm-diag-N.txt`.
-- The factory json comes back (when ours: copy in rollback/) in restore, before the factory lsd.sh in the last
-  `java-off` and in main menu 4's reset, and on the rescue card (by size: factory 5983 B, ours 5984 B).
+- Payload: `PMCP_MOST` = our bridge, `PMCP_MOST_SUP` = our MOST supervisor (prebuilt and pinned in `bridge/prebuilt/`,
+  so `install.sh` needs no QNX toolchain) and `PMCP_MOST_WRAPPER` = `installer/pmcp-most/dio_manager.wrapper.sh`,
+  mathsls's `dio_manager.wrapper.sh` unchanged plus one block before the `exec`: it writes the MOST contract owner
+  `v=1 src=wired pid=<its pid> gen=<previous+1, 0 skipped> since_ms=0 kind=proxy` and `wired.session`
+  (`v=1 state=start gen=<same> pid=<same> ts_ms=0 reason=start`) to `/ramdisk/most-src/` (tmp + rename). The `exec`
+  keeps the pid, so the owner lives as long as dio_manager. mathsls's bridge, supervisor and wrapper stay on the card as
+  the fallback.
+- "2. Install CarPlay" on a factory unit installs pmcp-most, its wrapper and our supervisor (at the paths the wrappers
+  use: `carplaymaps/altscreen-most-bridge`, `carplaymaps/carplay-cluster-supervisor`), with verified copies of all five
+  files in `carplaymaps/bridge/`. On an install of an earlier card (mathsls, no choice) it puts the pmcp-most set in
+  place and says so; then restart (the wrapper is read once per unit start).
+- GEM `pmcp_advanced` → `diagnostics`: "Bridge: pmcp-most (default, own MOST bridge; from the next phone connection)",
+  "Bridge: mathsls (fallback; from the next phone connection)" (`pmcp.sh bridge pmcp-most|mathsls`) and "Bridge status
+  (read-only)" (`pmcp.sh bridge-status`). A Bridge button puts the bridge, its wrapper and the matching supervisor in
+  place (pmcp-most → ours, mathsls → mathsls's), each with one verified rename; it stops a running supervisor whose file
+  changed (it gives the MOST channel back). No trial, no Confirm; from the next phone connection, the wrapper from the
+  next unit start.
+- Choice: `/mnt/persist/pmcp/most-bridge` (`pmcp-most` or `mathsls`; none = the card's default, pmcp-most). "2. Install
+  CarPlay" keeps it; "10. Reinstall" brings a choice of mathsls back after its step 2. "7. Status" shows the active
+  bridge with its sha8, the wrapper, the supervisor, what is wanted and this start's bridge status
+  (`/ramdisk/most-src/consumer`).
+- The VW encoder keeps its factory MOST path: the supervisor takes the channel from it and gives it back with `dmdt`.
+  The encoder path through our link (`dm-path`) stays on experimental cards only (A226).
+- Experimental cards also have "MOST supervisor: pmcp|mathsls" on its own (`pmcp.sh most-sup`, kept in
+  `/mnt/persist/pmcp/most-sup`); a Bridge button sets the matching supervisor again.
+- "CP save log" adds `/ramdisk/pmcp-most/events.log.1`, `events.log`, `bridge.log.1`, `bridge.log`, `sup.log.1`,
+  `sup.log` and `most-src/owner`, `wired.session`, `wireless.session`, `isotx2`, `consumer`. These files are in
+  `/ramdisk` and rotated by the bridge and the supervisor, so "9. Delete saved logs" has nothing new to delete.
+- Android Auto's output "CarPlay bridge" (ring) starts whichever bridge is at `carplaymaps/altscreen-most-bridge`;
+  pmcp-most accepts AA's guardian as its parent (the ring mode) and backs off from a live AA holder of the channel.
+- "8. Remove everything" removes it all (carplaymaps, the markers); the tree is the factory one again.
+- Power loss during a switch or during 2: the supervisor's path always holds one of the two verified bridges,
+  `carplay-cluster-supervisor` one of the two verified supervisors, dio_manager one of the two verified wrappers
+  (`fault_inject.sh`, `PMCP_FAULT_SCOPE=bridge`); the same button again finishes it.
+- Tests: `run_tests.sh` section [57] (default install, switch both ways, an earlier card's install, wrapper lines,
+  CarPlay log, restore exact; experimental: most-sup).
 
 ## Host tests
 

@@ -20,6 +20,7 @@ This repository holds only what is specific to this head unit. It builds on the 
 | Feature | Status |
 |---|---|
 | CarPlay map video on the AID (Apple Maps, Google Maps), big and small dial layouts | works |
+| Own MOST bridge pmcp-most with its MOST supervisor (default from v2.0; mathsls's bridge stays as the fallback: pmcp_advanced, diagnostics, "Bridge: mathsls") | in the car since 2026-11-22 (cable and wireless); cold start still to be tried ([details](docs/en/07-installer.md#own-most-bridge-pmcp-most-default-since-v20)) |
 | NavActiveIgnore: the head unit no longer stops or blocks phone navigation | works |
 | Native VW guidance from the iPhone: distance and time to destination on the VW bar and in the left dial | works |
 | Native turn arrow and distance to the manoeuvre (appears once the car moves) | works |
@@ -119,6 +120,9 @@ changed" (a card with the same features), nothing changed: no restart and no 5 n
 (`rglu`, `rg`, the experimental `rg-aa` → this card's `rg`) by this card's. Button 3 updates an earlier experimental
 card's Android Auto that it knows in place and replaces Android Auto it does not support by this card's. Make a new
 card 2 as well when coming from v1.0-v1.3: rescue cards made before v1.4 do not restore the v1.4 iAP2 driver.
+**From v1.9.0 (release-candidate, v2.0):** 2 puts our MOST bridge pmcp-most with its supervisor in place ("MOST bridge: pmcp-most
+(this card's default; was mathsls)"); restart. "Bridge: mathsls (fallback)" in pmcp_advanced, diagnostics goes back,
+and 2 keeps that choice.
 **From v1.8.0:** 2 ("already installed"), 3 if you use Android Auto (feeder v17 in place, the chosen output stays), 4
 (the route guidance JAR and the start script `lsd.sh` in place; `sl`, `ui` and the speed-limit mode stay); then restart
 (trial start), connect the phone and 5 (or "Save" on the settings page) in that start.

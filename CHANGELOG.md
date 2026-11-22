@@ -49,6 +49,15 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (release-candidate)
 
+- **Own MOST bridge pmcp-most is the default (v2.0 candidate, A227):** every MU1161 card carries pmcp-most, our MOST
+  supervisor and the pmcp-most dio_manager wrapper (prebuilt and pinned in `bridge/prebuilt/`, so `install.sh` needs no
+  QNX toolchain). "2. Install CarPlay" installs them; on an earlier card's install (mathsls) it puts them in place
+  (restart). "Bridge: mathsls (fallback; from the next phone connection)" in `pmcp_advanced` → `diagnostics` goes back
+  (bridge, wrapper and mathsls's supervisor), "Bridge: pmcp-most (default, ...)" forward, "Bridge status (read-only)"
+  shows it; 2 and 10 keep the choice. The VW encoder keeps its factory MOST path (dm-path stays experimental, A226).
+  "CP save log" includes the bridge and supervisor logs on every card. Confirmed in the car on 2026-11-22 with an
+  experimental card (cable and wireless, the VW map back after the phone left); a cold start and the cable unplug test
+  without the WL receiver are still open.
 - **Android Auto feeder v18 (MOST given back when gal dies in the first second):** if the AA feeder was killed right
   after it had taken the MOST channel and before the picture started, nobody gave the channel back: the AID stayed black
   until the next phone session. The feeder's guardian now starts before the channel is taken, so it always gives it

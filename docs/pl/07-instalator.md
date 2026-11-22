@@ -238,39 +238,42 @@ Karta ratunkowa jest na awarię po potwierdzeniu; wcześniejszy test jest opcjon
 
 Szczegółowy przewodnik po kolejnych krokach w aucie: [09-tutorial-w-aucie.md](09-tutorial-w-aucie.md).
 
-## Eksperymentalnie: własny most MOST (pmcp-most)
+## Własny most MOST (pmcp-most), domyślny od v2.0
 
-Tylko karty eksperymentalne (`PMCP_BUILD_EXPERIMENTAL=1`); karta wydania nie ma nic z tego (bez przycisku, payloadu
-i kodu: jej `pmcp.sh` i id buildu są takie same jak bez tej zmiany). Tło: `bridge/README.md`.
+Każda karta MU1161 (A227; do v1.9.0 tylko karty eksperymentalne). Tło: `bridge/README.md`, `docs 23`. Potwierdzone w
+aucie 2026-11-22 (A222) kartą eksperymentalną: CarPlay po kablu i bez kabla (WL), bez zgubionych klatek, kanał MOST
+wraca do mapy VW po odejściu telefonu. Przed wydaniem otwarte: zimny start i test odłączenia kabla bez odbiornika WL.
 
-- Payload: `PMCP_MOST` = nasz build mostu (`bridge/build.sh`, pin w `build_sd.py` `PMCP_MOST_PIN`) i
-  `PMCP_MOST_WRAPPER` = `installer/pmcp-most/dio_manager.wrapper.sh`, czyli `dio_manager.wrapper.sh` mathsls bez zmian
-  plus jeden blok przed `exec`: zapisuje właściciela kontraktu MOST `v=1 src=wired pid=<swój pid> gen=<poprzedni+1, bez
-  0> since_ms=0 kind=proxy` i `wired.session` (`v=1 state=start gen=<ten sam> pid=<ten sam> ts_ms=0 reason=start`) do
-  `/ramdisk/most-src/` (tmp + rename). `exec` zachowuje pid, więc właściciel żyje tyle co dio_manager. Powłoka radia nie
-  ma zegara w milisekundach, więc czasy to 0 (reguła 10 s z kontraktu wtedy nie obowiązuje).
-- GEM `pmcp_advanced` → `experimental` (tylko karty eksperymentalne): „Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)” i
-  „Bridge: use mathsls (default MOST bridge; from the next phone connection)” (`pmcp.sh bridge pmcp-most|mathsls`).
-  Bez triala i bez Confirm. Supervisor mathsls uruchamia `/mnt/app/carplaymaps/altscreen-most-bridge` (stała ścieżka,
-  bez argumentów) przy każdym starcie strumienia mapy; przycisk wstawia tam wybraną, sprawdzoną binarkę jednym rename,
-  więc działa od następnego podłączenia telefonu. pmcp-most dostaje też swój wrapper (od następnego startu radia).
-  mathsls przywraca wrapper mathsls: domyślny stan to dokładnie zestaw plików karty wydania.
-- Na radiu zostaje `carplaymaps/bridge/` (oba mosty i wrapper pmcp-most, sprawdzone; źródło każdego przełączenia).
-  Wybór: znacznik `/mnt/persist/pmcp/most-bridge` (`pmcp-most`; brak = mathsls). „7. Status” pokazuje aktywny most
-  z sha8, wrapper, wybór i status mostu z tego startu (`/ramdisk/most-src/consumer`).
-- „CP save log” dokłada `/ramdisk/pmcp-most/bridge.log.1`, `bridge.log` oraz `most-src/owner`, `wired.session`
-  i `consumer`. Te pliki są w `/ramdisk`, więc „9. Delete saved logs” nie ma nic nowego do usuwania.
-- „8. Remove everything” usuwa wszystko (carplaymaps, znacznik); drzewo jest znowu fabryczne. „2. Install CarPlay”
-  zostawia wybrany most. Karta wydania widzi wrapper pmcp-most jako pomieszane pliki mapy (jej 2 usuwa wtedy wszystko
-  i instaluje od nowa): przed powrotem do karty wydania naciśnij „Bridge: use mathsls”.
-- Utrata zasilania w trakcie przełączania: na ścieżce supervisora zawsze jest jeden z dwóch sprawdzonych mostów,
-  a dio_manager to jeden z dwóch sprawdzonych wrapperów (`fault_inject.sh`, `PMCP_FAULT_SCOPE=bridge`); ten sam przycisk
-  naciśnięty jeszcze raz kończy przełączenie.
-- „Bridge status: which bridge, owner, last lines of its log (read-only)” (`pmcp.sh bridge-status`) na tym samym
-  ekranie: linie mostu z „7. Status”, `owner` i `wired.session` tego startu oraz 15 ostatnich linii
-  `pmcp-most/bridge.log`. Niczego nie zmienia. Na tym ekranie jest też „AA record” (przeniesione z `aa_advanced`).
-- Testy: `run_tests.sh` sekcja [57] (karta wydania: nic z tego; karta eksperymentalna: przełączenie w obie strony,
-  linie wrappera, log CP, dokładny powrót do fabryki).
+- Payload: `PMCP_MOST` = nasz most, `PMCP_MOST_SUP` = nasz nadzorca MOST (zbudowane i przypięte w `bridge/prebuilt/`,
+  więc `install.sh` nie potrzebuje narzędzi QNX) oraz `PMCP_MOST_WRAPPER` = `installer/pmcp-most/dio_manager.wrapper.sh`,
+  czyli `dio_manager.wrapper.sh` mathsls bez zmian plus jeden blok przed `exec`: zapisuje właściciela kontraktu MOST
+  `v=1 src=wired pid=<swój pid> gen=<poprzedni+1, bez 0> since_ms=0 kind=proxy` i `wired.session` do
+  `/ramdisk/most-src/` (tmp + rename). Most, nadzorca i wrapper mathsls zostają na karcie jako zapas.
+- „2. Install CarPlay” na fabrycznym radiu instaluje pmcp-most, jego wrapper i naszego nadzorcę (pod ścieżkami, których
+  używają wrappery), ze sprawdzonymi kopiami wszystkich pięciu plików w `carplaymaps/bridge/`. Na instalacji wcześniejszej
+  karty (mathsls, bez wyboru) wstawia zestaw pmcp-most i to wypisuje; potem restart (wrapper czytany raz na start radia).
+- GEM `pmcp_advanced` → `diagnostics`: „Bridge: pmcp-most (default, own MOST bridge; from the next phone connection)”,
+  „Bridge: mathsls (fallback; from the next phone connection)” (`pmcp.sh bridge pmcp-most|mathsls`) i „Bridge status
+  (read-only)” (`pmcp.sh bridge-status`). Przycisk Bridge wstawia most, jego wrapper i pasującego nadzorcę (pmcp-most →
+  nasz, mathsls → mathsls), każdy jednym sprawdzonym przemianowaniem; zatrzymuje działającego nadzorcę, którego plik się
+  zmienił (oddaje kanał MOST). Bez próby i bez Confirm; od następnego podłączenia telefonu, wrapper od następnego startu.
+- Wybór: `/mnt/persist/pmcp/most-bridge` (`pmcp-most` albo `mathsls`; brak = domyślny karty, pmcp-most). „2. Install
+  CarPlay” go zostawia; „10. Reinstall” przywraca wybór mathsls po swoim kroku 2. „7. Status” pokazuje aktywny most z
+  sha8, wrapper, nadzorcę, co jest wybrane i stan mostu w tym starcie (`/ramdisk/most-src/consumer`).
+- Enkoder VW zostaje przy fabrycznej ścieżce MOST: nadzorca zabiera mu kanał i oddaje przez `dmdt`. Ścieżka enkodera
+  przez nasze dowiązanie (`dm-path`) zostaje tylko na kartach eksperymentalnych (A226).
+- Karty eksperymentalne mają też osobno „MOST supervisor: pmcp|mathsls” (`pmcp.sh most-sup`, zapis w
+  `/mnt/persist/pmcp/most-sup`); przycisk Bridge znów ustawia pasującego nadzorcę.
+- „CP save log” dokłada logi `/ramdisk/pmcp-most/` (events, bridge, sup, każdy z `.1`) i pliki `most-src/`. Leżą w
+  `/ramdisk` i są rotowane przez most i nadzorcę, więc „9. Delete saved logs” nie ma nic nowego do kasowania.
+- Wyjście Android Auto „CarPlay bridge” (ring) uruchamia most, który leży pod `carplaymaps/altscreen-most-bridge`;
+  pmcp-most przyjmuje strażnika AA jako rodzica (tryb ring) i ustępuje żywemu właścicielowi kanału AA.
+- „8. Remove everything” usuwa wszystko (carplaymaps, znaczniki); drzewo jest znowu fabryczne.
+- Zanik zasilania w trakcie przełączenia albo 2: pod ścieżką nadzorcy zawsze jeden z dwóch sprawdzonych mostów,
+  `carplay-cluster-supervisor` jeden z dwóch sprawdzonych nadzorców, dio_manager jeden z dwóch wrapperów
+  (`fault_inject.sh`, `PMCP_FAULT_SCOPE=bridge`); ten sam przycisk jeszcze raz kończy przełączenie.
+- Testy: `run_tests.sh` sekcja [57] (domyślna instalacja, przełączenie w obie strony, instalacja wcześniejszej karty,
+  linie wrappera, log CP, dokładny powrót do fabryki; eksperymentalnie: most-sup).
 
 ## Testy na hoście
 

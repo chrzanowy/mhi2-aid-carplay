@@ -173,26 +173,30 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", 1566, "aa/feeder.conf"),
 })
-# pmcp-most (bridge/, docs 23-wlasny-most.md): our build of the MOST bridge, experimental cards only, next to mathsls's
-# BRIDGE (pmcp.sh bridge mathsls|pmcp-most, GEM experimental; default mathsls). The ONE line to change after a rebuild:
-# bridge/build.sh OUTDIR prints the size and sha256; OUTDIR = <this project>/build/pmcp-most-<first 8 of the sha256>.
+# pmcp-most (bridge/, docs 23-wlasny-most.md): our build of the MOST bridge, every MU1161 card since v2.0 (A227), next to
+# mathsls's BRIDGE (pmcp.sh bridge pmcp-most|mathsls, GEM diagnostics; default pmcp-most). Prebuilt and pinned in
+# bridge/prebuilt (README there), so install.sh needs no QNX toolchain. The ONE line to change after a rebuild:
+# bridge/build.sh OUTDIR prints the size and sha256; copy the file to bridge/prebuilt.
 # Since 2026-11-16 (A203): stage 2 (PMCP_MOST_LIB=1, src/pmcp_most_lib.c on the AA MOST output library); stage 1c was 8c104a06.
 # 2026-11-18: stage 2 with thread priority 14 and the rotated event file (was 175eee71).
-PMCP_MOST_PIN = ("build/pmcp-most-93bad193/altscreen-most-bridge", "93bad193f7351eecdb6808e8ffd96ae5e8b31caf8e2ab08802e6d57e46dab79c", 38172)
-# MOST supervisor v1 (stage 5, bridge/src/pmcp_most_sup.c; PMCP_MOST_SUP=1 bridge/build.sh OUTDIR, OUTDIR =
-# <this project>/build/pmcp-most-sup-<first 8 of the sha256>): experimental cards only, pmcp.sh most-sup pmcp|mathsls
-PMCP_MOST_SUP_PIN = ("build/pmcp-most-sup-a545d5b1/pmcp-most-sup", "a545d5b1b5a95e42f62bf15770e0aeeaea267dc5a8f722e4ef76bf4b94920656", 22288)
-if IS_EXP and PROFILE_ID == "MU1161":
+PMCP_MOST_PIN = ("bridge/prebuilt/altscreen-most-bridge", "93bad193f7351eecdb6808e8ffd96ae5e8b31caf8e2ab08802e6d57e46dab79c", 38172)
+# MOST supervisor v1 (stage 5, bridge/src/pmcp_most_sup.c; PMCP_MOST_SUP=1 bridge/build.sh OUTDIR, then bridge/prebuilt):
+# every MU1161 card, it goes with pmcp-most (bridge pmcp-most|mathsls sets the matching supervisor); experimental cards
+# also have pmcp.sh most-sup pmcp|mathsls on its own
+PMCP_MOST_SUP_PIN = ("bridge/prebuilt/pmcp-most-sup", "a545d5b1b5a95e42f62bf15770e0aeeaea267dc5a8f722e4ef76bf4b94920656", 22288)
+if PROFILE_ID == "MU1161":
     PAYLOAD_BY_PROFILE["MU1161"].update({
         "PMCP_MOST": (PROJ / PMCP_MOST_PIN[0], PMCP_MOST_PIN[1], PMCP_MOST_PIN[2], "pmcp-most/altscreen-most-bridge"),
         "PMCP_MOST_SUP": (PROJ / PMCP_MOST_SUP_PIN[0], PMCP_MOST_SUP_PIN[1], PMCP_MOST_SUP_PIN[2], "pmcp-most/pmcp-most-sup"),
-        # the WL HMI hook (Java package wl, experimental only; see WL_JAR_PIN)
-        "JAR_wl": (PROJ / WL_JAR_PIN[0], WL_JAR_PIN[1], WL_JAR_PIN[2], "jars/pmcp-wl-%s.jar" % WL_JAR_PIN[1][:8]),
         # mathsls's WRAPPER + the contract owner block (src=wired kind=proxy, wired.session): live with pmcp-most only
         "PMCP_MOST_WRAPPER": (PROJ / "installer/pmcp-most/dio_manager.wrapper.sh",
                               "52031e8435dfed0329cb8d6fd83b6de184b0bee07529fa370c321c3e2d7d4859", 4301,
                               "pmcp-most/dio_manager.wrapper.sh"),
     })
+if IS_EXP and PROFILE_ID == "MU1161":
+    # the WL HMI hook (Java package wl, experimental only; see WL_JAR_PIN)
+    PAYLOAD_BY_PROFILE["MU1161"]["JAR_wl"] = (PROJ / WL_JAR_PIN[0], WL_JAR_PIN[1], WL_JAR_PIN[2],
+                                             "jars/pmcp-wl-%s.jar" % WL_JAR_PIN[1][:8])
 # Experimental AA set (AAX_FEEDER: an experimental feeder next to the stable one, pmcp.sh aa-on-exp, set id
 # gamma-<hook>-<that feeder>-<hook settings>): none since AA 1.0, whose stable set has the v13/v14 feeder. pmcp.sh keeps
 # the mechanism for the next experimental feeder: add the key here again (experimental builds only, own feeder file).
@@ -576,6 +580,12 @@ def menu_entries():
             ("speedlimit-status", "speedlimit-status", "Speed limit status: mode and native VW limit data (read-only)"),
             ]
     feat = [e for e in feat if not (e[0] == "speedlimit-status" and "sl" not in FW["packages"])]
+    # v2.0 (A227): the MOST bridge on every card with pmcp-most; each switch also sets the matching MOST supervisor; no
+    # card confirm, no trial (the supervisor starts the chosen bridge at the next phone connection)
+    if "PMCP_MOST" in PAYLOAD:
+        feat += [("bridge-pmcp-most", "bridge pmcp-most", "Bridge: pmcp-most (default, own MOST bridge; from the next phone connection)"),
+                 ("bridge-mathsls", "bridge mathsls", "Bridge: mathsls (fallback; from the next phone connection)"),
+                 ("bridge-status", "bridge-status", "Bridge status (read-only)")]
     onoff = ([("rg-system-on", "rg-system-on", "Route guidance system on (iAP2 driver, iap2.cfg, reader)"),
               ("rg-system-off", "rg-system-off", "Route guidance system off (factory iAP2 driver and iap2.cfg)")]
              if "rg" in FW["packages"] else []) + \
@@ -594,16 +604,12 @@ AA_MENU = [("aa-confirm", "aa-confirm", "AA Confirm: AA works (only in the start
            ("aa-status", "aa-status", "AA status and stream analysis (read-only)"),
            ("aa-log-save", "aa-log-save", "AA save log: copy this start's AA log to the unit (for the log card)"),
            ("aa-remove", "aa-remove", "AA remove (factory Android Auto back)")]
-# experimental builds only (empty on release cards): screen experimental, the MOST bridge switch and its status, then
-# the AA video record (A199, user 2026-11-15: the bridge serves CarPlay, Android Auto and wireless, so not aa_advanced)
+# experimental builds only (empty on release cards): screen experimental, the MOST supervisor on its own (the bridge
+# switch is on diagnostics on every card since v2.0), the VW encoder path, then the AA tests
 EXP_MENU = [] if not IS_EXP else ([
-    # the MOST bridge the CarPlay supervisor starts (also the AA output "CarPlay bridge"); no card confirm, no trial
-    ("bridge-pmcp-most", "bridge pmcp-most", "Bridge: use pmcp-most (experimental, new MOST bridge; from the next phone connection)"),
-    ("bridge-mathsls", "bridge mathsls", "Bridge: use mathsls (default MOST bridge; from the next phone connection)"),
-    ("bridge-status", "bridge-status", "Bridge status: which bridge, owner, last lines of its log (read-only)"),
-    # MOST supervisor v1 (stage 5): ours with pmcp-most only; "Bridge: use mathsls" puts mathsls's supervisor back too
-    ("most-sup-pmcp", "most-sup pmcp", "MOST supervisor: pmcp (experimental, needs Bridge pmcp-most; from the next phone connection)"),
-    ("most-sup-mathsls", "most-sup mathsls", "MOST supervisor: mathsls (default; from the next phone connection)")]
+    # MOST supervisor v1 (stage 5) on its own; a Bridge button sets the matching one again
+    ("most-sup-pmcp", "most-sup pmcp", "MOST supervisor: pmcp (needs Bridge pmcp-most; from the next phone connection)"),
+    ("most-sup-mathsls", "most-sup mathsls", "MOST supervisor: mathsls (test; from the next phone connection)")]
     if "PMCP_MOST" in PAYLOAD else []) + [
     # MOST supervisor stage 5 (docs 23, A218): the factory VW encoder's MOST path. dm-path from the next unit start;
     # dm-link only for this start (the lsd.sh block makes the link again at every start); dm-diag read-only
@@ -662,11 +668,11 @@ def esd_block(version, top, feat, onoff, aa, exp):
     for n, _, l in top:
         out += sc(n, l)
     out += ['screen pmcp_advanced pmcp_stream_map_aid', '']
-    out += kv("1. diagnostics: checks, CarPlay log, speed limit status (all read-only or logs).")
+    out += kv("1. diagnostics: checks, CarPlay log, speed limit status, MOST bridge (pmcp-most or mathsls).")
     out += kv("2. features: route guidance system and single packages on/off.")
     out += kv("3. aa_advanced: Android Auto details and logs.")
     if exp:
-        out += kv("4. experimental: MOST bridge switch and status, VW encoder MOST path, AA video record (experimental cards only).")
+        out += kv("4. experimental: MOST supervisor, VW encoder MOST path, AA tests (experimental cards only).")
     out += ['screen diagnostics pmcp_advanced', '']
     for n, _, l in feat:
         out += sc(n, l)
@@ -683,7 +689,7 @@ def esd_block(version, top, feat, onoff, aa, exp):
         out += sc(n, l)
     if exp:
         out += ['screen experimental pmcp_advanced', '']
-        out += kv("Experimental card only. A release card has none of this: before it, press Bridge: use mathsls.")
+        out += kv("Experimental card only. A release card has none of these buttons: before it, VW encoder: factory MOST path.")
         for n, _, l in exp:
             out += sc(n, l)
     return "\r\n".join(out) + "\r\n"

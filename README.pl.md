@@ -20,6 +20,7 @@ W repo jest tylko to, co dotyczy tego radia. Całość opiera się na pracy proj
 | Funkcja | Stan |
 |---|---|
 | Mapa CarPlay na AID (Mapy Apple, Google Maps), duże i małe zegary | działa |
+| Własny most MOST pmcp-most z nadzorcą MOST (domyślny od v2.0; most mathsls zostaje jako zapas: pmcp_advanced, diagnostics, „Bridge: mathsls”) | w aucie od 2026-11-22 (kabel i bez kabla); zimny start jeszcze do sprawdzenia ([szczegóły](docs/pl/07-instalator.md#własny-most-most-pmcp-most-domyślny-od-v20)) |
 | NavActiveIgnore: radio nie zatrzymuje i nie blokuje nawigacji z telefonu | działa |
 | Natywne prowadzenie VW z iPhone'a: dystans i czas do celu na pasku VW i w lewej tarczy | działa |
 | Natywna strzałka manewru i dystans do manewru (pojawia się po ruszeniu) | działa |
@@ -120,6 +121,9 @@ czytnik i paczki Java (`rglu`, `rg`, eksperymentalne `rg-aa` → `rg` z tej kart
 aktualizuje na miejscu znane mu Android Auto z wcześniejszej karty eksperymentalnej, a Android Auto, którego nie
 obsługuje, zastępuje zestawem z tej karty. Przy przejściu z v1.0–v1.3 zrób też nową kartę 2: karty ratunkowe sprzed
 v1.4 nie przywracają sterownika iAP2 z v1.4.
+**Z v1.9.0 (release-candidate, v2.0):** 2 wstawia nasz most MOST pmcp-most z nadzorcą („MOST bridge: pmcp-most (this
+card's default; was mathsls)”); restart. „Bridge: mathsls (fallback)” w pmcp_advanced, diagnostics wraca do mathsls,
+a 2 zostawia ten wybór.
 **Z v1.8.0:** 2 („already installed”), 3, jeśli używasz Android Auto (feeder v17 na miejscu, wybrane wyjście zostaje), 4
 (JAR prowadzenia po trasie i skrypt startowy `lsd.sh` na miejscu; `sl`, `ui` i tryb ograniczeń prędkości zostają); potem
 restart (start próbny), podłącz telefon i 5 (albo „Save” na stronie ustawień) w tym starcie.

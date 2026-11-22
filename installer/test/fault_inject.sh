@@ -82,6 +82,11 @@ fx() {
                   for _m in ok trial; do [ -e "$W/unit/mnt/persist/pmcp/$_m.$_s" ] && mv "$W/unit/mnt/persist/pmcp/$_m.$_s" "$W/unit/mnt/persist/pmcp/$_m.$_ns"; done ;;
         rg-unknown) printf 'Z' >> "$U/carplaymaps/rg/rgi-observer" ;;
         dio-mixed) echo junk > "$U/eso/bin/apps/dio_manager" ;;
+        # v2.0 (A227): an install of an earlier card (v1.9.0): mathsls's bridge, wrapper and supervisor, no bridge choice
+        bridge-earlier) cp "$U/carplaymaps/bridge/mathsls" "$U/carplaymaps/altscreen-most-bridge"
+                        cp "$U/carplaymaps/bridge/carplay-cluster-supervisor.mathsls" "$U/carplaymaps/carplay-cluster-supervisor"
+                        cp "$U/carplaymaps/dio_manager.wrapper.sh" "$U/eso/bin/apps/dio_manager"
+                        rm -f "$W/unit/mnt/persist/pmcp/most-bridge" "$W/unit/mnt/persist/pmcp/most-sup" ;;
         *) echo "PMCP_FAIL=FX_$1"; return 1 ;;
     esac
     echo "PMCP_FX_OK $1"
@@ -138,14 +143,16 @@ case "$(head -1 "$SDB/BUILD-MANIFEST.txt")" in *-exp-*) XAA+=("map-install map-s
 grep -q '^AAX_FEEDER ' <(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh") && \
     XAA+=("map-install map-square-fps40" "aa-install" "aa-on-exp" "aa-output direct" "aa-install" "aa-on-exp" "aa-remove" "aa-on-exp" "restore")
 OWN+=("${XAA[@]}")
-# experimental cards: the MOST bridge switch (bridge mathsls|pmcp-most); the supervisor's path must always hold one of the
-# two verified bridges and dio_manager one of the two verified wrappers
+# every card with pmcp-most (v2.0, A227): the MOST bridge switch (bridge pmcp-most|mathsls) and main menu 2 bringing an
+# earlier card's install (mathsls, no choice) to pmcp-most; the supervisor's path must always hold one of the two verified
+# bridges, carplay-cluster-supervisor one of the two verified supervisors and dio_manager one of the two verified wrappers
 MAN=$(sed -n "/^MANIFEST='/,/^'/p" "$SDB/pmcp/pmcp.sh")
 msha() { echo "$MAN" | sed -n "s/^$1 \([0-9a-f]*\) .*/\1/p"; }
 BR_M=$(msha BRIDGE); BR_P=$(msha PMCP_MOST); WR_M=$(msha WRAPPER); WR_P=$(msha PMCP_MOST_WRAPPER)
+SU_M=$(msha SUPERVISOR); SU_P=$(msha PMCP_MOST_SUP)
 XBR=()
-[ -n "$BR_P" ] && XBR=("map-install map-square-fps40" "aa-install" "bridge pmcp-most" "bridge mathsls" "bridge pmcp-most" \
-    "java-on nai" "bridge mathsls" "bridge pmcp-most" "restore")
+[ -n "$BR_P" ] && XBR=("map-install map-square-fps40" "aa-install" "bridge mathsls" "bridge pmcp-most" "bridge mathsls" \
+    "java-on nai" "bridge pmcp-most" "fx:bridge-earlier" "map-install map-square-fps40" "bridge mathsls" "restore")
 [ ${#XBR[@]} -gt 0 ] && OWN+=("${XBR[@]}")   # bash 3.2 (macOS): an empty array is unbound under set -u
 # earlier versions made from this card (A188): java-update and 4 over an earlier np and a renamed rg, 3 over an earlier
 # AA set (fx:aa-unknown is "old" now: our wrapper, the factory gal copy, a well-formed AA_BOOT)
@@ -265,6 +272,9 @@ one_target() {
                 _dw=$(shasum -a 256 < "$U/eso/bin/apps/dio_manager" | cut -d' ' -f1)
                 { [ "$_dw" = "$WR_M" ] || [ "$_dw" = "$WR_P" ]; } && [ -x "$U/eso/bin/apps/dio_manager" ] \
                     || bad "[$target] kill@$n ($killed): dio_manager is not one of the two wrappers ($_dw)"
+                _sw=$(shasum -a 256 < "$U/carplaymaps/carplay-cluster-supervisor" 2>/dev/null | cut -d' ' -f1)
+                { [ "$_sw" = "$SU_M" ] || [ "$_sw" = "$SU_P" ]; } && [ -x "$U/carplaymaps/carplay-cluster-supervisor" ] \
+                    || bad "[$target] kill@$n ($killed): supervisor missing or of another hash (${_sw:-none})"
                 rm -rf "$W/rerun"; cp -Rp "$W/unit" "$W/rerun"; mv "$W/unit" "$W/unit.k"; mv "$W/rerun" "$W/unit"
                 run $target; _again=$(grep "PMCP_BRIDGE_OK\|PMCP_FAIL" "$W/out")
                 _ab=$(shasum -a 256 < "$U/carplaymaps/altscreen-most-bridge" | cut -d' ' -f1)
