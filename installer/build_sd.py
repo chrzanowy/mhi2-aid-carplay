@@ -181,7 +181,7 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
 PMCP_MOST_PIN = ("build/pmcp-most-93bad193/altscreen-most-bridge", "93bad193f7351eecdb6808e8ffd96ae5e8b31caf8e2ab08802e6d57e46dab79c", 38172)
 # MOST supervisor v1 (stage 5, bridge/src/pmcp_most_sup.c; PMCP_MOST_SUP=1 bridge/build.sh OUTDIR, OUTDIR =
 # <this project>/build/pmcp-most-sup-<first 8 of the sha256>): experimental cards only, pmcp.sh most-sup pmcp|mathsls
-PMCP_MOST_SUP_PIN = ("build/pmcp-most-sup-5abcab20/pmcp-most-sup", "5abcab2035dfd6b63bd7ec75941846e647d3d604099ed14500f6dbffe690965f", 22188)
+PMCP_MOST_SUP_PIN = ("build/pmcp-most-sup-a545d5b1/pmcp-most-sup", "a545d5b1b5a95e42f62bf15770e0aeeaea267dc5a8f722e4ef76bf4b94920656", 22288)
 if IS_EXP and PROFILE_ID == "MU1161":
     PAYLOAD_BY_PROFILE["MU1161"].update({
         "PMCP_MOST": (PROJ / PMCP_MOST_PIN[0], PMCP_MOST_PIN[1], PMCP_MOST_PIN[2], "pmcp-most/altscreen-most-bridge"),
