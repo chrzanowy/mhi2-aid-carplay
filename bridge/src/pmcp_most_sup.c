@@ -52,7 +52,7 @@ static void config(void)
     snprintf(P_APP, sizeof(P_APP), "%s", env_or("PMCP_SUP_APP", "/mnt/app/carplaymaps"));
     snprintf(P_SRC, sizeof(P_SRC), "%s", pmcp_most_src_dir());
     snprintf(P_DMDT, sizeof(P_DMDT), "%s", env_or("PMCP_SUP_DMDT", "/eso/bin/apps/dmdt"));
-    snprintf(P_LN, sizeof(P_LN), "%s", env_or("PMCP_SUP_LN", "/proc/boot/ln"));
+    snprintf(P_LN, sizeof(P_LN), "%s", env_or("PMCP_SUP_LN", "/bin/ln"));
     snprintf(P_LINK, sizeof(P_LINK), "%s", env_or("PMCP_SUP_LINK", "/dev/pmcp-isoTX2"));
     snprintf(P_DEV, sizeof(P_DEV), "%s", env_or("PMCP_SUP_DEV", "/dev/mlb/isoTX2"));
     snprintf(P_FLUSH, sizeof(P_FLUSH), "%s", env_or("PMCP_SUP_FLUSH", "/dev/mlb/debug/isoTX2"));
@@ -225,6 +225,8 @@ static void link_make(void)
     char *argv[] = { P_LN, "-Ps", P_DEV, P_LINK, NULL };
     int r;
     if (lstat(P_LINK, &st) == 0) return;
+    /* MU1161 has no /proc/boot/ln (car 2026-11-22: status=127); without ln the giveback goes on, logged once per try */
+    if (access(P_LN, X_OK) != 0) { sup_log("dm-link-make-failed no-ln path=%s errno=%d", P_LN, errno); return; }
     r = run_wait(argv);
     sup_log("dm-link-made status=%d", r);
 }

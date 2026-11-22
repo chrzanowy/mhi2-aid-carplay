@@ -745,6 +745,8 @@ PY
     o=$(unit_boot); case "$o" in "boot=trial set=$ALL jars="*"$RGF"*"$DNF:/X/lsd/jars/$UIF") ok "next start: one trial with all JARs" ;; *) bad "boot: $o" ;; esac
     run java-confirm; rc_is 0; expect_out "PMCP_JAVA_CONFIRM_OK set=$ALL" "one confirm for everything"
     allon; expect_out "everything was already on, nothing changed" "second press: nothing to do"
+    grep -q "PMCP_FAIL" "$W/out" && bad "second press prints PMCP_FAIL for skipped steps (A222)" || ok "second press: no PMCP_FAIL line for skipped steps"
+    expect_out "(nothing to do, skipped)" "second press: skipped steps say so"
     run restore; rc_is 0; run verify; expect_out "PMCP_VERIFY_OK state=STOCK" "remove everything: factory state"
     [ "$(h "$W/unit/mnt/system/etc/mm/iap2.cfg")" = 1539c79dd415eddeb59ea215c7a9b0ec4be3632fe066be3aefdff11bd19cdf37 ] && ok "factory iap2.cfg back" || bad "cfg after restore"
 

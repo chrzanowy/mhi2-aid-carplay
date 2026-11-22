@@ -458,9 +458,9 @@ NEW=0
 for A in %(actions)s; do
     echo "- ${A%%%%_*} ${A#*_}"
     OUT=`/bin/ksh $PMCP ${A%%%%_*} ${A#*_} 2>&1`
-    echo "$OUT" | while read L; do case "$L" in PMCP_WARN*) ;; PMCP_*) echo "  $L" ;; esac; done
+    echo "$OUT" | while read L; do case "$L" in PMCP_WARN*|PMCP_FAIL=*_ALREADY_*) ;; PMCP_*) echo "  $L" ;; esac; done
     case "$OUT" in
-        *PMCP_FAIL=*_ALREADY_*) echo "  (already on)" ;;
+        *PMCP_FAIL=*_ALREADY_*) echo "  (nothing to do, skipped)" ;;
         *PMCP_FAIL=*PRESS_2*) echo "PMCP_FAIL=FEATURES_STOPPED_AT_$A"
                      echo "The CarPlay map is missing or its files are mixed: main menu, 2. Install CarPlay first, then 4 again."
                      trap 2; exit 0 ;;
@@ -523,9 +523,9 @@ while read A B; do
     [ -n "$A" ] || continue
     echo "- $A $B"
     OUT=`/bin/ksh $PMCP $A $B 2>&1 </dev/null`
-    echo "$OUT" | while read L; do case "$L" in PMCP_WARN*) ;; PMCP_*) echo "  $L" ;; esac; done
+    echo "$OUT" | while read L; do case "$L" in PMCP_WARN*|PMCP_FAIL=*_ALREADY_*) ;; PMCP_*) echo "  $L" ;; esac; done
     case "$OUT" in
-        *PMCP_FAIL=*_ALREADY_*) echo "  (already on)" ;;
+        *PMCP_FAIL=*_ALREADY_*) echo "  (nothing to do, skipped)" ;;
         *PMCP_FAIL*) echo "PMCP_FAIL=REINSTALL_STOPPED_AT_${A}_$B"
                      echo "The unit has the factory files plus the steps before this one. Take a photo; then 2, 3 or 4."
                      STOP=1; break ;;
@@ -624,7 +624,7 @@ EXP_MENU = [] if not IS_EXP else ([
 
 # main menu 4, in order: unsupported route guidance / Java files back to factory (features-reset), an earlier card's
 # RG driver/reader and Java packages replaced by this card's (rg-update, java-update), the route guidance system (rg
-# needs it), then every package except the optional sl (ui included: its page saves trial starts on the unit). Steps already done answer *_ALREADY_* and are skipped, so the
+# needs it), then every package except the optional sl (ui included: its page saves trial starts on the unit). Steps already done answer *_ALREADY_* and are skipped (shown as "(nothing to do, skipped)", not as PMCP_FAIL; A222), so the
 # same button brings any earlier pmcp install to this card's set. The map (2) and Android Auto (3) are not touched.
 FEATURE_NAMES = [("rg", "route guidance"), ("zoom", "zoom"), ("dn", "day/night"), ("np", "song title"), ("ui", "settings page")]
 FEATURES_NOTE = "" if not UNSUPPORTED else 'echo "Not yet supported on this unit (%s), skipped: %s."\n' % (
