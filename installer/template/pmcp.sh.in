@@ -2589,7 +2589,7 @@ bridge_status() {
     [ -n "$_bs_s" ] || _bs_s="not a file of this card"
     say "  MOST supervisor: $_bs_s; wanted: $_bs_sw"
     if ! bridge_set_ok "$_bs_w"; then
-        say "  not the wanted set (an earlier card's install or an interrupted switch): 2. Install CarPlay, or the Bridge button, puts it in place"
+        say "  not the wanted set (an older install or an interrupted switch): 2. Install CarPlay, or the Bridge button, puts it in place"
     fi
     _bs_cs=`cat "$RAMDISK/most-src/consumer" 2>/dev/null`
     [ -n "$_bs_cs" ] && say "  bridge status (this start): $_bs_cs"
