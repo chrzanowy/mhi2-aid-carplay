@@ -14,7 +14,10 @@ Model parameters: M = measured in the car (visit), A = assumption (docs/28 "Mode
 import hashlib, json, os, random, re, select, shutil, signal, socket, struct, subprocess, sys, threading, time
 
 BUILD = os.path.abspath(sys.argv[1])
-ONLY = sys.argv[2:]
+_ARGS = sys.argv[2:]
+JOBS = int(_ARGS[_ARGS.index('--jobs') + 1]) if '--jobs' in _ARGS else int(os.environ.get('FAKECAR_JOBS', '1'))
+ONLY = [a for i, a in enumerate(_ARGS) if a not in ('--jobs', '--params', '--none') and
+        not (i > 0 and _ARGS[i - 1] == '--jobs')]
 HERE = os.path.dirname(os.path.abspath(__file__))
 BRIDGE_DIR = os.path.dirname(HERE)
 
@@ -1742,10 +1745,51 @@ def print_params():
                                          re.sub(r'^[MA]( \(\w+\))?:\s*', '', text)))
 
 
+def run_parallel(names):
+    """Every scenario in its own process (own car dir, socket, processes), JOBS at a time; output kept per scenario."""
+    import collections
+    order = sorted(names, key=lambda n: (not n.startswith(('chaos', 'replay-car')), names.index(n)))   # long ones first
+    queue = collections.deque(order)
+    running = {}
+    n_ok = n_bad = 0
+    bad_names = []
+    t0 = time.time()
+    while queue or running:
+        while queue and len(running) < JOBS:
+            n = queue.popleft()
+            f = open(os.path.join(BUILD, 'job-%s.log' % n), 'w+')
+            running[n] = (subprocess.Popen([sys.executable, '-I', os.path.abspath(__file__), BUILD, n],
+                                           stdout=f, stderr=subprocess.STDOUT,
+                                           env=dict(os.environ, FAKECAR_JOBS='1')), f)
+        time.sleep(0.2)
+        for n, (p, f) in list(running.items()):
+            if p.poll() is None:
+                continue
+            del running[n]
+            f.seek(0)
+            out = f.read()
+            f.close()
+            m = re.search(r'FAKECAR TESTS: (\d+) ok, (\d+) failed', out)
+            a, b = (int(m.group(1)), int(m.group(2))) if m else (0, 1)
+            n_ok, n_bad = n_ok + a, n_bad + b
+            if b:
+                bad_names.append(n)
+            print('\n'.join(l for l in out.splitlines() if not l.startswith('FAKECAR TESTS')), flush=True)
+            if not m:
+                print('FAILED %s: scenario process died (rc %s)' % (n, p.returncode), flush=True)
+    print('parallel: %d scenarios, %d at a time, %.1f min%s' % (len(names), JOBS, (time.time() - t0) / 60,
+          ('; failed in ' + ', '.join(bad_names)) if bad_names else ''))
+    print('FAKECAR TESTS: %d ok, %d failed' % (n_ok, n_bad))
+    return 1 if n_bad else 0
+
+
 def main():
     if '--params' in sys.argv:
         print_params()
         return 0
+    names = [n for n in SCENARIOS if not ONLY or n in ONLY]
+    if JOBS > 1 and len(names) > 1:
+        return run_parallel(names)
     for name, fn in SCENARIOS.items():
         if ONLY and name not in ONLY:
             continue

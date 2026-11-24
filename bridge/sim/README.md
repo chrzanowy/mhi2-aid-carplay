@@ -15,7 +15,7 @@ Verdicts come only from what the car saw. Every run leaves `build/runs/<scenario
 encoder, process and screen events) next to the programs' own logs in `ramdisk/`.
 
 ```
-./run_sim.sh                 # all 17 scenarios (about 7 minutes; ffmpeg with libx264 for the AA phone)
+./run_sim.sh                 # all scenarios, 4 cars at a time (about 2.5 minutes; FAKECAR_JOBS=1 one after another, ~9 min)
 ./run_sim.sh boot-steal      # one scenario
 FAKECAR_RECLAIM_US=0 ./run_sim.sh boot-steal      # bridge without reclaim: the gap check must fail
 FAKECAR_AA_RECLAIM_S=0 ./run_sim.sh aa-steal       # feeder without reclaim: the picture check must fail
