@@ -598,9 +598,11 @@ PY
         # A199 (user 2026-11-15): the MOST bridge serves CarPlay, AA and wireless, so its buttons and the AA record live on
         # their own screen experimental
         _br=""; [ -e "$SDB/pmcp/payload/pmcp-most/altscreen-most-bridge" ] && _br="menu/most-sup-pmcp.sh menu/most-sup-mathsls.sh "
+        # A/B keyframe buttons (exp only, 59aa8cd): first on the experimental screen
+        _kf=""; [ -f "$SDB/pmcp/menu/map-kf5.sh" ] && _kf="menu/map-kf5.sh menu/map-kf10.sh menu/map-kf30.sh "
         xp=$(tr -d '\r' < "$SDB/esd/Launcher-sda0.esd" | sed -n '/^screen experimental/,$p' | grep -o 'menu/[a-z0-9-]*\.sh' | tr '\n' ' ')
-        [ "$xp" = "${_br}menu/dm-diag.sh menu/dm-path-pmcp.sh menu/dm-path-factory.sh menu/dm-link-drop.sh menu/dm-link-make.sh menu/aa-capture-60.sh menu/aa-capture-off.sh menu/aa-regrant-on.sh menu/aa-regrant-off.sh menu/aa-keepalive-on.sh menu/aa-keepalive-off.sh " ] \
-            && ok "experimental:${_br:+ MOST supervisor on its own,} VW encoder path/link/diag, AA record on/off, AA cluster re-grant on/off" || bad "experimental: $xp"
+        [ "$xp" = "${_kf}${_br}menu/dm-diag.sh menu/dm-path-pmcp.sh menu/dm-path-factory.sh menu/dm-link-drop.sh menu/dm-link-make.sh menu/aa-capture-60.sh menu/aa-capture-off.sh menu/aa-regrant-on.sh menu/aa-regrant-off.sh menu/aa-keepalive-on.sh menu/aa-keepalive-off.sh " ] \
+            && ok "experimental:${_kf:+ keyframe A/B 5/10/30,}${_br:+ MOST supervisor on its own,} VW encoder path/link/diag, AA record on/off, AA cluster re-grant on/off" || bad "experimental: $xp"
         sed '/^screen experimental/,$d' "$SDB/esd/Launcher-sda0.esd" | grep -q 'menu/most-sup-\|menu/dm-\|menu/aa-capture-\|menu/aa-regrant-\|menu/aa-keepalive-\|rg-aa' && bad "experimental buttons outside the experimental screen" || ok "experimental buttons only on the experimental screen"
         grep -qi 'rg-aa' <(sed -n '/^screen pmcp_stream_map_aid/,$p' "$SDB/esd/Launcher-sda0.esd") && bad "menu still says rg-aa" || ok "menu: no rg-aa" ;;
     *)
