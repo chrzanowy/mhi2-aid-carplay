@@ -504,6 +504,7 @@ class Car:
         self.chan.capdir = self.dir
         self.aa = None
         self.wl = None
+        self.wl_gen = 0
         self.env = dict(os.environ, FAKECAR_SOCK=self.sock_path, FAKECAR_DIR=self.dir, FAKECAR_WHO='cp',
                         FAKECAR_DMDT_CALL_S='%.3f' % (PARAMS['dmdt_call_ms'] / 1000.0),
                         PMCP_SUP_RAMDISK=self.ram, PMCP_SUP_APP=self.app, PMCP_MOST_SRC_DIR=self.src,
@@ -708,7 +709,8 @@ class Car:
             f.write('%d\n' % self.dio.pid)
         self.prod = self.spawn([os.path.join(BUILD, 'producer'), '--ring', self.env['HOST_RING_PATH'],
                                 '--idr', self.env['HOST_IDR_PATH'], '--out', out,
-                                '--frames', '100000', '--fps', '30', '--gop', '60', '--repeat-avcc', '1'])
+                                '--frames', '100000', '--fps', '30', '--gop', '60', '--repeat-avcc', '1',
+                                '--attach-ms', '0'])   # A: core.so waits for the bridge's ring as long as the session lives
         open(os.path.join(self.ram, 'carplay-altstream.ready'), 'w').close()
         self.marks.setdefault('plug', []).append(now())
         self.bb.rec('phone', 'cp cable plug dio=%d producer=%d' % (self.dio.pid, self.prod.pid))
@@ -748,7 +750,7 @@ class Car:
         self.wl = self.spawn([os.path.join(BUILD, 'producer'), '--ring', self.env['HOST_RING_PATH'],
                               '--idr', self.env['HOST_IDR_PATH'], '--out', out, '--frames', '100000',
                               '--fps', str(fps), '--gop', str(gop), '--repeat-avcc', '1',
-                              '--idr-on-request', str(idr_on_request)])
+                              '--idr-on-request', str(idr_on_request), '--attach-ms', '0'])
         self.wl_gen = gen
         ms = int(time.monotonic() * 1000)
         put(os.path.join(self.src, 'owner'), 'v=1 src=wireless pid=%d gen=%d since_ms=%d kind=in\n' % (self.wl.pid, gen, ms))
@@ -1484,6 +1486,185 @@ SCENARIOS = {'session': sc_session, 'boot-steal': sc_boot_steal, 'replug': sc_re
              'aa-silence': sc_aa_silence, 'aa-silence-noka': sc_aa_silence_noka}
 
 
+# ---------------------------------------------------------------------- chaos (stage 4)
+CHAOS_DISTURB = ('vw_steal', 'reverse', 'starve', 'bridge_kill')
+
+
+def chaos_gen(seed, steps):
+    """A random but car-sensible sequence: [{'do', 'arg', 'wait', 'check'}]. The generator tracks the phones so every
+    action is possible (unplug only what is plugged; the cable during Wi-Fi = the cable preempts it)."""
+    rng = random.Random(seed)
+    cable = wl = aa = False
+    t = last_kill = last_steal = -1e9
+    seq = []
+    for _ in range(steps):
+        opts = []
+        opts += ['cable_unplug'] if cable else ['cable_plug']
+        if wl:
+            opts += ['wl_stop', 'wl_crash', 'wl_replaced']
+        elif not cable:
+            opts += ['wl_start']
+        opts += ['aa_unplug', 'aa_kill'] if aa else ['aa_plug']
+        opts += ['reverse', 'starve']
+        if t - last_steal > 15:
+            opts.append('vw_steal')
+        if t - last_kill > 60:
+            opts.append('bridge_kill')
+        do = rng.choice(opts)
+        arg = None
+        if do == 'cable_plug':
+            cable, wl = True, False
+        elif do == 'cable_unplug':
+            cable = False
+        elif do == 'wl_start':
+            wl, arg = True, rng.choice([5, 30])
+        elif do == 'wl_stop':
+            wl, arg = False, rng.choice(['done', 'idle', 'phone-gone'])
+        elif do == 'wl_crash':
+            wl = False
+        elif do == 'aa_plug':
+            aa = True
+        elif do in ('aa_unplug', 'aa_kill'):
+            aa = False
+        elif do == 'reverse':
+            arg = round(rng.uniform(2, 5), 1)
+        elif do == 'starve':
+            arg = round(rng.uniform(0.5, 2.5), 1)
+        elif do == 'vw_steal':
+            last_steal = t
+        elif do == 'bridge_kill':
+            last_kill = t
+        check = rng.random() < 0.4
+        wait = 9.0 if check else round(rng.uniform(0.3, 4.0), 1)
+        seq.append(dict(do=do, arg=arg, wait=wait, check=check))
+        t += wait + (arg if do in ('reverse', 'starve') else 0)
+    seq.append(dict(do='end', arg=None, wait=0, check=False))
+    return seq
+
+
+def chaos_run(name, seq):
+    """Plays seq on a fresh car; returns the failed check names. Liveness at every check point (after a calm
+    wait): the AID shows AA if AA holds MOST, else CP if a CP phone is on (cable or Wi-Fi), else the VW map."""
+    first = len(results)
+    car = Car(name)
+    car.boot()
+    time.sleep(1.5)
+    cable = wl = False
+    aa = None                 # None | 'show' | 'waiting' | 'analysis'
+    aa_until = 0.0
+    phones = []
+    log = []
+
+    def cp_ended():
+        nonlocal aa
+        if aa == 'waiting' and now() < aa_until:
+            aa = 'show'
+
+    for i, st in enumerate(seq):
+        do, arg = st['do'], st['arg']
+        t = now()
+        impossible = ((do == 'cable_plug' and cable) or (do == 'cable_unplug' and not cable) or
+                      (do == 'wl_start' and (wl or cable)) or (do in ('wl_stop', 'wl_crash', 'wl_replaced') and not wl) or
+                      (do == 'aa_plug' and aa is not None) or (do in ('aa_unplug', 'aa_kill') and aa is None))
+        if impossible:   # a shrunk sequence may drop the step that made this one possible
+            log.append('%7.2f %s skipped (not possible now)' % (t, do))
+            continue
+        log.append('%7.2f %s %s' % (t, do, '' if arg is None else arg))
+        car.bb.rec('chaos', 'step %d %s %s' % (i, do, '' if arg is None else arg))
+        if do == 'cable_plug':
+            if wl:
+                car.wl_preempt_by_cable()
+                wl = False
+            else:
+                car.cable_plug()
+            cable = True
+        elif do == 'cable_unplug':
+            car.cable_unplug()
+            cable = False
+            cp_ended()
+        elif do == 'wl_start':
+            if car.wl is not None and car.wl.poll() is None:
+                car.wl.kill()
+            car.wl_start(fps=30, gop=arg, gen=len(car.marks.get('wl_start', [])) + 1)
+            wl = True
+        elif do == 'wl_stop':
+            car.wl_stop(arg)
+            wl = False
+            cp_ended()
+        elif do == 'wl_crash':
+            car.wl_crash()
+            wl = False
+            cp_ended()
+        elif do == 'wl_replaced':
+            car.wl_replaced(1.5)
+        elif do == 'aa_plug':
+            car.aa_plug()
+            phones.append(car.aa)
+            if cable or wl:
+                aa, aa_until = 'waiting', now() + 20
+            else:
+                aa = 'show'
+        elif do in ('aa_unplug', 'aa_kill'):
+            car.aa_unplug() if do == 'aa_unplug' else car.aa_kill()
+            aa = None
+        elif do == 'reverse':
+            car.reverse(arg)
+        elif do == 'starve':
+            pids = car.bridge_pids()
+            for p in pids:
+                os.kill(p, signal.SIGSTOP)
+            time.sleep(arg)
+            for p in pids:
+                os.kill(p, signal.SIGCONT)
+        elif do == 'vw_steal':
+            car.vw_steal_in(0)
+        elif do == 'bridge_kill':
+            for p in car.bridge_pids():
+                os.kill(p, signal.SIGKILL)
+        elif do == 'end':
+            if aa:
+                car.aa_unplug()
+            if cable:
+                car.cable_unplug()
+            if wl:
+                car.wl_stop('done')
+            aa, cable, wl = None, False, False
+            time.sleep(6)
+        time.sleep(st['wait'])
+        if st['check']:
+            if aa == 'waiting' and now() >= aa_until:
+                aa = 'analysis'        # AA waited 20 s for CP and runs without the AID (AA rule)
+            if aa == 'show':
+                allowed = {'aa'}
+            elif cable or wl:
+                allowed = {'cp'}
+            else:
+                allowed = {'vw'}
+            tail = [w for ts, w in car.screen if ts >= now() - 1.0]
+            ok = tail and all(w in allowed for w in tail)
+            check('%s: step %d (%s) AID shows %s' % (name, i, do, '/'.join(sorted(allowed))), ok,
+                  'saw %s' % sorted(set(tail)))
+    tail = [w for ts, w in car.screen if ts >= now() - 1.0]
+    check('%s: VW map at the end' % name, tail and all(w == 'vw' for w in tail), sorted(set(tail)))
+    if car.wl is not None and car.wl.poll() is None:
+        car.wl.kill()
+    car.shutdown()
+    common_invariants(car)
+    for ph in phones:
+        check('%s: AA phone never asked for an IDR (K/C)' % name, ph.other == 0, ph.other)
+    with open(os.path.join(car.dir, 'chaos.json'), 'w') as f:
+        json.dump(dict(seq=seq, log=log), f, indent=1)
+    return [n for n, c in results[first:] if not c]
+
+
+def sc_chaos_quick():
+    """Stage 4 in the suite: one seeded random drive (about 90 s); the long runs and the shrinking are chaos.py."""
+    chaos_run('chaos-1161', chaos_gen(1161, 16))
+
+
+SCENARIOS['chaos-quick'] = sc_chaos_quick
+
+
 # ---------------------------------------------------------------------- replay of car timelines (stage 3)
 ACTIONS = {
     'cable_plug': lambda car, a: car.cable_plug(),
@@ -1537,7 +1718,7 @@ def replay(path):
         lines.append('%-44s %8.2f %8s %7s %5.1f %s' % (e.get('what', e['kind'] + ' ' + e['match'])[:44], e['t'],
                      '-' if st is None else '%.2f' % st, '-' if diff is None else '%+.2f' % diff, e.get('tol', 1.0),
                      'ok' if ok else 'DIFF'))
-        if not tl.get('informational'):
+        if not tl.get('informational') or os.environ.get('FAKECAR_STRICT'):
             check('%s: %s at car t=%.2f (sim %s)' % (name, e.get('what', e['match']), e['t'],
                                                      '-' if st is None else '%.2f' % st), ok,
                   'diff=%s tol=%s' % (diff, e.get('tol', 1.0)))

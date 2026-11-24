@@ -477,6 +477,7 @@ int main(int argc, char **argv)
     unsigned stop_hold_ms = 2000;
     int repeat_avcc = 0, pause_at = -1, pause_ms = 0;
     unsigned gop = 0;
+    unsigned attach_ms = 10000; /* --attach-ms: how long to wait for the bridge's ring (0 = as long as it lives) */
     SwitchOpts sw;
     char path[512], line[256];
     FILE *man, *avcc_file;
@@ -526,6 +527,7 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--repeat-avcc")) repeat_avcc = atoi(v);
         else if (!strcmp(a, "--gop")) gop = (unsigned)atoi(v);
         else if (!strcmp(a, "--pause-at")) pause_at = atoi(v);
+        else if (!strcmp(a, "--attach-ms")) attach_ms = (unsigned)atoi(v);
         else if (!strcmp(a, "--pause-ms")) pause_ms = atoi(v);
         else usage();
     }
@@ -539,7 +541,7 @@ int main(int argc, char **argv)
     snprintf(path, sizeof(path), "%s/input.avcc", out);
     avcc_file = fopen(path, "wb");
     if (!man || !avcc_file) { perror(out); return 2; }
-    if (ring_attach(ring_path, 10000) != 0) {
+    if (ring_attach(ring_path, attach_ms ? attach_ms : 0xffffffffU) != 0) {
         fprintf(stderr, "producer: ring not ready\n");
         return 3;
     }

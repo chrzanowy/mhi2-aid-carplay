@@ -19,7 +19,7 @@ fail=0
     "$ROOT/contract/pmcp_most_producer.c" || fail=1
 "$CC" -std=gnu99 -O2 -Wall -Wextra -Werror -o "$B/producer" "$ROOT/test/producer.c" || fail=1
 # stage 2: the real AA feeder (aa/ compiled, never edited) on the same simulated channel
-AAF="$ROOT/../aa/feeder"
+AAF="${FAKECAR_AA_DIR:-$ROOT/../aa}/feeder"   # FAKECAR_AA_DIR: test another AA tree (e.g. an AA branch before it is in RC)
 "$CC" -O2 -Wall -Wextra -Werror -std=gnu99 -pthread -DMOST_HOST_SIM -o "$B/feeder-sim" "$AAF/aa_most_feeder.c" \
     "$AAF/h264_ka.c" "$AAM/ts_mux.c" "$AAM/most_writer.c" "$HERE/sim_mlb.c" || fail=1
 [ $fail = 0 ] || { echo "FAKECAR TESTS: 0 ok, 1 failed (build)"; exit 1; }
