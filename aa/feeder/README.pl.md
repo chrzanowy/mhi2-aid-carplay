@@ -92,6 +92,19 @@ uruchamia `altscreen-most-bridge` i nie tworzy ringu:
   oddanie MOST bez bridge. Nieudane zwolnienie też kończy się przez strażnika. Test hosta: `early-kill-direct` /
   `early-kill-ring` (SIGKILL zaraz po `sc 4 72`: jedno przywrócenie, plik właściciela i znacznik usunięte, bez
   urządzenia i bez bridge; v17 ich nie przechodzi).
+- v19 (A236-AA, A234-AA znalezione w symulatorze auta CP): po ponownym przejęciu MOST (v15) AU już w kolejce w chwili
+  kradzieży szły przed SPS/PPS i powtórzonym ostatnim IDR, a późniejsze obrazy telefonu odnoszą się do nowszego obrazu
+  niż ten IDR: AID mógł pokazywać artefakty do następnego IDR telefonu (minutę i dłużej). Teraz direct trzyma każdą AU
+  wstawioną do kolejki TS od ostatniego IDR, tak jak wyszła (z klatkami keep-alive i przesuniętymi obrazami; najwyżej
+  `PMCP_AA_RECLAIM_GOP_KB`, domyślnie 4096, 0 = po staremu jak v15). Przy ponownym przejęciu kolejka jest czyszczona
+  (`ts_mux_flush`), potem idą SPS/PPS, IDR i cały łańcuch po nim, najwyżej `PMCP_AA_REPLAY_FPS` (domyślnie 60) obrazów
+  na sekundę i tylko gdy kolejka jest poniżej progu puszczania ACK; nowe klatki telefonu dołączają do zapisu i idą
+  za nim po kolei, IDR z telefonu zaczyna go od nowa, zaległość powtórki liczy się do wstrzymania ACK. AID kończy
+  dokładnie na obrazach telefonu. Pełny zapis (albo brak IDR) = po staremu jak v15, liczone. Linia statusu
+  `powtorka GOP:`. Test hosta sekcja 19 (libx264, IDR co 90 obrazów, wolne urządzenie, ENOMEM w trakcie; także z
+  klatkami keep-alive w zapisie): obraz po ponownym otwarciu zaczyna się od SPS/PPS + IDR, dekoduje się sam bez
+  jednego błędu i daje dokładnie oryginalne obrazy od tego IDR; z wyłączonym zapisem 82 ze 148 obrazów różni się od
+  obrazów telefonu (v18 nie przechodzi tej sekcji).
 
 Diagnostyka w obu wyjściach: strażnik trzyma pierwsze 30 linii bridge'a (odczyty devctl) obok ostatnich;
 `PMCP_AA_CAPTURE_S=N` (domyślnie 0) nagrywa jednostki dostępu z telefonu przez N s do `PMCP_AA_CAPTURE_PATH` (tylko ze

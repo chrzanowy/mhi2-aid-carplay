@@ -58,6 +58,12 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
   "CP save log" includes the bridge and supervisor logs on every card. Confirmed in the car on 2026-11-22 with an
   experimental card (cable and wireless, the VW map back after the phone left); a cold start and the cable unplug test
   without the WL receiver are still open.
+- **Android Auto feeder v19 (clean picture after the channel is taken back at boot):** in the first 3 minutes after the
+  radio starts, the factory encoder can take the cluster's MOST channel; the feeder takes it back (since v15), but the
+  AID could then show a damaged map until the phone's next full picture, a minute or more. The feeder now keeps the
+  phone's pictures since the last full one and sends them again after taking the channel back, so the AID shows the
+  phone's own picture within a second or two. Found by the car simulator; host test added. New AA set: one trial start,
+  then "5. Confirm". Feeder `48d6fc56…` (was `b574ffe9…`).
 - **Android Auto feeder v18 (MOST given back when gal dies in the first second):** if the AA feeder was killed right
   after it had taken the MOST channel and before the picture started, nobody gave the channel back: the AID stayed black
   until the next phone session. The feeder's guardian now starts before the channel is taken, so it always gives it

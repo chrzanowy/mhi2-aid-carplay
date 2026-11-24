@@ -150,6 +150,13 @@
  * right after the owner claim, before the first dmdt; in ring mode it starts the bridge only on the byte 'G' (sent after
  * the 500 ms), and an EOF before it gives MOST back without a bridge. A failed release also goes through the guardian.
  *
+ * v19 (A236-AA; A234-AA from CP's car simulator): after a reclaim (v15) the AUs queued at the steal went out before
+ * SPS/PPS + the replayed last IDR, and the phone's next pictures refer to a newer picture than that IDR, so the AID could
+ * show artifacts until the phone's next IDR. Direct now records every AU put into the TS queue since the last IDR, as it
+ * went out (PMCP_AA_RECLAIM_GOP_KB, default 4096, 0 = the v15 way); a reclaim flushes the queue (ts_mux_flush) and
+ * replays SPS/PPS + the whole chain from the IDR at PMCP_AA_REPLAY_FPS (default 60) while the queue is below the ACK
+ * release mark; phone frames meanwhile join the record behind it, an IDR from the phone restarts it.
+ *
  * Modes (PMCP_AA_MODE): "analyze" (default) only reads, ACKs and writes a summary; the cluster keeps
  * the VW map. "most" also takes the MOST channel over. The summary is rewritten once a second to
  * PMCP_AA_STATUS (default /ramdisk/pmcp-aa-feeder.txt); nothing grows without bound.
@@ -186,7 +193,7 @@
 #include "../most/most_writer.h"
 #include "h264_ka.h"
 
-#define FEEDER_VERSION "18"
+#define FEEDER_VERSION "19"
 
 #define RING_MAGIC      0x43505247u
 #define RING_VERSION    1u
@@ -309,7 +316,9 @@ static const char *const CONF_KEYS[] = { "PMCP_AA_MODE", "PMCP_AA_RATE_KBPS", "P
                                          /* v15 */
                                          "PMCP_AA_RECLAIM_S", "PMCP_AA_RECLAIM_MAX",
                                          /* v17 */
-                                         "PMCP_AA_KEEPALIVE_MS", NULL };
+                                         "PMCP_AA_KEEPALIVE_MS",
+                                         /* v19 */
+                                         "PMCP_AA_RECLAIM_GOP_KB", "PMCP_AA_REPLAY_FPS", NULL };
 
 /* v11: GEM switches (pmcp.sh aa-output / aa-capture) write a second, unpinned file on /mnt/persist: only these keys,
  * never a path, read before the pinned settings so the switch wins over them (the environment still wins). */
@@ -321,6 +330,18 @@ static h264ka_t g_ka;
 static unsigned long g_ka_ms;                  /* PMCP_AA_KEEPALIVE_MS, 0 = off */
 static uint64_t g_ka_last_us;                  /* last keep-alive picture put */
 static unsigned long g_ka_sent, g_ka_gap, g_ka_gap_max, g_ka_skipped;
+/* v19 (A234-AA): every AU put into the TS queue since the last IDR, as it went out (keep-alives and shifted pictures
+ * included), so a MOST reclaim can replay the whole chain and the AID decodes exactly the pictures it would have. */
+#define GOP_MAX_ENTRIES 8192u
+typedef struct { unsigned off, len; } gop_e_t;
+static uint8_t *g_gop;                          /* NULL = off (PMCP_AA_RECLAIM_GOP_KB=0 or no memory) */
+static gop_e_t *g_gop_e;
+static unsigned g_gop_cap, g_gop_len, g_gop_n;
+static int g_gop_ok;                            /* the record starts at an IDR and holds every AU since */
+static int g_replay;                            /* replaying the record after a reclaim */
+static unsigned g_gop_cur;                      /* next record entry to replay */
+static uint64_t g_replay_next;
+static unsigned long g_replay_fps;              /* PMCP_AA_REPLAY_FPS, 0 = as fast as the queue takes them */
 /* v16: priority and MOST owner file */
 static const char *g_owner_path;               /* PMCP_AA_OWNER, "off" = no file (environment only, host tests) */
 static unsigned long g_prio_target;            /* PMCP_AA_PRIO, 0 = off */
@@ -392,6 +413,7 @@ typedef struct {
     /* v11 direct output */
     unsigned long hold_n, hold_ms_max, hold_ms_sum, acks_held, ack_forced, put_waits, put_wait_ms_max, put_err;
     unsigned long reclaims, reclaim_fail, reclaim_idr, reclaim_last_s;   /* v15 */
+    unsigned long gop_replays, gop_frames, gop_overflow, gop_cut, gop_fallback, gop_flushed;   /* v19 */
     uint64_t wr_max_logged;
     int poll_off_logged, first_block_logged;
     /* v11 capture: 0 off, 1 recording (from the first frame), 2 being written, 3 written (cap_rc 0 or errno) */
@@ -1472,6 +1494,8 @@ static void direct_hold_update(uint64_t t)
 {
     uint32_t pk = 0;
     if (g_direct_on) ts_mux_depth(&g_mux, &pk, NULL);
+    if (g_replay && g_gop_cur < g_gop_n)          /* v19: what the replay still has to put counts as queued */
+        pk += (uint32_t)((g_gop_len - g_gop_e[g_gop_cur].off) / 184u);
     if (!g_ack_hold && g_direct_on && pk > g_ack_high) {
         g_ack_hold = 1;
         g_hold_t0 = t;
@@ -1506,8 +1530,8 @@ static void direct_put_params(void)
     else { S.put_err++; set_error("SPS/PPS do kolejki r=%d", r); }
 }
 
-/* One frame (AVCC, as for the ring) into the TS queue, whole; the hold is updated before its ACK is scheduled. */
-static void direct_put(const uint8_t *au, unsigned len, uint32_t frame_no)
+/* One AU into the TS queue, whole (waits for room). 0 = queued. */
+static int direct_put_raw(const uint8_t *au, unsigned len, uint32_t frame_no)
 {
     uint64_t t0 = now_us();
     int r, waited = 0;
@@ -1521,7 +1545,87 @@ static void direct_put(const uint8_t *au, unsigned len, uint32_t frame_no)
     }
     if (r == 0) S.ring_writes++;
     else { S.put_err++; set_error("klatka do kolejki r=%d len=%u", r, len); }
+    return r;
+}
+
+/* v19: an IDR NAL in this AVCC AU? */
+static int avcc_is_idr(const uint8_t *a, unsigned len)
+{
+    unsigned off = 0;
+    while (off + 4u <= len) {
+        unsigned n = ((unsigned)a[off] << 24) | ((unsigned)a[off + 1] << 16) | ((unsigned)a[off + 2] << 8) | a[off + 3];
+        off += 4u;
+        if (n == 0u || n > len - off) return 0;
+        if ((a[off] & 0x1fu) == 5u) return 1;
+        off += n;
+    }
+    return 0;
+}
+
+/* v19: the AU goes into the record (an IDR starts it again; during a replay the cursor restarts with it). */
+static void gop_note(const uint8_t *au, unsigned len)
+{
+    if (g_gop == NULL) return;
+    if (avcc_is_idr(au, len)) { g_gop_len = 0; g_gop_n = 0; g_gop_ok = 1; g_gop_cur = 0; }
+    if (!g_gop_ok) return;
+    if (g_gop_n == GOP_MAX_ENTRIES || len > g_gop_cap - g_gop_len) { g_gop_ok = 0; S.gop_overflow++; return; }
+    memcpy(g_gop + g_gop_len, au, len);
+    g_gop_e[g_gop_n].off = g_gop_len;
+    g_gop_e[g_gop_n].len = len;
+    g_gop_n++;
+    g_gop_len += len;
+}
+
+/* v19: the rest of the record into the queue now (it is full, or the replay must end). */
+static void replay_rest(void)
+{
+    while (g_gop_cur < g_gop_n) {
+        (void)direct_put_raw(g_gop + g_gop_e[g_gop_cur].off, g_gop_e[g_gop_cur].len, (uint32_t)++g_frame_no);
+        g_gop_cur++;
+        S.gop_frames++;
+    }
+    g_replay = 0;
+}
+
+/* One frame (AVCC, as for the ring) into the TS queue, whole; the hold is updated before its ACK is scheduled.
+ * v19: during a replay it only joins the record and goes out behind it, in order. */
+static void direct_put(const uint8_t *au, unsigned len, uint32_t frame_no)
+{
+    if (g_replay) {
+        gop_note(au, len);
+        if (g_gop_ok) { direct_hold_update(now_us()); return; }
+        replay_rest();                            /* the record is full: what it holds goes now, then this AU */
+        S.gop_cut++;
+        ev_log("powtorka GOP skrocona: zapis pelny");
+    } else {
+        gop_note(au, len);
+    }
+    (void)direct_put_raw(au, len, frame_no);
     direct_hold_update(now_us());
+}
+
+/* v19: main loop, after a reclaim: the record from its IDR, at most PMCP_AA_REPLAY_FPS pictures a second and only
+ * while the TS queue is below the ACK release mark, so the AID's decoder never gets the whole chain at once. */
+static void replay_poll(uint64_t t)
+{
+    uint32_t pk = 0;
+    uint64_t period = g_replay_fps ? 1000000u / g_replay_fps : 0u;
+    if (!g_replay) return;
+    if (!g_direct_on) { g_replay = 0; return; }
+    while (g_gop_cur < g_gop_n) {
+        if (period && t < g_replay_next) break;
+        ts_mux_depth(&g_mux, &pk, NULL);
+        if (pk > g_ack_low) break;
+        (void)direct_put_raw(g_gop + g_gop_e[g_gop_cur].off, g_gop_e[g_gop_cur].len, (uint32_t)++g_frame_no);
+        g_gop_cur++;
+        S.gop_frames++;
+        if (period) { g_replay_next += period; if (g_replay_next + period < t) g_replay_next = t; }
+    }
+    if (g_gop_cur == g_gop_n) {
+        g_replay = 0;
+        ev_log("powtorka GOP zakonczona: %u klatek", g_gop_n);
+    }
+    direct_hold_update(t);
 }
 
 /* Is a MOST output (ring or direct) taking frames? */
@@ -1579,6 +1683,7 @@ static void direct_lost(const char *why)
     ev_log("MOST oddane: %s", why);
     most_stop(&g_mw, 0u);
     g_direct_on = 0;
+    g_replay = 0;
     direct_hold_update(now_us());
     most_restore();
     set_error("MOST: %s", why);
@@ -1666,6 +1771,11 @@ static void write_status_direct(FILE *f)
                 (unsigned long long)w.slow_writes, most_wait_name(g_mw_cfg.wait), w.poll_off ? " (poll wylaczony)" : "");
         fprintf(f, "ponowne przejecie MOST: proby=%lu nieudane=%lu IDR_ponownie=%lu ostatnie=%lus (okno %lus od startu radia, maks %lu)\n",
                 S.reclaims, S.reclaim_fail, S.reclaim_idr, S.reclaim_last_s, g_reclaim_s, g_reclaim_max);
+        fprintf(f, "powtorka GOP: zapis=%uKB/%uKB klatki=%u stan=%s powtorki=%lu klatki_powtorzone=%lu bez_GOP=%lu "
+                "przepelnienia=%lu skrocone=%lu wyrzucone_z_kolejki=%lu tempo=%lufps\n",
+                g_gop_len / 1024u, g_gop_cap / 1024u, g_gop_n, g_gop == NULL ? "wylaczony" : g_replay ? "powtarza" :
+                g_gop_ok ? "gotowy" : "brak IDR/pelny", S.gop_replays, S.gop_frames, S.gop_fallback, S.gop_overflow,
+                S.gop_cut, S.gop_flushed, g_replay_fps);
         fprintf(f, "czas zapisu bloku: <5ms=%llu <10ms=%llu <30ms=%llu <50ms=%llu <100ms=%llu >=100ms=%llu max=%lluus sr=%lluus\n",
                 (unsigned long long)w.hist[0], (unsigned long long)w.hist[1], (unsigned long long)w.hist[2],
                 (unsigned long long)w.hist[3], (unsigned long long)w.hist[4], (unsigned long long)w.hist[5],
@@ -2032,6 +2142,15 @@ static int direct_reclaim(uint64_t t, const most_stats_t *ms, const char *why)
         S.reclaim_fail++;
         return 0;
     }
+    {   /* v19 (A234-AA): what was queued at the steal never goes out on its own (it used to precede the IDR): the
+         * replay below brings it again, in order, after SPS/PPS and the IDR it depends on */
+        ts_mux_stats_t a, b;
+        ts_mux_snapshot(&g_mux, &a);
+        ts_mux_flush(&g_mux);
+        ts_mux_snapshot(&g_mux, &b);
+        S.gop_flushed += (unsigned long)(b.aus_flushed - a.aus_flushed);
+        g_replay = 0;
+    }
     ts_mux_discontinuity(&g_mux);
     if (most_start(&g_mw, &g_mux) != 0) {
         most_stop(&g_mw, 0u);
@@ -2041,14 +2160,26 @@ static int direct_reclaim(uint64_t t, const most_stats_t *ms, const char *why)
     }
     g_avcc_dirty = 1;
     send_avcc();                                  /* SPS/PPS first, then the picture to decode from */
-    if (g_sync_idr_len != 0u && S.sync_state != 1u) {
+    if (g_gop != NULL && g_gop_ok && g_gop_n != 0u && S.sync_state != 1u) {
+        /* v19: the whole chain since the IDR, exactly as it went out: the AID ends on the phone's last picture */
+        g_replay = 1;
+        g_gop_cur = 0;
+        g_replay_next = now_us();
+        S.gop_replays++;
+        S.reclaim_idr++;
+        ev_log("powtorka GOP: %u klatek, %uKB od IDR", g_gop_n, g_gop_len / 1024u);
+        replay_poll(g_replay_next);
+    } else if (g_sync_idr_len != 0u && S.sync_state != 1u) {
+        /* no record (off, full, or no IDR in it): v15 as before, the last IDR only; the phone's next pictures refer
+         * to a newer one, so the AID may show artifacts until the phone's next IDR */
         out_frame(g_sync_idr, g_sync_idr_len, (uint32_t)++g_frame_no);
         S.reclaim_idr++;
+        S.gop_fallback++;
         g_ka.have_ref = 0;                        /* v17: the decoder restarted on an old IDR: no keep-alive until a new one */
     }
     snprintf(S.most_state, sizeof S.most_state, "przejety ponownie (direct)");
     ev_log("MOST znowu nasze po %lums (IDR ponownie: %s)", (unsigned long)((now_us() - t) / 1000u),
-           g_sync_idr_len != 0u && S.sync_state != 1u ? "tak" : "nie");
+           g_replay ? "powtorka GOP" : g_sync_idr_len != 0u && S.sync_state != 1u ? "tak" : "nie");
     return 1;
 }
 
@@ -2082,7 +2213,7 @@ static void ka_poll(uint64_t t)
     uint32_t pk = 0, aus = 0;
     uint64_t last;
     unsigned n;
-    if (!g_direct_on || g_ka_ms == 0u || S.last_frame_us == 0u || S.sync_state == 1u || g_pace_n != 0u) return;
+    if (!g_direct_on || g_ka_ms == 0u || S.last_frame_us == 0u || S.sync_state == 1u || g_pace_n != 0u || g_replay) return;
     last = S.last_frame_us > g_ka_last_us ? S.last_frame_us : g_ka_last_us;
     if (t < last + (uint64_t)g_ka_ms * 1000u) return;
     ts_mux_depth(&g_mux, &pk, &aus);
@@ -2409,6 +2540,14 @@ int main(int argc, char **argv)
             uint8_t *a = (uint8_t *)malloc(AU_BUF_MAX), *b = (uint8_t *)malloc(AU_BUF_MAX);
             if (a != NULL && b != NULL) { g_au = a; g_sync_idr = b; g_sync_idr_cap = AU_BUF_MAX; } else { free(a); free(b); }
         }
+        /* v19: the reclaim record (0 = off: the v15 replay of the last IDR only) and its replay rate */
+        g_gop_cap = (unsigned)env_ul("PMCP_AA_RECLAIM_GOP_KB", 4096ul, 0ul, 16384ul) * 1024u;
+        g_replay_fps = env_ul("PMCP_AA_REPLAY_FPS", 60ul, 0ul, 1000ul);
+        if (g_gop_cap != 0u) {
+            g_gop = (uint8_t *)malloc(g_gop_cap);
+            g_gop_e = (gop_e_t *)malloc(GOP_MAX_ENTRIES * sizeof *g_gop_e);
+            if (g_gop == NULL || g_gop_e == NULL) { free(g_gop); free(g_gop_e); g_gop = NULL; g_gop_e = NULL; g_gop_cap = 0u; }
+        }
     }
     g_cap_s = env_ul("PMCP_AA_CAPTURE_S", 0ul, 0ul, 600ul);                       /* v11: 0 = no capture */
     g_cap_path = env_or("PMCP_AA_CAPTURE_PATH", "/mnt/persist/pmcp/aa-stream.h264");   /* environment only */
@@ -2491,7 +2630,7 @@ int main(int argc, char **argv)
         }
         sync_poll(now_us());
         pace_poll(now_us());
-        if (g_direct) { direct_check(now_us()); direct_hold_update(now_us()); ka_poll(now_us()); }   /* v11, v17 */
+        if (g_direct) { direct_check(now_us()); replay_poll(now_us()); direct_hold_update(now_us()); ka_poll(now_us()); }   /* v11, v19, v17 */
         ack_send_due(now_us());
         kf_poll(now_us());
         if (S.cap_state == 1 && g_cap_t0 != 0u && now_us() - g_cap_t0 > (uint64_t)g_cap_s * 1000000u) cap_finish(0);

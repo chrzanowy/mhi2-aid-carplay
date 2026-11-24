@@ -91,6 +91,7 @@ typedef struct {
     int64_t lead_first_min, lead_first_max, lead_last_min, lead_first_last;   /* 90 kHz */
     int have_lead;
     uint64_t aus_without_ps;  /* keyframes sent before any SPS/PPS was known */
+    uint64_t aus_flushed;     /* ts_mux_flush: AUs dropped (queued or partly sent) */
     uint64_t packet_count_mismatch;   /* must stay 0 */
     /* producer side */
     uint64_t aus_in, bytes_in, put_full;
@@ -133,6 +134,11 @@ void ts_mux_free(ts_mux_t *m);
 void ts_mux_default_cfg(ts_mux_cfg_t *cfg);
 /* The next AU whose first packet is built carries the discontinuity flag (0x80): after the writer reopened the device. */
 void ts_mux_discontinuity(ts_mux_t *m);
+
+/* Drops every queued AU and the AU being sent (its rest is never built); queued parameter sets are applied, so
+ * the next keyframe still carries the latest SPS/PPS. Only while no consumer runs (the writer was stopped): after a
+ * MOST reclaim the feeder replays the stream from its last keyframe instead (v19). */
+void ts_mux_flush(ts_mux_t *m);
 
 /* Producer. Both return 0, or -1 when the pool or the entry table has no room now (the caller retries later;
  * nothing is dropped), or -2 when the data can never fit / is invalid. */

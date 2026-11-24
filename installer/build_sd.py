@@ -174,7 +174,7 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
     # AA 1.0 (A153): feeder v14 = v13 (pmcp's own MOST writer, direct) + only direct|ring taken from PMCP_AA_OUTPUT
     # v1.7.0: feeder v15 = v14 + MOST taken back when the factory encoder grabs isoTX2 early after boot (A166; in the car
     # with cards b542b2d4 and 9c0c4493)
-    "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "b574ffe9330489bf8d2d141ea121cb27bcf4fe476d186ee91cf1078b85e95738", 68628, "aa/aa-most-feeder"),
+    "AA_FEEDER": (PROJ / "aa/prebuilt/aa-most-feeder", "48d6fc5670d2fd64453ccf54be0c789789ca995a02f1d41fbebab312406c3155", 70840, "aa/aa-most-feeder"),
     "AA_HOOK_CONF": (PROJ / "aa/unit/gal-hook-gamma.conf", "716516eb36b50f7b7230ff36ad8057713ba2b1c97c2fd0b55afe2c8f17559173", 1839, "aa/gal-hook.conf"),
     "AA_MODE": (PROJ / "aa/unit/feeder-gamma.conf", "08daec96ae34f93557792ef2289e968b049f45c1b1f30802095302eae1a40a47", 1566, "aa/feeder.conf"),
 })

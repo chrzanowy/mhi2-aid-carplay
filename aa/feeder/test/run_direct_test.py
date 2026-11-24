@@ -250,7 +250,7 @@ STEADY = [(1, 1, 20000, 20000, False), (149, 0, 1500, 6000, False)]
 r = analyse(run('steady', plan_synth(STEADY)))
 common(r, 'steady', 150, lead_min=4500)
 st = r.status
-check(st.startswith('PMCP AA FEEDER v18 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
+check(st.startswith('PMCP AA FEEDER v19 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
 for p in ('kolejka direct:', 'ACK wstrzymane:', 'zapis MOST:', 'czas zapisu bloku:', 'PTS-PCR (90kHz):', 'devctl: interfejs=0 (status 0)',
           'MOST poczatek 01: ', 'AU direct:'):
     check(any(l.startswith(p) for l in st.split('\n')), 'steady: status line %r' % p)
@@ -336,7 +336,7 @@ check(r.dmdt_before_close == ['dc 72', 'sc 4 72', 'dc 72', 'sc 4 72'], 'reclaim:
       % r.dmdt_before_close)
 check(r.dmdt == ['dc 72', 'sc 4 72', 'dc 72', 'sc 4 72', 'dc 70 33', 'sc 4 70'], 'reclaim: one restore at the end %r' % r.dmdt)
 check(num(rl, 'proby') == 1 and num(rl, 'nieudane') == 0 and num(rl, 'IDR_ponownie') == 1, 'reclaim: counted %r' % rl)
-check('MOST zabrane (blad zapisu errno=12)' in r.status and 'MOST znowu nasze' in r.status and 'IDR ponownie: tak' in r.status,
+check('MOST zabrane (blad zapisu errno=12)' in r.status and 'MOST znowu nasze' in r.status and 'IDR ponownie: powtorka GOP' in r.status,
       'reclaim: events logged')
 check('przejety ponownie (direct)' in r.status_before_close and 'MOST oddane' not in r.status_before_close,
       'reclaim: MOST still ours after it')
@@ -429,7 +429,7 @@ check('przerwa od telefonu 3' in r.status or 'przerwa od telefonu 4' in r.status
 bl = [l for l in r.status.split('\n') if 'brak klatek 3 s' in l]
 check(len(bl) == 2 and 'ACK czeka 0 (wstrzymane nie)' in bl[-1] and 'kolejka 0 pakietow/0 AU' in bl[-1], 'gap: stall noted with ACK/queue state %s' % bl)
 pv = [open(SPATH + '-prev%d' % k).read() if os.path.exists(SPATH + '-prev%d' % k) else '' for k in (1, 2, 3)]
-check(all(x.startswith('PMCP AA FEEDER v18') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
+check(all(x.startswith('PMCP AA FEEDER v19') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
 check([num(line(x, 'klatki='), 'klatki') for x in pv] == [30, 30, 30] and pv[0] != pv[1] != pv[2], 'prev: prev1..3 are separate sessions')
 sess = [l for l in open(os.path.join(OUT, 'prev3', 'pmcp-aa-sessions.txt')).read().split('\n') if l]
 check(len(sess) == 1 and '>3s=1' in sess[0] and 'ACK=30' in sess[0]
@@ -466,7 +466,7 @@ r = run('ring-explicit', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 
         env_add={'PMCP_AA_OUTPUT': 'ring', 'FAKE_BRIDGE_PRINT': '1', 'PMCP_AA_CAPTURE_S': '1',
                  'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'ring.h264')})
 check(not os.path.exists(r.P('mlb.ts')) and os.path.exists(r.P('bridge.jsonl')) and r.acks == 40, 'ring-explicit: ring + bridge, no isoTX2')
-check(r.status.startswith('PMCP AA FEEDER v18 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
+check(r.status.startswith('PMCP AA FEEDER v19 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
 bt = open(r.P('pmcp-aa-bridge.txt')).read() if os.path.exists(r.P('pmcp-aa-bridge.txt')) else ''
 check('bridge poczatek 01: bridge: start status=0 packets=64' in bt and 'bridge poczatek 02: bridge: latency-reset' in bt,
       'ring-explicit: guardian keeps the first bridge lines')
@@ -481,7 +481,7 @@ r = run('extra-switch', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 6
         conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=ring\n', env_add={'PMCP_AA_OUTPUT': None, 'PMCP_AA_MODE': None,
         'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'extra.h264')},
         extra='PMCP_AA_OUTPUT=direct\nPMCP_AA_CAPTURE_S=1\nPMCP_AA_MODE=analyze\nPMCP_AA_CAPTURE_PATH=/tmp/x\n')
-check(r.status.startswith('PMCP AA FEEDER v18 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
+check(r.status.startswith('PMCP AA FEEDER v19 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
 check(os.path.exists(os.path.join(OUT, 'capture-files', 'extra.h264')) and 'nagranie: zapisane' in r.status,
       'extra-switch: capture switched on there, path key there ignored')
 check(r.acks == 40, 'extra-switch: every frame (%d)' % r.acks)
@@ -609,6 +609,90 @@ if shutil.which('ffmpeg') and 'libx264' in subprocess.run(['ffmpeg', '-hide_bann
           'keepalive: a stream it cannot follow gets none: %r' % line(r.status, 'keepalive:'))
 else:
     check(False, 'keepalive: ffmpeg with libx264 needed for section 17')
+
+# 19. v19 (A234-AA): after a reclaim the stream is replayed from the last IDR. A real H.264 stream (libx264, an IDR every
+# 90 pictures), a slow device so frames are queued at the steal, ENOMEM mid-stream. The video after the reopen (from the
+# AU with the discontinuity flag) must start with SPS/PPS + IDR, decode without one error on its own, and give exactly
+# the original pictures from that IDR to the end: the AID ends on the phone's own pictures, no artifacts. ACK = frames.
+def ts_video_aus(path):
+    """[(discontinuity, keyframe flag, Annex B bytes)] of PID 0x11, one per PES (PUSI)."""
+    b = open(path, 'rb').read(); aus = []
+    for i in range(0, len(b) - 187, 188):
+        p = b[i:i + 188]
+        if p[0] != 0x47 or ((p[1] & 0x1f) << 8 | p[2]) != 0x11: continue
+        pusi, afc, o, disc, rai = p[1] & 0x40, (p[3] >> 4) & 3, 4, False, False
+        if afc & 2:
+            if p[4] > 0: disc, rai = bool(p[5] & 0x80), bool(p[5] & 0x40)
+            o = 5 + p[4]
+        if not afc & 1: continue
+        pl = p[o:]
+        if pusi:
+            pl = pl[9 + pl[8]:]
+            aus.append([disc, rai, bytearray()])
+        if aus: aus[-1][2] += pl
+    return [(d, k, bytes(x)) for d, k, x in aus]
+
+
+if shutil.which('ffmpeg') and 'libx264' in subprocess.run(['ffmpeg', '-hide_banner', '-encoders'], capture_output=True, text=True).stdout:
+    src = os.path.join(OUT, 'gop-src.h264')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=800x480:rate=30', '-frames:v', '240',
+                    '-c:v', 'libx264', '-profile:v', 'baseline', '-x264-params', 'keyint=90:min-keyint=90:scenecut=0:ref=1:bframes=0:aud=1',
+                    '-f', 'h264', src], check=True)
+    data = open(src, 'rb').read(); gplan, cur = [], b''
+    for nal in split_nals(data):
+        if (nal[0] & 0x1f) == 9 and cur: gplan.append(cur); cur = b''
+        cur += b'\x00\x00\x00\x01' + nal
+    if cur: gplan.append(cur)
+    gplan = [(au, b'\x00\x00\x00\x01\x65' in au, False) for au in gplan]
+    rc0, err0, gorig = framemd5(src, 'h264')
+    idr_at = [k for k, x in enumerate(gplan) if x[1]]
+    for case, env_extra, pause in (('gop-replay', {}, None), ('gop-off', {'PMCP_AA_RECLAIM_GOP_KB': '0'}, None),
+                                   ('gop-keepalive', {'HOST_MLB_FAIL_AT_BLOCK': '110'}, {93: 3.0})):
+        env = dict(RECLAIM_ENV, HOST_MLB_FAIL_AT_BLOCK='60', HOST_MLB_BPS='1600000')
+        env.update(env_extra)
+        r = run(case, gplan, env_add=env, ack_idle=6.0, pause=pause)
+        aus = ts_video_aus(r.P('mlb.ts'))
+        disc = [k for k, a in enumerate(aus) if a[0]]
+        gl = line(r.status, 'powtorka GOP:')
+        check(rc0 == 0 and len(gorig) == 240 and idr_at == [0, 90, 180] and len(disc) == 2,
+              '%s: source 240 pictures, IDRs %r, two discontinuities in the TS %r' % (case, idr_at, disc))
+        if len(disc) < 2: continue
+        seg = aus[disc[1]:]
+        check(seg[0][1] and b'\x00\x00\x00\x01\x67' in seg[0][2] and b'\x00\x00\x00\x01\x65' in seg[0][2],
+              '%s: after the reopen the first AU is SPS/PPS + IDR (flagged)' % case)
+        if case != 'gop-keepalive':
+            check(num(gl, 'wyrzucone_z_kolejki') >= 1, '%s: frames were queued at the steal (%r)' % (case, gl))
+        es = r.P('after-reopen.h264')
+        open(es, 'wb').write(b''.join(a[2] for a in seg))
+        rc, err, got = framemd5(es, 'h264')
+        if case == 'gop-keepalive':           # v17 + v19: keep-alive pictures (and shifted phone pictures) are in the record
+            ded = [x for k, x in enumerate(got) if k == 0 or x != got[k - 1]]
+            start = gorig.index(ded[0]) if ded and ded[0] in gorig else -1
+            kl = line(r.status, 'keepalive:')
+            check(rc == 0 and err == '' and start in idr_at and ded == gorig[start:] and len(got) > len(ded)
+                  and start <= 92 and got.count(gorig[92]) >= 2 and num(kl, 'bledy') == 0,
+                  '%s: replay over keep-alive pictures decodes without an error to the phone pictures from the IDR at %d '
+                  '(%d pictures, %d keep-alive) %s' % (case, start, len(got), len(got) - len(ded), err[:150]))
+        elif case == 'gop-replay':
+            check(rc == 0 and err == '', '%s: the stream after the reopen decodes on its own without an error %s' % (case, err[:200]))
+            start = gorig.index(got[0]) if got and got[0] in gorig else -1
+            tail = len(got) - (len(gorig) - start)      # keep-alive pictures after the phone's last one (it is silent then)
+            check(start in idr_at and 0 <= tail <= num(line(r.status, 'keepalive:'), 'wyslane') and
+                  got == gorig[start:] + [gorig[-1]] * tail,
+                  '%s: it gives exactly the original pictures from the IDR at %d to the end (%d pictures, %d keep-alive after)'
+                  % (case, start, len(got), tail))
+            check(num(gl, 'powtorki') == 1 and num(gl, 'bez_GOP') == 0 and num(gl, 'klatki_powtorzone') >= 1 and 'stan=gotowy' in gl,
+                  '%s: replay counted %r' % (case, gl))
+        else:
+            check(num(gl, 'bez_GOP') == 1 and num(gl, 'powtorki') == 0 and 'stan=wylaczony' in gl,
+                  '%s: PMCP_AA_RECLAIM_GOP_KB=0: last IDR only, as v15 (%r)' % (case, gl))
+            wrong = sum(1 for x in got if x not in gorig)
+            check(wrong > 0, '%s: control: the v15 way gives %d of %d pictures the phone never had (A234 artifacts)'
+                  % (case, wrong, len(got)))
+        check(r.acks == len(gplan) and r.other == 0 and r.rc == 0,
+              '%s: one ACK per phone frame, no IDR request, exit 0 (%d/%d %d %s)' % (case, r.acks, len(gplan), r.other, r.rc))
+else:
+    check(False, 'gop: ffmpeg with libx264 needed for section 19')
 
 # 18. v18 (A235-AA, CP's car simulator): the feeder SIGKILLed right after the dmdt release (gal dying in the first second
 # of an AA session), before the device opens or the stream connects: the guardian still gives MOST back, exactly once,

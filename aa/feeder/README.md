@@ -92,6 +92,18 @@ feeder starts no `altscreen-most-bridge` and makes no ring:
   500 ms; an EOF before that gives MOST back without a bridge. A failed release also ends through the guardian. Host
   test: `early-kill-direct` / `early-kill-ring` (SIGKILL right after `sc 4 72`: one restore, owner file and marker
   removed, no device, no bridge; v17 fails them).
+- v19 (A236-AA, A234-AA found in CP's car simulator): after a MOST reclaim (v15) the AUs already queued at the steal
+  went out before SPS/PPS and the replayed last IDR, and the phone's later pictures refer to a newer picture than that
+  IDR: the AID could show artifacts until the phone's next IDR (up to a minute and more). Now direct keeps every AU put
+  into the TS queue since the last IDR, as it went out (keep-alive pictures and shifted pictures included; at most
+  `PMCP_AA_RECLAIM_GOP_KB`, default 4096, 0 = the v15 way). On a reclaim the queue is flushed (`ts_mux_flush`), then
+  SPS/PPS, the IDR and the whole chain after it are replayed at most `PMCP_AA_REPLAY_FPS` (default 60) pictures a second
+  and only while the queue is below the ACK release mark; new phone frames join the record and follow in order, an IDR
+  from the phone restarts it, the replay backlog counts for the ACK hold. The AID ends on exactly the phone's pictures.
+  A full record (or none yet) falls back to the v15 way, counted. Status line `powtorka GOP:`. Host test section 19
+  (libx264, IDR every 90 pictures, a slow device, ENOMEM mid-stream; also with keep-alive pictures in the record): the
+  video after the reopen starts with SPS/PPS + IDR, decodes on its own without one error and gives exactly the original
+  pictures from that IDR; with the record off, 82 of 148 pictures differ from the phone's (v18 fails the section).
 
 Diagnostics in both outputs: the guardian keeps the bridge's first 30 lines (devctl read-backs) besides the last ones;
 `PMCP_AA_CAPTURE_S=N` (default 0) records the phone's access units for N s to `PMCP_AA_CAPTURE_PATH` (environment only,

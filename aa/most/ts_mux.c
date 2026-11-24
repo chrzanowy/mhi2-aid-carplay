@@ -368,6 +368,31 @@ static void pes_copy(ts_mux_t *m, uint8_t *dst, uint32_t n)
     }
 }
 
+void ts_mux_flush(ts_mux_t *m)
+{
+    pthread_mutex_lock(&m->lock);
+    while (m->q_count > 0u) {
+        ts_entry_t *e = &m->q[m->q_head];
+        if (e->type == ENTRY_CONFIG) {          /* as start_next_au: the parameter sets stay in force */
+            memcpy(m->sps, m->pool + e->off, e->sps_len);
+            m->sps_len = e->sps_len;
+            memcpy(m->pps, m->pool + e->off + e->sps_len, e->len - e->sps_len);
+            m->pps_len = e->len - e->sps_len;
+        } else {
+            m->st.aus_flushed++;
+        }
+        m->q_head = (m->q_head + 1u) % m->q_cap;
+        m->q_count--;
+    }
+    if (m->active) { m->active = 0; m->st.aus_flushed++; }
+    m->cur_pos = 0;
+    m->cur_total = 0;
+    m->cur_packet = 0;
+    m->queued_packets = 0;
+    m->wr = 0;
+    pthread_mutex_unlock(&m->lock);
+}
+
 void ts_mux_discontinuity(ts_mux_t *m)
 {
     m->disc_next = 1;
