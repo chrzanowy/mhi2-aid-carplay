@@ -144,6 +144,12 @@
  * Keep-alive pictures are reference pictures, so the phone's later pictures get frame_num += k and POC lsb += 2k
  * until its next IDR; every picture decodes to exactly the pixels it would have had (host test on a phone capture).
  *
+ * v18 (A235-AA, CP's car simulator, chaos seed 5): the guardian was forked only after dmdt dc 72 + sc 4 72 and the
+ * 500 ms after them, so a feeder killed in that window (gal dying in the first second of an AA session) left MOST
+ * released with nobody to give it back: AID black, VW map back only after another session. The guardian is now forked
+ * right after the owner claim, before the first dmdt; in ring mode it starts the bridge only on the byte 'G' (sent after
+ * the 500 ms), and an EOF before it gives MOST back without a bridge. A failed release also goes through the guardian.
+ *
  * Modes (PMCP_AA_MODE): "analyze" (default) only reads, ACKs and writes a summary; the cluster keeps
  * the VW map. "most" also takes the MOST channel over. The summary is rewritten once a second to
  * PMCP_AA_STATUS (default /ramdisk/pmcp-aa-feeder.txt); nothing grows without bound.
@@ -180,7 +186,7 @@
 #include "../most/most_writer.h"
 #include "h264_ka.h"
 
-#define FEEDER_VERSION "17"
+#define FEEDER_VERSION "18"
 
 #define RING_MAGIC      0x43505247u
 #define RING_VERSION    1u
@@ -985,6 +991,19 @@ static void guardian(int rfd)
         if (fd >= 0) { (void)write(fd, pf, strlen(pf)); close(fd); }
     }
     owner_to_guardian((long)getppid());         /* v16: before the bridge starts (it checks the file) */
+    if (!g_direct) {
+        /* v18: forked before the dmdt release; the bridge may start only after it and its 500 ms ('G'). EOF first:
+         * the feeder died or failed during the release, MOST goes back below without any bridge. */
+        ssize_t n;
+        do { n = read(rfd, &c, 1); } while (n < 0 && errno == EINTR);
+        if (n != 1) {
+            sleep_ms(250);
+            dmdt_restore();
+            owner_release((long)getpid());
+            (void)unlink(gpath);
+            _exit(0);
+        }
+    }
     if (g_direct) {
         /* v11 direct output: no bridge. The feeder itself writes isoTX2 and closes it before this pipe (or the kernel
          * closes both when it dies); then MOST goes back exactly as below. */
@@ -1316,25 +1335,29 @@ static int most_take(void)
         return -1;
     }
     if (pipe(p) != 0) { set_error("pipe errno=%d", errno); owner_release((long)getpid()); return -1; }
-    rc = dmdt("dc", "72", NULL);
-    S.dmdt_release_rc = rc != 0 ? rc : dmdt("sc", "4", "72");
-    if (rc != 0 || S.dmdt_release_rc != 0) {
-        set_error("dmdt release rc=%d", S.dmdt_release_rc);
-        close(p[0]); close(p[1]);
-        dmdt_restore();                           /* the first call may have gone through */
-        owner_release((long)getpid());
-        return -1;
-    }
-    sleep_ms(500);
+    /* v18 (A235-AA): the guardian exists BEFORE the first dmdt, so a feeder killed during the release or the 500 ms
+     * after it (gal dying in the first second of a session) still gets MOST given back by the guardian's pipe EOF. */
     g_guard_pid = fork();
     if (g_guard_pid == 0) { close(p[1]); guardian(p[0]); }
     close(p[0]);
-    if (g_guard_pid < 0) {
-        set_error("fork straznik errno=%d", errno); close(p[1]); dmdt_restore(); owner_release((long)getpid()); return -1;
+    if (g_guard_pid < 0) {                        /* nothing released yet: only the claim to undo */
+        set_error("fork straznik errno=%d", errno); close(p[1]); owner_release((long)getpid()); return -1;
     }
     g_guard_fd = p[1];
     (void)fcntl(g_guard_fd, F_SETFD, FD_CLOEXEC);
     S.bridge_pid = (long)g_guard_pid;
+    rc = dmdt("dc", "72", NULL);
+    S.dmdt_release_rc = rc != 0 ? rc : dmdt("sc", "4", "72");
+    if (rc != 0 || S.dmdt_release_rc != 0) {
+        set_error("dmdt release rc=%d", S.dmdt_release_rc);
+        most_restore();                           /* pipe EOF: the guardian restores (the first call may have gone
+                                                   * through) and releases the owner file, as at any session end */
+        return -1;
+    }
+    sleep_ms(500);
+    if (!g_direct && write(g_guard_fd, "G", 1) != 1) {   /* ring: the guardian starts the bridge only now */
+        set_error("straznik pipe errno=%d", errno); most_restore(); return -1;
+    }
     if (g_direct) return direct_start();        /* v11: open isoTX2 here, the guardian holds no device */
     for (i = 0; i < 300 && !g_stop; ++i) {     /* the bridge creates and initialises the ring */
         int st;

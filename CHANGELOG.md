@@ -47,6 +47,14 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
   does not starve the bridge (after tomasz-twardzicki MU1367 v1.5.3). `events.log` is now rotated like the bridge's
   log (`events.log.1`, both together at most 64 KB) instead of stopping at 64 KB; "CP save log" includes both files.
 
+## Unreleased (release-candidate)
+
+- **Android Auto feeder v18 (MOST given back when gal dies in the first second):** if the AA feeder was killed right
+  after it had taken the MOST channel and before the picture started, nobody gave the channel back: the AID stayed black
+  until the next phone session. The feeder's guardian now starts before the channel is taken, so it always gives it
+  back. Found by the car simulator; host test added. New AA set: one trial start, then "5. Confirm". Feeder `b574ffe9…`
+  (was `7a578e1a…`).
+
 ## v1.9.0 (2026-11-22)
 
 Installer version `pmcp-0.9.0-mu1161-791-<build id>`. Tested in the car on 2026-11-22 with an experimental card of this

@@ -84,6 +84,15 @@ uruchamia `altscreen-most-bridge` i nie tworzy ringu:
   błędów dekodowania, każdy obraz telefonu identyczny co do piksela, każdy keep-alive = obraz przed nim) i sekcja 17
   `run_direct_test.py` (strumień libx264 przez feeder i symulowany isoTX2).
 
+- v18 (A235-AA, symulator auta CP, chaos seed 5, powtarzalne): feeder zabity w pierwszej sekundzie sesji (po dmdt dc 72
+  + sc 4 72, przed otwarciem urządzenia) zostawiał MOST zwolniony bez nikogo, kto by go oddał: AID czarny, mapa VW
+  wracała dopiero z następną sesją. Strażnik powstawał dopiero po zwolnieniu i 500 ms. Teraz powstaje zaraz po
+  założeniu pliku właściciela, przed pierwszym dmdt, i od razu wpisuje tam swój pid, więc CarPlay widzi żywego
+  właściciela. W trybie ring uruchamia bridge dopiero po bajcie `G`, który feeder wysyła po 500 ms; EOF wcześniej =
+  oddanie MOST bez bridge. Nieudane zwolnienie też kończy się przez strażnika. Test hosta: `early-kill-direct` /
+  `early-kill-ring` (SIGKILL zaraz po `sc 4 72`: jedno przywrócenie, plik właściciela i znacznik usunięte, bez
+  urządzenia i bez bridge; v17 ich nie przechodzi).
+
 Diagnostyka w obu wyjściach: strażnik trzyma pierwsze 30 linii bridge'a (odczyty devctl) obok ostatnich;
 `PMCP_AA_CAPTURE_S=N` (domyślnie 0) nagrywa jednostki dostępu z telefonu przez N s do `PMCP_AA_CAPTURE_PATH` (tylko ze
 środowiska, domyślnie `/mnt/persist/pmcp/aa-stream.h264`, najwyżej 6 MB, Annex B z AUD w każdym AU, plus `.idx` z czasami).

@@ -84,6 +84,15 @@ feeder starts no `altscreen-most-bridge` and makes no ring:
   capture, ffmpeg: no decode error, every phone picture pixel-identical, every keep-alive = the picture before) and
   section 17 of `run_direct_test.py` (libx264 stream through the feeder and the simulated isoTX2).
 
+- v18 (A235-AA, CP's car simulator, chaos seed 5, repeatable): a feeder killed in the first second of a session (after
+  dmdt dc 72 + sc 4 72, before the device opened) left MOST released with nobody to give it back: the AID stayed black
+  and the VW map came back only with the next session. The guardian was forked only after the release and its 500 ms.
+  It is now forked right after the owner claim, before the first dmdt; it rewrites the owner file to its pid at once,
+  so CarPlay sees a live holder. In ring mode it starts the bridge only on the byte `G` the feeder sends after the
+  500 ms; an EOF before that gives MOST back without a bridge. A failed release also ends through the guardian. Host
+  test: `early-kill-direct` / `early-kill-ring` (SIGKILL right after `sc 4 72`: one restore, owner file and marker
+  removed, no device, no bridge; v17 fails them).
+
 Diagnostics in both outputs: the guardian keeps the bridge's first 30 lines (devctl read-backs) besides the last ones;
 `PMCP_AA_CAPTURE_S=N` (default 0) records the phone's access units for N s to `PMCP_AA_CAPTURE_PATH` (environment only,
 default `/mnt/persist/pmcp/aa-stream.h264`, at most 6 MB, Annex B with an AUD per AU, plus `.idx` with the times).

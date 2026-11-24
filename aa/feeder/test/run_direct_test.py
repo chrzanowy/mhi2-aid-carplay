@@ -250,7 +250,7 @@ STEADY = [(1, 1, 20000, 20000, False), (149, 0, 1500, 6000, False)]
 r = analyse(run('steady', plan_synth(STEADY)))
 common(r, 'steady', 150, lead_min=4500)
 st = r.status
-check(st.startswith('PMCP AA FEEDER v17 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
+check(st.startswith('PMCP AA FEEDER v18 mode=most wyjscie=direct'), 'steady: status header %r' % st.split('\n')[0])
 for p in ('kolejka direct:', 'ACK wstrzymane:', 'zapis MOST:', 'czas zapisu bloku:', 'PTS-PCR (90kHz):', 'devctl: interfejs=0 (status 0)',
           'MOST poczatek 01: ', 'AU direct:'):
     check(any(l.startswith(p) for l in st.split('\n')), 'steady: status line %r' % p)
@@ -429,7 +429,7 @@ check('przerwa od telefonu 3' in r.status or 'przerwa od telefonu 4' in r.status
 bl = [l for l in r.status.split('\n') if 'brak klatek 3 s' in l]
 check(len(bl) == 2 and 'ACK czeka 0 (wstrzymane nie)' in bl[-1] and 'kolejka 0 pakietow/0 AU' in bl[-1], 'gap: stall noted with ACK/queue state %s' % bl)
 pv = [open(SPATH + '-prev%d' % k).read() if os.path.exists(SPATH + '-prev%d' % k) else '' for k in (1, 2, 3)]
-check(all(x.startswith('PMCP AA FEEDER v17') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
+check(all(x.startswith('PMCP AA FEEDER v18') for x in pv) and not os.path.exists(SPATH + '-prev4'), 'prev: 3 earlier full statuses kept')
 check([num(line(x, 'klatki='), 'klatki') for x in pv] == [30, 30, 30] and pv[0] != pv[1] != pv[2], 'prev: prev1..3 are separate sessions')
 sess = [l for l in open(os.path.join(OUT, 'prev3', 'pmcp-aa-sessions.txt')).read().split('\n') if l]
 check(len(sess) == 1 and '>3s=1' in sess[0] and 'ACK=30' in sess[0]
@@ -466,7 +466,7 @@ r = run('ring-explicit', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 
         env_add={'PMCP_AA_OUTPUT': 'ring', 'FAKE_BRIDGE_PRINT': '1', 'PMCP_AA_CAPTURE_S': '1',
                  'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'ring.h264')})
 check(not os.path.exists(r.P('mlb.ts')) and os.path.exists(r.P('bridge.jsonl')) and r.acks == 40, 'ring-explicit: ring + bridge, no isoTX2')
-check(r.status.startswith('PMCP AA FEEDER v17 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
+check(r.status.startswith('PMCP AA FEEDER v18 mode=most czas='), 'ring-explicit: header without wyjscie=direct')
 bt = open(r.P('pmcp-aa-bridge.txt')).read() if os.path.exists(r.P('pmcp-aa-bridge.txt')) else ''
 check('bridge poczatek 01: bridge: start status=0 packets=64' in bt and 'bridge poczatek 02: bridge: latency-reset' in bt,
       'ring-explicit: guardian keeps the first bridge lines')
@@ -481,7 +481,7 @@ r = run('extra-switch', plan_synth([(1, 1, 20000, 20000, False), (39, 0, 1500, 6
         conf='PMCP_AA_MODE=most\nPMCP_AA_OUTPUT=ring\n', env_add={'PMCP_AA_OUTPUT': None, 'PMCP_AA_MODE': None,
         'PMCP_AA_CAPTURE_PATH': os.path.join(OUT, 'capture-files', 'extra.h264')},
         extra='PMCP_AA_OUTPUT=direct\nPMCP_AA_CAPTURE_S=1\nPMCP_AA_MODE=analyze\nPMCP_AA_CAPTURE_PATH=/tmp/x\n')
-check(r.status.startswith('PMCP AA FEEDER v17 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
+check(r.status.startswith('PMCP AA FEEDER v18 mode=most wyjscie=direct'), 'extra-switch: output from aa-extra.conf, MODE there ignored')
 check(os.path.exists(os.path.join(OUT, 'capture-files', 'extra.h264')) and 'nagranie: zapisane' in r.status,
       'extra-switch: capture switched on there, path key there ignored')
 check(r.acks == 40, 'extra-switch: every frame (%d)' % r.acks)
@@ -609,6 +609,43 @@ if shutil.which('ffmpeg') and 'libx264' in subprocess.run(['ffmpeg', '-hide_bann
           'keepalive: a stream it cannot follow gets none: %r' % line(r.status, 'keepalive:'))
 else:
     check(False, 'keepalive: ffmpeg with libx264 needed for section 17')
+
+# 18. v18 (A235-AA, CP's car simulator): the feeder SIGKILLed right after the dmdt release (gal dying in the first second
+# of an AA session), before the device opens or the stream connects: the guardian still gives MOST back, exactly once,
+# and removes the owner file and its marker; in ring mode no bridge is ever started.
+def early_kill(case, output):
+    d = os.path.join(OUT, case)
+    shutil.rmtree(d, ignore_errors=True); os.makedirs(d)
+    P = lambda n: os.path.join(d, n)
+    srv = socket.socket(); srv.bind(('127.0.0.1', 0)); srv.listen(1)
+    open(P('feeder.conf'), 'w').close()
+    env = {k: v for k, v in os.environ.items() if not k.startswith(('PMCP_', 'HOST_MLB_'))}
+    env.update(PMCP_AA_CONF=P('feeder.conf'), PMCP_AA_STATUS=P('status.txt'), PMCP_AA_RING=P('ring.bin'),
+               PMCP_AA_BRIDGE=os.path.join(HERE, 'fake_bridge.sh'), PMCP_AA_DMDT=os.path.join(HERE, 'fake_dmdt.sh'),
+               PMCP_AA_ACK=P('ack.sock'), PMCP_AA_FLUSH_DEV=P('flush.dev'), FAKE_DMDT_LOG=P('dmdt.log'),
+               FAKE_BRIDGE_OUT=P('bridge.jsonl'), PMCP_AA_KF_REQ=P('kf.request'), PMCP_AA_RUNDIR=d,
+               PMCP_AA_MODE='most', PMCP_AA_OUTPUT=output, PMCP_AA_MOST_DEV=P('mlb.ts'), PMCP_AA_SETTLE_MS='200',
+               PMCP_AA_CP_READY=P('cp.ready'), PMCP_AA_CONF_EXTRA=P('extra.conf'), PMCP_AA_OWNER=P('most-src/isotx2'),
+               PMCP_AA_PRIO='0')
+    feeder = subprocess.Popen([FEEDER, 'tcp://127.0.0.1:%d' % srv.getsockname()[1]], env=env)
+    released = wait_for(lambda: 'sc 4 72' in dmdt_lines(P), 5)
+    feeder.send_signal(signal.SIGKILL); feeder.wait()
+    t_kill = time.time()
+    back = wait_for(lambda: dmdt_lines(P)[-2:] == ['dc 70 33', 'sc 4 70'] and not os.path.exists(P('pmcp-aa-guard.pid')), 5)
+    time.sleep(0.5)                               # nothing more may come
+    dm = dmdt_lines(P)
+    check(released and back and dm == ['dc 72', 'sc 4 72', 'dc 70 33', 'sc 4 70'],
+          '%s: SIGKILL right after the dmdt release: MOST given back exactly once (%r, %.1fs)'
+          % (case, dm, time.time() - t_kill - 0.5))
+    check(not os.path.exists(P('most-src/isotx2')) and not os.path.exists(P('pmcp-aa-guard.pid')),
+          '%s: owner file and guardian marker removed' % case)
+    check(not os.path.exists(P('mlb.ts')) and not os.path.exists(P('bridge.jsonl')),
+          '%s: no device opened, no bridge started' % case)
+    srv.close()
+
+
+early_kill('early-kill-direct', 'direct')
+early_kill('early-kill-ring', 'ring')
 
 print('runs kept in', OUT)
 print('FAILED CHECKS: %d' % len(fails))
