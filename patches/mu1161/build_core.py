@@ -112,6 +112,9 @@ VARIANTS = {
     "map-square-fps40":     dict(max_fps=40, keyframe=5, url="map",              area=(240, 60, 320, 340), phys=(240, 144)),
     # fps40-kf10: 40 fps declared with half the forced IDRs (user's question: lighter than 30 fps + IDR every 5?).
     "map-square-fps40-kf10": dict(max_fps=40, keyframe=10, url="map",            area=(240, 60, 320, 340), phys=(240, 144)),
+    # fps40-kf30: an IDR every 30 frames (A/B 2026-11-24 with our bridge pmcp-most: drops=0, IDR on request; kf10
+    # gave artefacts on 2026-10-31, but with mathsls's bridge; fake-car kf_experiment, docs 28)
+    "map-square-fps40-kf30": dict(max_fps=40, keyframe=30, url="map",            area=(240, 60, 320, 340), phys=(240, 144)),
     "map-square-fps20":     dict(max_fps=20, keyframe=5, url="map",              area=(240, 60, 320, 340), phys=(240, 144)),
     "map-square-kf10":      dict(max_fps=30, keyframe=10, url="map",             area=(240, 60, 320, 340), phys=(240, 144)),
 }

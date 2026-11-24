@@ -93,6 +93,11 @@ VARIANTS = ["map-clean", "card-clean", "url-map-hybrid", "map-clean-l40", "map-s
 # main GEM button: map-square (chosen 2026-10-25) at 40 fps with an IDR every 5 frames, kept after the lag test drive
 # (2026-10-31: no lag difference, no artefacts; IDR every 10 gave artefacts). map-square is 30 fps.
 START_VARIANT = "map-square-fps40"
+# experimental cards: keyframe A/B with our bridge pmcp-most (2026-11-24, user): an IDR every 5 (START_VARIANT), 10 or 30
+# frames, switched by the experimental screen (only core.so; back to 5 before a release card, which does not know them)
+KF_AB = ["map-square-fps40-kf10", "map-square-fps40-kf30"]
+if IS_EXP:
+    VARIANTS = VARIANTS + KF_AB
 
 # Pins of the unit's factory files come from the profile: path relative to the backup's appimg folder, "@system/..." to its
 # system folder. Android Auto receiver (GAL): aa-on replaces it by the AA wrapper and keeps this factory file as
@@ -285,6 +290,8 @@ TUNING_SHA = {
     "map-square": "f4d83fd2e33e20513e5856da554716e1b6a055a88bf69fe928beb52fadbe8028",
     # map-square latency A/B: maxFPS 40 (base value, as mathsls) / 20 / forced IDR every 10 frames, 2026-10-25
     "map-square-fps40": "f826ff0ab78ca595ef7e0c836ba183ae28c7cb7309f2ef6966d3a0c738a99050",
+    # keyframe A/B with pmcp-most (2026-11-24): fps40 with an IDR every 30 frames (only 0x4370/0x452c differ, 5 -> 30)
+    "map-square-fps40-kf30": "825178d0114b4791a8bfcbe915e8d87f7a44687ca17b3ba15a1ce89c0e98b4ec",
     "map-square-fps40-kf10": "88aa23c23e0d1ec93ded4c074e8c74681f074adc56ffdbedcb5c59ef833213f9",
     "map-square-fps20": "7d3c6009f8d2613603e70d80d10ed2fb6df2744cef77a068f74f769ee091a93d",
     "map-square-kf10": "a14f5a0b0d7ebe9a7e392549120d31634bf717839325faf36a89c8f8d81e24b5",
@@ -606,7 +613,11 @@ AA_MENU = [("aa-confirm", "aa-confirm", "AA Confirm: AA works (only in the start
            ("aa-remove", "aa-remove", "AA remove (factory Android Auto back)")]
 # experimental builds only (empty on release cards): screen experimental, the MOST supervisor on its own (the bridge
 # switch is on diagnostics on every card since v2.0), the VW encoder path, then the AA tests
-EXP_MENU = [] if not IS_EXP else ([
+EXP_MENU = [] if not IS_EXP else [
+    # keyframe A/B (docs 28): core.so only, a full unit reboot after each; switch back to 5 before a release card
+    ("map-kf5", "switch " + START_VARIANT, "Map keyframe A/B: IDR every 5 frames (default; reboot after)"),
+    ("map-kf10", "switch map-square-fps40-kf10", "Map keyframe A/B: IDR every 10 frames (test; reboot after)"),
+    ("map-kf30", "switch map-square-fps40-kf30", "Map keyframe A/B: IDR every 30 frames (test; reboot after; back to 5 before a release card)")] + ([
     # MOST supervisor v1 (stage 5) on its own; a Bridge button sets the matching one again
     ("most-sup-pmcp", "most-sup pmcp", "MOST supervisor: pmcp (needs Bridge pmcp-most; from the next phone connection)"),
     ("most-sup-mathsls", "most-sup mathsls", "MOST supervisor: mathsls (test; from the next phone connection)")]
