@@ -33,6 +33,7 @@ PARAMS = {
     'aa_fps': 30,             # AA phone model (aa/feeder/test/run_direct_test.py): 8-frame window, IDR ~60 s
     'aa_window': 8,
     'aa_idr_every_s': 60,
+    'wl_phone_gone_ms': 3000, # A (WL): airplayd sees the phone leave the hotspot (by MAC) after about 3 s
     'wl_idle_ms': 5000,       # M: WL cluster_owner_idle_ms default 5000 (airplayd ap_conf.c, WL 2026-11-24)
     'screen_hold_ms': 1500,   # A: stricter than the car (AA: the AID drops the picture after ~15 s without data)
 }
@@ -735,6 +736,8 @@ class Car:
         self.bb.rec('phone', 'wl frames stop reason=%s (producer alive)' % reason)
         if reason == 'idle':
             time.sleep(PARAMS['wl_idle_ms'] / 1000.0)
+        elif reason == 'phone-gone':
+            time.sleep(PARAMS['wl_phone_gone_ms'] / 1000.0)
         ms = int(time.monotonic() * 1000)
         put(os.path.join(self.src, 'wireless.session'),
             'v=1 state=stop gen=%d pid=%d ts_ms=%d reason=%s\n' % (self.wl_gen, pid, ms, reason))
@@ -1045,8 +1048,11 @@ def sc_wl_session():
     time.sleep(7)
     d = car.first_after(car.marks['wl_start'][0], 'cp', 6)
     check('wl-session: CP map within 4 s of the session start', d is not None and d < 4, d)
+    t_drop = now()
     car.wl_stop('idle')
     time.sleep(5)
+    vw = car.first_after(t_drop, 'vw', 12)
+    print('       wl-session: frozen CP map %.2f s after the Wi-Fi drop (idle)' % (vw or -1), flush=True)
     d = car.first_after(car.marks['wl_stop'][0], 'vw', 5)
     check('wl-session: VW map back within 4 s of the idle stop', d is not None and d < 4, d)
     car.shutdown()
@@ -1242,6 +1248,28 @@ def sc_aa_silence():
     aa_invariants(car, car.aa, ts=False)
 
 
+def sc_wl_phone_gone():
+    """The phone leaves the hotspot: frames stop, airplayd (alive) writes stop reason=phone-gone after ~3 s, before
+    the 5 s idle (WL 2026-11-24). Measures how long the frozen CP map stays on the AID."""
+    car = Car('wl-phone-gone')
+    car.boot()
+    time.sleep(1)
+    car.wl_start(fps=30, gop=5)
+    time.sleep(5)
+    t_drop = now()
+    car.wl_stop('phone-gone')
+    time.sleep(4)
+    d = car.first_after(car.marks['wl_stop'][0], 'vw', 4)
+    check('wl-phone-gone: VW map back within 3 s of the phone-gone stop', d is not None and d < 3, d)
+    vw = car.first_after(t_drop, 'vw', 10)
+    check('wl-phone-gone: frozen CP map shorter than with idle (< 5 s from the drop)', vw is not None and vw < 5, vw)
+    car.bb.rec('car', 'frozen CP map after the drop: %.2f s' % (vw or -1))
+    print('       wl-phone-gone: frozen CP map %.2f s after the drop' % (vw or -1), flush=True)
+    car.wl.kill()
+    car.shutdown()
+    common_invariants(car)
+
+
 def sc_wl_crash():
     """airplayd dies mid-session (dead owner pid, no stop line), the guard restarts it with gen+1."""
     car = Car('wl-crash')
@@ -1307,6 +1335,7 @@ def sc_aa_steal_late():
 
 SCENARIOS = {'session': sc_session, 'boot-steal': sc_boot_steal, 'replug': sc_replug, 'cp-reverse': sc_cp_reverse,
              'wl-session': sc_wl_session, 'wl-steal': sc_wl_steal, 'wl-crash': sc_wl_crash,
+             'wl-phone-gone': sc_wl_phone_gone,
              'aa-session': sc_aa_session, 'aa-kill': sc_aa_kill, 'aa-holds': sc_aa_holds, 'cp-then-aa': sc_cp_then_aa,
              'aa-steal': sc_aa_steal, 'aa-steal-late': sc_aa_steal_late, 'aa-reverse': sc_aa_reverse,
              'aa-silence': sc_aa_silence, 'aa-silence-noka': sc_aa_silence_noka}
