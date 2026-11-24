@@ -578,7 +578,7 @@ def x264_plan(path, frames=90):
 
 def framemd5(path, fmt):
     r = subprocess.run(['ffmpeg', '-v', 'error', '-err_detect', 'crccheck+bitstream+buffer+explode', '-f', fmt, '-i', path,
-                        '-map', '0:v', '-f', 'framemd5', '-'], capture_output=True, text=True)
+                        '-map', '0:v', '-fps_mode', 'passthrough', '-f', 'framemd5', '-'], capture_output=True, text=True)
     return r.returncode, r.stderr.strip(), [l.split(',')[-1].strip() for l in r.stdout.splitlines() if l and not l.startswith('#')]
 
 

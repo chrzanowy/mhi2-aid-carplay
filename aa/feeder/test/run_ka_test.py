@@ -26,7 +26,7 @@ def check(cond, msg):
 
 def framemd5(path):
     r = subprocess.run(['ffmpeg', '-v', 'error', '-err_detect', 'crccheck+bitstream+buffer+explode', '-f', 'h264',
-                        '-i', path, '-f', 'framemd5', '-'], capture_output=True, text=True)
+                        '-i', path, '-fps_mode', 'passthrough', '-f', 'framemd5', '-'], capture_output=True, text=True)
     md5 = [l.split(',')[-1].strip() for l in r.stdout.splitlines() if l and not l.startswith('#')]
     return r.returncode, r.stderr.strip(), md5
 
