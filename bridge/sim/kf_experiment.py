@@ -97,6 +97,8 @@ def run(dist, gop, req, loss=0.0, seconds=6.0):
     freeze = max((b - a for a, b in zip(win, win[1:])), default=None)
     ka = [t for t in keys if t >= t_e]
     key_after = ka[0] - t_e if ka else None
+    if key_after is None and [t for t in pics if t > t_e + 0.5] == []:
+        freeze = float('inf')   # no picture after the disturbance at all: the AID never recovered
     broken = sum(b - a for h in cp_handles(car) for a, b in h.broken)
     open_b = [h.broken_since for h in cp_handles(car) if h.broken_since is not None]
     span = (pics[-1] - pics[0]) if len(pics) > 1 else 1.0
@@ -108,6 +110,8 @@ def run(dist, gop, req, loss=0.0, seconds=6.0):
 
 
 def fmt(x, unit='s'):
+    if x == float('inf'):
+        return 'NO RECOVERY'
     return '-' if x is None else ('%.2f %s' % (x, unit)).strip()
 
 
