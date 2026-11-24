@@ -781,6 +781,41 @@ class Car:
         self.marks.setdefault('wl_stop', []).append(now())
         self.bb.rec('phone', 'wl session stop reason=%s' % reason)
 
+    def wl_replaced(self, gap=1.5):
+        """A new SETUP of stream 111 (WL: 'replaced'): detach only, owner stays, the frames come back with the same gen;
+        the first frame of the new connection is config + IDR (the WL side asks for it when a P frame comes first)."""
+        self.wl.send_signal(signal.SIGSTOP)
+        self.bb.rec('phone', 'wl stream 111 replaced: detach, owner kept (gen=%d)' % self.wl_gen)
+        time.sleep(gap)
+        open(self.env['HOST_IDR_PATH'], 'w').close()
+        self.wl.send_signal(signal.SIGCONT)
+        self.marks.setdefault('wl_resume', []).append(now())
+        self.bb.rec('phone', 'wl stream 111 back (config + IDR)')
+
+    def wl_gen_change(self):
+        """Ring generation / picture size change on the WL side: a new owner gen of the same producer, no stop."""
+        self.wl_gen += 1
+        ms = int(time.monotonic() * 1000)
+        put(os.path.join(self.src, 'owner'), 'v=1 src=wireless pid=%d gen=%d since_ms=%d kind=in\n' % (
+            self.wl.pid, self.wl_gen, ms))
+        put(os.path.join(self.src, 'wireless.session'),
+            'v=1 state=start gen=%d pid=%d ts_ms=%d reason=connect\n' % (self.wl_gen, self.wl.pid, ms))
+        self.marks.setdefault('wl_gen', []).append(now())
+        self.bb.rec('phone', 'wl owner gen -> %d (same producer)' % self.wl_gen)
+
+    def wl_preempt_by_cable(self):
+        """The cable comes while Wi-Fi runs: the dio_manager wrapper writes owner src=wired with gen+1 (the cable
+        wins), the WL library writes stop reason=preempted and stops writing; core.so of the cable session takes over."""
+        old_pid = self.wl.pid
+        self.wl.send_signal(signal.SIGSTOP)
+        self.cable_plug()
+        ms = int(time.monotonic() * 1000)
+        put(os.path.join(self.src, 'owner'), 'v=1 src=wired pid=%d gen=%d since_ms=%d kind=in\n' % (
+            self.dio.pid, self.wl_gen + 1, ms))
+        put(os.path.join(self.src, 'wireless.session'),
+            'v=1 state=stop gen=%d pid=%d ts_ms=%d reason=preempted\n' % (self.wl_gen, old_pid, ms))
+        self.bb.rec('phone', 'wl preempted by the cable (owner src=wired gen=%d)' % (self.wl_gen + 1))
+
     def wl_crash(self):
         """airplayd dies: dead owner pid, no stop line (WL: the guard restarts it with a new pid and gen+1)."""
         self.wl.kill()
@@ -1302,6 +1337,81 @@ def sc_wl_phone_gone():
     common_invariants(car)
 
 
+def sc_wl_replaced():
+    """WL 'replaced': stream 111 reconnects with the same gen after 1.5 s: no giveback, no bridge restart, the
+    picture comes back on the config + IDR within 1 s."""
+    car = Car('wl-replaced')
+    car.boot()
+    time.sleep(1)
+    car.wl_start(fps=30, gop=30)
+    time.sleep(5)
+    t = now()
+    car.wl_replaced(1.5)
+    time.sleep(4)
+    check('wl-replaced: no giveback during the reconnect', not dm(car, '^dc 70', after=t))
+    check('wl-replaced: one bridge for the whole session', len(car.bb.find('proc', 'bridge start')) == 1,
+          len(car.bb.find('proc', 'bridge start')))
+    r = car.marks['wl_resume'][0]
+    k = [x for h in car.chan.handles.values() if h.tag == 'cp' for x in h.key_times if x >= r]
+    check('wl-replaced: keyframe on the AID within 1 s after the stream came back', k and min(k) - r < 1.0,
+          k and min(k) - r)
+    car.wl_stop('done')
+    time.sleep(4)
+    car.shutdown()
+    common_invariants(car)
+
+
+def sc_wl_gen():
+    """Ring generation change under a live WL producer (WL: 'wait + IDR request, no stop'): the bridge dies (SIGKILL),
+    the supervisor gives back and starts a new bridge, which re-inits the ring with a new generation. The producer
+    stays attached (sequence from the header, docs/11); the CP picture must come back."""
+    car = Car('wl-gen')
+    car.boot()
+    time.sleep(1)
+    car.wl_start(fps=30, gop=30)
+    time.sleep(4)
+    pids = car.bridge_pids()
+    for p in pids:
+        os.kill(p, signal.SIGKILL)
+    t = now()
+    car.bb.rec('car', 'bridge SIGKILL %s' % pids)
+    time.sleep(7)
+    check('wl-gen: the supervisor started a new bridge', len(car.bb.find('proc', 'bridge start')) == 2,
+          len(car.bb.find('proc', 'bridge start')))
+    k = [x for h in car.chan.handles.values() if h.tag == 'cp' and h.t_open > t for x in h.key_times]
+    check('wl-gen: CP picture (keyframe) from the new bridge within 5 s', k and min(k) - t < 5.0, k and min(k) - t)
+    print('       wl-gen: picture back %.2f s after the bridge was killed' % ((min(k) - t) if k else -1), flush=True)
+    car.wl_stop('done')
+    time.sleep(4)
+    car.shutdown()
+    common_invariants(car)
+
+
+def sc_wl_preempted():
+    """The cable comes during a Wi-Fi session (cable wins): no giveback, the same bridge goes on, the cable picture
+    within 2 s; unplug -> VW."""
+    car = Car('wl-preempted')
+    car.boot()
+    time.sleep(1)
+    car.wl_start(fps=30, gop=5)
+    time.sleep(4)
+    t = now()
+    car.wl_preempt_by_cable()
+    time.sleep(5)
+    check('wl-preempted: no giveback on the switch to the cable', not dm(car, '^dc 70', after=t))
+    check('wl-preempted: one bridge across the switch', len(car.bb.find('proc', 'bridge start')) == 1,
+          len(car.bb.find('proc', 'bridge start')))
+    k = [x for h in car.chan.handles.values() if h.tag == 'cp' for x in h.key_times if x >= t]
+    check('wl-preempted: cable picture (keyframe) on the AID within 2 s', k and min(k) - t < 2.0, k and min(k) - t)
+    car.cable_unplug()
+    time.sleep(5)
+    d = car.first_after(car.marks['unplug'][0], 'vw', 5)
+    check('wl-preempted: VW map back after the unplug', d is not None and d < 4, d)
+    car.wl.kill()
+    car.shutdown()
+    common_invariants(car)
+
+
 def sc_wl_crash():
     """airplayd dies mid-session (dead owner pid, no stop line), the guard restarts it with gen+1."""
     car = Car('wl-crash')
@@ -1367,7 +1477,8 @@ def sc_aa_steal_late():
 
 SCENARIOS = {'session': sc_session, 'boot-steal': sc_boot_steal, 'replug': sc_replug, 'cp-reverse': sc_cp_reverse,
              'wl-session': sc_wl_session, 'wl-steal': sc_wl_steal, 'wl-crash': sc_wl_crash,
-             'wl-phone-gone': sc_wl_phone_gone,
+             'wl-phone-gone': sc_wl_phone_gone, 'wl-replaced': sc_wl_replaced, 'wl-gen': sc_wl_gen,
+             'wl-preempted': sc_wl_preempted,
              'aa-session': sc_aa_session, 'aa-kill': sc_aa_kill, 'aa-holds': sc_aa_holds, 'cp-then-aa': sc_cp_then_aa,
              'aa-steal': sc_aa_steal, 'aa-steal-late': sc_aa_steal_late, 'aa-reverse': sc_aa_reverse,
              'aa-silence': sc_aa_silence, 'aa-silence-noka': sc_aa_silence_noka}
