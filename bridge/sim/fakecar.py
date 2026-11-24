@@ -1560,7 +1560,7 @@ def chaos_run(name, seq):
 
     def cp_ended():
         nonlocal aa
-        if aa == 'waiting' and now() < aa_until:
+        if aa in ('waiting', 'race') and now() < aa_until:
             aa = 'show'
 
     for i, st in enumerate(seq):
@@ -1624,6 +1624,10 @@ def chaos_run(name, seq):
         elif do == 'bridge_kill':
             for p in car.bridge_pids():
                 os.kill(p, signal.SIGKILL)
+            # the supervisor gives MOST back before it starts a new bridge: an AA session that is still waiting for
+            # CP (within its 20 s) may take it in that gap (as in cp-then-aa) - either phone on the AID is right
+            if aa == 'waiting' and now() < aa_until:
+                aa = 'race'
         elif do == 'end':
             if aa:
                 car.aa_unplug()
@@ -1637,7 +1641,9 @@ def chaos_run(name, seq):
         if st['check']:
             if aa == 'waiting' and now() >= aa_until:
                 aa = 'analysis'        # AA waited 20 s for CP and runs without the AID (AA rule)
-            if aa == 'show':
+            if aa == 'race':
+                allowed = {'aa', 'cp'}
+            elif aa == 'show':
                 allowed = {'aa'}
             elif cable or wl:
                 allowed = {'cp'}
@@ -1647,6 +1653,11 @@ def chaos_run(name, seq):
             ok = tail and all(w in allowed for w in tail)
             check('%s: step %d (%s) AID shows %s' % (name, i, do, '/'.join(sorted(allowed))), ok,
                   'saw %s' % sorted(set(tail)))
+            if aa == 'race' and tail:
+                if all(w == 'aa' for w in tail):
+                    aa = 'show'        # AA won the gap
+                elif now() >= aa_until:
+                    aa = 'analysis'    # CP came back first and AA's 20 s are over
     tail = [w for ts, w in car.screen if ts >= now() - 1.0]
     check('%s: VW map at the end' % name, tail and all(w == 'vw' for w in tail), sorted(set(tail)))
     if car.wl is not None and car.wl.poll() is None:

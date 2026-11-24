@@ -56,7 +56,7 @@ def main():
         path = ARGS[ARGS.index('--replay') + 1]
         seq = json.load(open(path))
         seq = seq.get('shrunk') or seq.get('seq') if isinstance(seq, dict) else seq
-        fails = fc.chaos_run('chaos-replay', seq)
+        fails = fc.chaos_run('chaos-replay-' + os.path.splitext(os.path.basename(path))[0], seq)
         print('REPLAY: %d failed %s' % (len(fails), fails))
         return 1 if fails else 0
     seeds, first, steps, budget = opt('--seeds', 3), opt('--first', 1), opt('--steps', 30), opt('--shrink', 12)
