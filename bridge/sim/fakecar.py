@@ -974,8 +974,9 @@ def aa_invariants(car, phone, sessions_with_most=1, ts=True, decode=True, killed
 
 def aa_reclaim_ts(car, phone, steal_t):
     """AA I3 as corrected by AA (2026-11-24), per channel handle, nothing glued: handle 1 = frames 1..k (the last may
-    be cut); handle 2 starts (after < 1 AU of continuation packets) with a discontinuity-flagged AU, holds every frame
-    from k+1 in order plus exactly one replayed IDR equal to the last IDR before the steal. Order logged."""
+    be cut); handle 2 starts (after < 1 AU of continuation packets) with a discontinuity-flagged AU and, since AA v19
+    (A236-AA), holds the whole chain from the last IDR before the steal through the end, each frame once, in order,
+    and decodes on its own. Order logged."""
     n = car.name
     hs = sorted(h.hid for h in car.chan.handles.values() if h.tag == 'aa' and h.t_open >= phone.plug_t)
     if len(hs) != 2:
@@ -994,14 +995,23 @@ def aa_reclaim_ts(car, phone, steal_t):
     seq = [(d, x) for d, x in a2]
     check(f'{n}: handle 2 starts on a PES start with the discontinuity flag ({lead2} continuation packets first)',
           seq and seq[0][0] and lead2 * 184 < 60000, (lead2, seq[:1]))
-    replay = [i for i, (_, x) in enumerate(seq) if x and last_idr in x and x[0] <= k + cut]
-    rest = [x[0] for _, x in seq if x and x[0] > k]
-    first = k + 1 + cut
-    expect = list(range(rest[0], rest[0] + len(rest))) if rest else []
-    check(f'{n}: handle 2 = every frame from {first} on, in order, plus exactly one replayed IDR (frame {last_idr})',
-          len(replay) == 1 and rest == expect and rest and rest[0] in (k + 1, k + 2) and
-          all(x for _, x in seq), 'replay at %s, rest %s..%s, unmatched %d' % (
-              replay, rest[:2], rest[-1:], sum(1 for _, x in seq if not x)))
+    frames2 = [x[0] if x else None for _, x in seq]
+    end = max([f['frame_no'] for f in phone.frames] or [0])
+    expect = list(range(last_idr, last_idr + len(frames2))) if last_idr else []
+    check(f'{n}: handle 2 = the chain from the last IDR before the steal (frame {last_idr}) through the end, each '
+          f'once, in order (AA v19 GOP replay)',
+          last_idr is not None and frames2 == expect and frames2 and frames2[-1] == end and
+          all(x for _, x in seq), 'first %s, last %s (end %s), len %d, unmatched %d, gaps %s' % (
+              frames2[:4], frames2[-2:], end, len(frames2), sum(1 for x in frames2 if x is None),
+              [(a, b) for a, b in zip(frames2, frames2[1:]) if a is None or b is None or b != a + 1][:4]))
+    if shutil.which('ffmpeg'):
+        p2 = os.path.join(car.dir, 'chan-%d-aa.ts' % hs[1])
+        r = subprocess.run(['ffmpeg', '-v', 'error', '-err_detect', 'crccheck+bitstream+buffer+explode', '-f',
+                            'mpegts', '-i', p2, '-map', '0:v', '-f', 'null', '-'], capture_output=True, text=True)
+        err = '\n'.join(l for l in r.stderr.splitlines() if 'non monotonically increasing dts to muxer' not in l
+                        and 'Last message repeated' not in l).strip()
+        check(f'{n}: handle 2 alone decodes with ffmpeg, zero errors (starts on SPS/PPS + IDR)',
+              r.returncode == 0 and not err, err[:200])
     order = ' '.join(('D:' if d else '') + ('?' if not x else ('IDR%d' % x[0] if x[0] == last_idr else str(x[0])))
                      for d, x in seq[:6])
     car.bb.rec('aa', 'after reclaim: %s ...' % order)
@@ -1251,7 +1261,6 @@ def sc_aa_steal():
     d = rec[0][0] - st if rec else None
     check('aa-steal: AA picture back with a keyframe within 3 s of the steal', d is not None and d < 3, d)
     check('aa-steal: reclaim dmdt (dc 72 by aa) after the steal', dm(car, '^dc 72 by=aa', after=st))
-    aa_reclaim_ts(car, car.aa, st)
     st_text = car.aa.status()
     check('aa-steal: feeder status: one reclaim attempt, IDR replayed once',
           snum(st_text, 'ponowne przejecie MOST:', 'proby') == 1 and
@@ -1260,6 +1269,7 @@ def sc_aa_steal():
     car.aa_unplug()
     time.sleep(4)
     car.shutdown()
+    aa_reclaim_ts(car, car.aa, st)   # after the unplug: handle 2 must run through the phone's last frame
     common_invariants(car)
     # ts_analyse assumes one continuous capture (PSI cadence by packet number); AA's own reclaim test does not run it
     # either. The AU in flight at the steal is cut (the ENOMEM block is not accepted) - question to AA (docs/28).
