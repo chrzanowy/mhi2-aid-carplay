@@ -15,9 +15,18 @@ Verdicts come only from what the car saw. Every run leaves `build/runs/<scenario
 encoder, process and screen events) next to the programs' own logs in `ramdisk/`.
 
 ```
-./run_sim.sh                 # all scenarios: session, boot-steal, aa-holds, replug
+./run_sim.sh                 # all 13 scenarios (about 4 minutes)
 ./run_sim.sh boot-steal      # one scenario
-FAKECAR_RECLAIM_US=0 ./run_sim.sh boot-steal   # bridge without reclaim: the gap check must fail
+FAKECAR_RECLAIM_US=0 ./run_sim.sh boot-steal      # bridge without reclaim: the gap check must fail
+FAKECAR_AA_RECLAIM_S=0 ./run_sim.sh aa-steal       # feeder without reclaim: the picture check must fail
 ```
+
+Scenarios:
+
+| Area | Scenarios |
+|---|---|
+| CarPlay over the cable | session, boot-steal, replug, cp-reverse |
+| CarPlay over Wi-Fi (WL contract files) | wl-session, wl-steal |
+| Android Auto (the real aa-most-feeder, `aa/` compiled, never edited) | aa-session, aa-kill, aa-holds, cp-then-aa, aa-steal, aa-reverse, aa-silence |
 
 `bridge/test/run_tests.sh` (no arguments) runs it as its last stage.

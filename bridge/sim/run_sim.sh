@@ -18,5 +18,9 @@ fail=0
 "$CC" $CF -I "$ROOT/contract" -o "$B/pmcp-most-sup" "$ROOT/src/pmcp_most_sup.c" \
     "$ROOT/contract/pmcp_most_producer.c" || fail=1
 "$CC" -std=gnu99 -O2 -Wall -Wextra -Werror -o "$B/producer" "$ROOT/test/producer.c" || fail=1
+# stage 2: the real AA feeder (aa/ compiled, never edited) on the same simulated channel
+AAF="$ROOT/../aa/feeder"
+"$CC" -O2 -Wall -Wextra -Werror -std=gnu99 -pthread -DMOST_HOST_SIM -o "$B/feeder-sim" "$AAF/aa_most_feeder.c" \
+    "$AAF/h264_ka.c" "$AAM/ts_mux.c" "$AAM/most_writer.c" "$HERE/sim_mlb.c" || fail=1
 [ $fail = 0 ] || { echo "FAKECAR TESTS: 0 ok, 1 failed (build)"; exit 1; }
 exec python3 -I "$HERE/fakecar.py" "$B" "$@"
