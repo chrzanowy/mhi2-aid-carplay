@@ -75,4 +75,6 @@ if [ -z "$AA_DIFF" ]; then echo "ok     aa/most unchanged against origin/release
 else echo "FAILED aa/most differs from origin/release-candidate or aa/ has local changes:"; echo "$AA_DIFF"; rc3=1; fi
 echo "== stage 5 (MOST supervisor v1)"
 python3 -I "$HERE/sup_test.py" "$B/pmcp-most-sup"; rc4=$?
-[ $rc1 = 0 ] && [ $rc2 = 0 ] && [ $rc3 = 0 ] && [ $rc4 = 0 ]
+echo "== fake-car (docs/28: supervisor + bridge stage 2 in the simulated car)"
+if [ $# -eq 0 ]; then "$ROOT/sim/run_sim.sh"; rc5=$?; else rc5=0; fi
+[ $rc1 = 0 ] && [ $rc2 = 0 ] && [ $rc3 = 0 ] && [ $rc4 = 0 ] && [ $rc5 = 0 ]

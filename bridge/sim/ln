@@ -1,0 +1,5 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# fake-car ln for the supervisor (ln -Ps DEV LINK): logs the call, makes a plain symlink.
+echo "ln $*" >> "$FAKECAR_DIR/ln.log"
+exec /bin/ln -s "$2" "$3"
