@@ -1,5 +1,5 @@
 {
- "source": "KNOWN BUG (AA, reported 2026-11-24; switch 'informational' off when fixed): fake-car chaos seed 5 (2026-11-24): SIGKILL of the AA feeder in the takeover window (after its dmdt dc 72 + sc 4 72, before the guardian exists): nobody restores the VW view. Expected (AA I1): dc 70 33 + sc 4 70 and the VW map back.",
+ "source": "Regression test (AA feeder v18, RC 5165bd7): fake-car chaos seed 5 (2026-11-24): SIGKILL of the AA feeder in the takeover window (after its dmdt dc 72 + sc 4 72, before the guardian exists): nobody restores the VW view. Expected (AA I1): dc 70 33 + sc 4 70 and the VW map back.",
  "actions": [
   {
    "t": 1.0,
@@ -33,6 +33,5 @@
    "what": "VW map back"
   }
  ],
- "end": 9,
- "informational": true
+ "end": 9
 }
