@@ -1,5 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
 # fake-car dmdt (docs/28): one line per call to $FAKECAR_DIR/dmdt.req (pid caller args); the car applies the effect.
+# The call itself takes FAKECAR_DMDT_CALL_S (car: ~0.4 s per call, mathsls release -> bridge start 1.31 s, calib. 24.11).
 echo "$$ ${FAKECAR_WHO:-?} $*" >> "$FAKECAR_DIR/dmdt.req"
+[ -n "${FAKECAR_DMDT_CALL_S:-}" ] && sleep "$FAKECAR_DMDT_CALL_S"
 exit 0

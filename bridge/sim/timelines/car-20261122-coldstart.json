@@ -1,0 +1,69 @@
+{
+ "source": "car 2026-11-22 cold start, supervisor pmcp + pmcp-most (car-logs-20261122/sloginfo-black.txt, 1 s resolution; owners by open flags; build/sim-calibration-20261124 2.1). t 0 = CP session start. INFORMATIONAL: the car shows no failed open of ours between 8 and 15 s (only 0x82 opens at 4 and 15 s) and an encoder close/open/close at 10/11/14 s; with 1 s resolution and no dmdt or reclaim timestamps the cause is open (docs/28 'Do zmierzenia').",
+ "actions": [
+  {
+   "t": 2.8,
+   "do": "cable_plug"
+  },
+  {
+   "t": 33.0,
+   "do": "cable_unplug"
+  }
+ ],
+ "expect": [
+  {
+   "t": 4.0,
+   "kind": "chan",
+   "match": "^open tag=cp pid=\\d+ id=",
+   "tol": 1.0,
+   "what": "our first isoTX2 open"
+  },
+  {
+   "t": 8.0,
+   "kind": "vw",
+   "match": "^steal from cp",
+   "tol": 1.0,
+   "what": "encoder comes up, takes isoTX2 (0x8002)"
+  },
+  {
+   "t": 10.0,
+   "kind": "vw",
+   "match": "^release",
+   "tol": 1.0,
+   "what": "encoder closes (NvVideoStreamEncoderClose)"
+  },
+  {
+   "t": 11.0,
+   "kind": "vw",
+   "match": "^open ok",
+   "tol": 1.0,
+   "what": "encoder opens again (VW map, 0x8002)"
+  },
+  {
+   "t": 14.0,
+   "kind": "vw",
+   "match": "^release",
+   "tol": 1.0,
+   "what": "encoder closes again"
+  },
+  {
+   "t": 15.0,
+   "kind": "chan",
+   "match": "^open tag=cp pid=\\d+ id=",
+   "tol": 1.0,
+   "what": "our next successful open"
+  },
+  {
+   "t": 34.0,
+   "kind": "screen",
+   "match": "^vw$",
+   "tol": 1.5,
+   "what": "VW map back after the unplug"
+  }
+ ],
+ "end": 38,
+ "params": {
+  "vw_start_s": 8
+ },
+ "informational": true
+}

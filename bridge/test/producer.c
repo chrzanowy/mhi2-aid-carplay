@@ -279,7 +279,9 @@ static uint32_t ring_put(uint32_t type, const uint8_t *data, size_t n, uint32_t 
 {
     uint64_t ts = now_ntp();
     uint32_t off;
-    g_seq = g_seq + 1U == 0 ? 1U : g_seq + 1U;
+    /* as core.so (docs/11): N = header.seq + 1 on every write, so a bridge that re-inits the ring (new generation,
+     * sequence 0) while we are attached gets sequence 1 next (fake-car replug, 2026-11-24) */
+    g_seq = rd32(0x0c) + 1U == 0 ? 1U : rd32(0x0c) + 1U;
     off = RING_HDR + ((g_seq - 1U) & (RING_SLOTS - 1U)) * RING_SLOT_SIZE;
     wr32(off, 0);
     __sync_synchronize();

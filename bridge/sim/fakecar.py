@@ -23,24 +23,33 @@ DC_START, DC_FLUSH = 0x80040509, 0x40040506
 DC_READ = {0x4004050c: 0, 0x4004050d: 0, 0x40040510: 0}   # iface / packet size / block count (A: unknown on MU1161)
 
 PARAMS = {
-    'bps': 12288000,          # A: channel drain rate (host_mlb.c default)
+    'bps': 12288000,          # M: 127 blocks/s = 12.15-12.25 Mbit/s, write_us ~8 ms (bridge metrics 20.11, calib. 24.11)
     'depth': 2 * 12032,       # A: driver FIFO
-    'dmdt_ms': 120,           # A: dmdt effect delay
+    'dmdt_call_ms': 400,      # M (derived): one dmdt call blocks ~0.4 s (mathsls: 2 calls + 500 ms = 1.31 s, 14.11)
+    'dmdt_ms': 120,           # A: dmdt effect delay (not logged; our open 0-1 s after NvVideoStreamEncoderClose, calib. 24.11)
+    'vw_start_s': 0,          # A per run: the encoder's first activity after boot (cold start 22.11: 8 s, it then took isoTX2 from us)
     'vw_knock_ms': 50,        # M: 20 open tries/s (sloginfo 16.11, A208)
     'vw_release_ms': 80,      # A: encoder closes after dc 72 (M: it does close, A222)
-    'vw_knock_in_cp': False,  # M: A222 with supervisor pmcp: 0 "error open" after dc 72
+    'vw_knock_in_cp': True,   # M: 20 probes/s also in the CP view (sloginfo 22.11); A: a probe never takes isoTX2 - takes are HMI view requests (steals)
     'vw_return_ms': 400,      # A: encoder back after dc 70 33 / sc 4 70
-    'aa_fps': 30,             # AA phone model (aa/feeder/test/run_direct_test.py): 8-frame window, IDR ~60 s
-    'aa_window': 8,
-    'aa_idr_every_s': 60,
+    'aa_fps': 30,             # M (AA): phone frame rate, aa/feeder/test/run_direct_test.py phone model
+    'aa_window': 8,           # M (AA): the phone keeps at most 8 frames unACKed
+    'aa_idr_every_s': 60,     # M (AA): an IDR about every 60 s, never on request
     'wl_phone_gone_ms': 3000, # A (WL): airplayd sees the phone leave the hotspot (by MAC) after about 3 s
     'wl_idle_ms': 5000,       # M: WL cluster_owner_idle_ms default 5000 (airplayd ap_conf.c, WL 2026-11-24)
+    'chan_loss': 0.0,         # A (experiments only): silent loss per accepted block on MOST/AID - the bridge never sees it
     'screen_hold_ms': 1500,   # A: stricter than the car (AA: the AID drops the picture after ~15 s without data)
 }
+# Source of every parameter: M = measured in the car (where), A = assumption. `fakecar.py BUILD --params` prints it.
+PARAM_SRC = {k: ('M' if c.split('#')[1].strip().startswith('M') else 'A', c.split('#', 1)[1].strip())
+             for k, c in re.findall(r"^    '(\w+)': [^#\n]*(#.*)$", open(__file__).read(), re.M) if k in PARAMS}
+if os.environ.get('FAKECAR_PARAMS'):          # model experiments: FAKECAR_PARAMS='{"dmdt_ms": 300}'
+    PARAMS.update(json.loads(os.environ['FAKECAR_PARAMS']))
 AA_FEEDER_TEST = os.path.join(BRIDGE_DIR, '..', 'aa', 'feeder', 'test')
 AA_MOST_TEST = os.path.join(BRIDGE_DIR, '..', 'aa', 'most', 'test')
 
 T0 = time.monotonic()
+LOSS_RNG = random.Random(1161)
 
 
 def now():
@@ -77,6 +86,10 @@ class Handle:
         self.last_write = None
         self.last_picture = None  # last video PES start (PUSI on PID 0x11): a new picture on the AID
         self.pictures = 0
+        self.key_times = []       # every keyframe accepted on this handle
+        self.pic_times = []       # every new video PES (picture) accepted
+        self.broken_since = None  # silent channel loss: picture broken until the next keyframe
+        self.broken = []          # (from, to) intervals of a broken picture
         self.bytes = 0
         self.bad_blocks = 0
         self.cap = None          # every accepted byte of this handle (chan-<id>-<tag>.ts)
@@ -152,11 +165,19 @@ class Channel:
                 if data[i + 1] & 0x40 and ((data[i + 1] & 0x1f) << 8 | data[i + 2]) == 0x11:
                     h.last_picture = t
                     h.pictures += 1
+                    h.pic_times.append(t)
             if len(data) % 188 or any(data[i] != 0x47 for i in range(0, len(data), 188)):
                 h.bad_blocks += 1
-            if h.idr_at is None and re.search(rb'\x00\x00\x01[\x25\x45\x65]', data):
-                h.idr_at = t
-                self.bb.rec('screen', 'keyframe tag=%s id=%d' % (h.tag, h.hid))
+            if re.search(rb'\x00\x00\x01[\x25\x45\x65]', data):
+                h.key_times.append(t)
+                if h.broken_since is not None:
+                    h.broken.append((h.broken_since, t))
+                    h.broken_since = None
+                if h.idr_at is None:
+                    h.idr_at = t
+                    self.bb.rec('screen', 'keyframe tag=%s id=%d' % (h.tag, h.hid))
+            elif PARAMS['chan_loss'] and h.broken_since is None and LOSS_RNG.random() < PARAMS['chan_loss']:
+                h.broken_since = t   # a block lost on the bus: the AID decoder shows artifacts until a keyframe
             return len(data), 0
 
     # the factory encoder (not a client: lives in the car)
@@ -484,6 +505,7 @@ class Car:
         self.aa = None
         self.wl = None
         self.env = dict(os.environ, FAKECAR_SOCK=self.sock_path, FAKECAR_DIR=self.dir, FAKECAR_WHO='cp',
+                        FAKECAR_DMDT_CALL_S='%.3f' % (PARAMS['dmdt_call_ms'] / 1000.0),
                         PMCP_SUP_RAMDISK=self.ram, PMCP_SUP_APP=self.app, PMCP_MOST_SRC_DIR=self.src,
                         PMCP_SUP_DMDT=os.path.join(HERE, 'dmdt'), PMCP_SUP_LN=os.path.join(HERE, 'ln'),
                         PMCP_SUP_LINK=os.path.join(self.dir, 'dev', 'pmcp-isoTX2'), PMCP_SUP_DEV=self.dev,
@@ -587,9 +609,17 @@ class Car:
         """The factory encoder: knocks 20/s in the VW view, takes a free channel, drops it after dc 72."""
         holding = False
         tries = 0
+        probes = 0
+        started = False
         while not self.stop_ev.is_set():
             time.sleep(PARAMS['vw_knock_ms'] / 1000.0)
             t = now()
+            if not started:
+                if t - self.boot_t < PARAMS['vw_start_s']:
+                    continue
+                started = True
+                if isinstance(self.chan.holder, Handle):   # cold start: the encoder comes up while we hold isoTX2
+                    self.vw_steal_at = t
             if self.vw_steal_at is not None and t >= self.vw_steal_at:
                 self.vw_steal_at = None
                 old = self.chan.vw_steal()
@@ -600,16 +630,17 @@ class Car:
                 self.bb.rec('vw', 'steal from %s' % (old.tag if isinstance(old, Handle) else old))
                 continue
             if holding:
-                if self.view == 'cp' and t - self.view_t >= PARAMS['vw_release_ms'] / 1000.0:
+                if self.view == 'cp' and t >= self.view_t + PARAMS['vw_release_ms'] / 1000.0:
                     if self.chan.vw_drop():
                         self.bb.rec('vw', 'release (tries=%d)' % tries)
                     holding = False
                 elif self.chan.holder != 'vw':
                     holding = False
                 continue
-            knock = (self.view == 'vw' and t - self.view_t >= PARAMS['vw_return_ms'] / 1000.0) or \
-                PARAMS['vw_knock_in_cp']
-            if knock:
+            if PARAMS['vw_knock_in_cp'] and self.view == 'cp':
+                probes += 1   # io_open 0x8880/0x0 + io_close handle=-1: a probe, never a take (we got isoTX2 anyway)
+                continue
+            if self.view == 'vw' and t - self.view_t >= PARAMS['vw_return_ms'] / 1000.0:
                 tries += 1
                 if self.chan.vw_try():
                     holding = True
@@ -641,6 +672,7 @@ class Car:
         return p
 
     def boot(self):
+        self.boot_t = now()
         for fn in (self.serve, self.dmdt_watch, self.vw_encoder, self.screen_watch, self.proc_watch):
             threading.Thread(target=fn, daemon=True).start()
         time.sleep(0.1)
@@ -1341,7 +1373,87 @@ SCENARIOS = {'session': sc_session, 'boot-steal': sc_boot_steal, 'replug': sc_re
              'aa-silence': sc_aa_silence, 'aa-silence-noka': sc_aa_silence_noka}
 
 
+# ---------------------------------------------------------------------- replay of car timelines (stage 3)
+ACTIONS = {
+    'cable_plug': lambda car, a: car.cable_plug(),
+    'cable_unplug': lambda car, a: car.cable_unplug(),
+    'aa_plug': lambda car, a: car.aa_plug(),
+    'aa_unplug': lambda car, a: car.aa_unplug(),
+    'aa_kill': lambda car, a: car.aa_kill(),
+    'vw_steal': lambda car, a: car.vw_steal_in(0),
+    'reverse': lambda car, a: threading.Thread(target=car.reverse, args=(a.get('s', 5),), daemon=True).start(),
+    'wl_start': lambda car, a: car.wl_start(fps=a.get('fps', 30), gop=a.get('gop', 5)),
+    'wl_stop': lambda car, a: car.wl_stop(a.get('reason', 'done')),
+}
+
+
+def replay(path):
+    """A car timeline (timelines/*.json): actions at car times, then what the car saw, each with a tolerance.
+    {"source": "...", "params": {...}, "actions": [{"t": 2.0, "do": "cable_plug"}, ...],
+     "expect": [{"t": 3.1, "kind": "dmdt", "match": "^dc 72", "tol": 1.0, "what": "..."}, ...], "end": 30}
+    Sim time 0 = the car's t 0 (supervisor start). Every expected event is matched in order to the first sim event
+    of that kind after the previous match; the report lists car t, sim t and the difference."""
+    tl = json.load(open(path))
+    name = 'replay-' + os.path.splitext(os.path.basename(path))[0]
+    saved = dict(PARAMS)
+    PARAMS.update(tl.get('params', {}))
+    try:
+        car = Car(name)
+        car.boot()
+        t0 = car.boot_t   # the car's t 0: before the encoder thread can act
+        for a in sorted(tl['actions'], key=lambda x: x['t']):
+            while now() < t0 + a['t']:
+                time.sleep(0.01)
+            ACTIONS[a['do']](car, a)
+        while now() < t0 + tl.get('end', 30):
+            time.sleep(0.05)
+        car.shutdown()
+    finally:
+        PARAMS.clear()
+        PARAMS.update(saved)
+    lines = ['replay %s (source: %s)' % (name, tl.get('source', '?')),
+             '%-44s %8s %8s %7s %5s' % ('expected', 'car t', 'sim t', 'diff', 'tol')]
+    after = t0
+    for e in tl['expect']:
+        hit = car.bb.find(e['kind'], e['match'], after)
+        st = hit[0][0] - t0 if hit else None
+        if hit:
+            hit = [(hit[0][0] + 1e-6,) + tuple(hit[0][1:])]   # the next expectation starts after this event
+        diff = None if st is None else st - e['t']
+        ok = diff is not None and abs(diff) <= e.get('tol', 1.0)
+        if hit:
+            after = hit[0][0]
+        lines.append('%-44s %8.2f %8s %7s %5.1f %s' % (e.get('what', e['kind'] + ' ' + e['match'])[:44], e['t'],
+                     '-' if st is None else '%.2f' % st, '-' if diff is None else '%+.2f' % diff, e.get('tol', 1.0),
+                     'ok' if ok else 'DIFF'))
+        if not tl.get('informational'):
+            check('%s: %s at car t=%.2f (sim %s)' % (name, e.get('what', e['match']), e['t'],
+                                                     '-' if st is None else '%.2f' % st), ok,
+                  'diff=%s tol=%s' % (diff, e.get('tol', 1.0)))
+    with open(os.path.join(car.dir, 'replay.txt'), 'w') as f:
+        f.write('\n'.join(lines) + '\n')
+    print('\n'.join('       ' + l for l in lines), flush=True)
+    common_invariants(car)
+
+
+for _p in sorted(os.listdir(os.path.join(HERE, 'timelines'))) if os.path.isdir(os.path.join(HERE, 'timelines')) else []:
+    if _p.endswith('.json'):
+        SCENARIOS['replay-' + _p[:-5]] = (lambda path: lambda: replay(path))(os.path.join(HERE, 'timelines', _p))
+
+
+def print_params():
+    print('| parametr | wartość | źródło | opis |')
+    print('|---|---|---|---|')
+    for k, v in PARAMS.items():
+        src, text = PARAM_SRC.get(k, ('?', ''))
+        print('| %s | %s | %s | %s |' % (k, v, 'zmierzone' if src == 'M' else 'założenie',
+                                         re.sub(r'^[MA]( \(\w+\))?:\s*', '', text)))
+
+
 def main():
+    if '--params' in sys.argv:
+        print_params()
+        return 0
     for name, fn in SCENARIOS.items():
         if ONLY and name not in ONLY:
             continue

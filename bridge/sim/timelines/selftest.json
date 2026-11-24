@@ -1,0 +1,65 @@
+{
+ "source": "self-test of the replay mechanism (not car data): the plain cable session as the calibrated model predicts it (dmdt 0.4 s per call: dc 72 -> bridge start 1.4 s; car mathsls 1.31 s)",
+ "actions": [
+  {
+   "t": 1.5,
+   "do": "cable_plug"
+  },
+  {
+   "t": 9.0,
+   "do": "cable_unplug"
+  }
+ ],
+ "expect": [
+  {
+   "t": 0.1,
+   "kind": "screen",
+   "match": "^vw$",
+   "tol": 0.5,
+   "what": "VW map at start"
+  },
+  {
+   "t": 2.0,
+   "kind": "dmdt",
+   "match": "^dc 72 by=cp",
+   "tol": 0.7,
+   "what": "takeover dc 72"
+  },
+  {
+   "t": 3.4,
+   "kind": "proc",
+   "match": "bridge start",
+   "tol": 0.7,
+   "what": "bridge start"
+  },
+  {
+   "t": 3.7,
+   "kind": "screen",
+   "match": "^keyframe tag=cp",
+   "tol": 0.7,
+   "what": "first CP picture"
+  },
+  {
+   "t": 9.6,
+   "kind": "proc",
+   "match": "bridge exit",
+   "tol": 0.7,
+   "what": "bridge exit after unplug"
+  },
+  {
+   "t": 10.0,
+   "kind": "dmdt",
+   "match": "^dc 70 33 by=cp",
+   "tol": 0.7,
+   "what": "restore dc 70 33"
+  },
+  {
+   "t": 10.5,
+   "kind": "screen",
+   "match": "^vw$",
+   "tol": 0.7,
+   "what": "VW map back"
+  }
+ ],
+ "end": 13
+}
