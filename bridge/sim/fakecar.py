@@ -33,8 +33,8 @@ PARAMS = {
     'aa_fps': 30,             # AA phone model (aa/feeder/test/run_direct_test.py): 8-frame window, IDR ~60 s
     'aa_window': 8,
     'aa_idr_every_s': 60,
-    'wl_idle_ms': 3000,
-    'screen_hold_ms': 1500,   # A: the AID keeps the last picture this long without data       # A: WL cluster_owner_idle_ms (WL: no frames -> session stop reason=idle)
+    'wl_idle_ms': 5000,       # M: WL cluster_owner_idle_ms default 5000 (airplayd ap_conf.c, WL 2026-11-24)
+    'screen_hold_ms': 1500,   # A: stricter than the car (AA: the AID drops the picture after ~15 s without data)
 }
 AA_FEEDER_TEST = os.path.join(BRIDGE_DIR, '..', 'aa', 'feeder', 'test')
 AA_MOST_TEST = os.path.join(BRIDGE_DIR, '..', 'aa', 'most', 'test')
@@ -74,6 +74,8 @@ class Handle:
         self.stolen = False
         self.idr_at = None       # first keyframe accepted on this handle (picture visible)
         self.last_write = None
+        self.last_picture = None  # last video PES start (PUSI on PID 0x11): a new picture on the AID
+        self.pictures = 0
         self.bytes = 0
         self.bad_blocks = 0
         self.cap = None          # every accepted byte of this handle (chan-<id>-<tag>.ts)
@@ -145,6 +147,10 @@ class Channel:
             h.last_write = t
             if h.cap:
                 h.cap.write(data)
+            for i in range(0, len(data) - 187, 188):
+                if data[i + 1] & 0x40 and ((data[i + 1] & 0x1f) << 8 | data[i + 2]) == 0x11:
+                    h.last_picture = t
+                    h.pictures += 1
             if len(data) % 188 or any(data[i] != 0x47 for i in range(0, len(data), 188)):
                 h.bad_blocks += 1
             if h.idr_at is None and re.search(rb'\x00\x00\x01[\x25\x45\x65]', data):
@@ -183,12 +189,30 @@ def put(path, text):
     os.rename(tmp, path)
 
 
+def x264_aus():
+    """60 s of libx264 baseline 800x480 at 30 fps, one IDR (the phone's IDR about every 60 s), split at the AUDs.
+    Made once per build directory (ffmpeg with libx264 needed; else None and the synthetic stream is used)."""
+    path = os.path.join(BUILD, 'aa-x264.h264')
+    if not os.path.exists(path):
+        if not shutil.which('ffmpeg'):
+            return None
+        r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=800x480:rate=30',
+                            '-frames:v', '1800', '-c:v', 'libx264', '-profile:v', 'baseline', '-x264-params',
+                            'keyint=1800:ref=1:bframes=0:aud=1', '-f', 'h264', path + '.tmp'])
+        if r.returncode != 0:
+            return None
+        os.rename(path + '.tmp', path)
+    data = open(path, 'rb').read()
+    starts = [m.start() for m in re.finditer(rb'\x00\x00\x00\x01\x09', data)]
+    return [data[a:b] for a, b in zip(starts, starts[1:] + [len(data)])]
+
+
 class AAPhone:
     """gal's hook + the phone for the real aa-most-feeder: Annex-B stream over TCP, one ACK byte per frame back
     (8-frame window), IDR first and about every 60 s, never on request (AA 2026-11-24)."""
     n = 0
 
-    def __init__(self, car, idr_every_s):
+    def __init__(self, car, idr_every_s, env_add=None):
         sys.path.insert(0, AA_FEEDER_TEST)
         import h264synth
         self.hs = h264synth
@@ -210,6 +234,7 @@ class AAPhone:
         self.srv.bind(('127.0.0.1', 0))
         self.srv.listen(1)
         self.idr_every = max(1, int(idr_every_s * PARAMS['aa_fps']))
+        self.x264 = x264_aus()
         self.acks = self.other = 0
         self.frames = []
         self.conn = None
@@ -227,6 +252,9 @@ class AAPhone:
                    PMCP_AA_FLUSH_DEV=os.path.join(self.dir, 'flush.dev'),
                    PMCP_AA_KF_REQ=os.path.join(self.dir, 'kf.request'), PMCP_AA_PRIO='0',
                    PMCP_AA_RECLAIM_S=os.environ.get('FAKECAR_AA_RECLAIM_S', str(int(time.clock_gettime(time.CLOCK_MONOTONIC)) + 180)))
+        env.update(env_add or {})
+        self.lag = []            # (t, frames sent - ACKs) per frame: > 0 for long = the feeder holds ACKs
+        self.status_before = ''
         self.log = open(os.path.join(self.dir, 'feeder.stderr'), 'w')
         self.feeder = car.spawn([os.path.join(BUILD, 'feeder-sim'), 'tcp://127.0.0.1:%d' % self.srv.getsockname()[1]],
                                 env=env, stdout=self.log)
@@ -270,7 +298,8 @@ class AAPhone:
         ack.setblocking(False)
         rng = random.Random(1161)
         try:
-            self.conn.sendall(b''.join(hs.SC + x for x in (hs.sps(), hs.pps())))
+            if not self.x264:
+                self.conn.sendall(b''.join(hs.SC + x for x in (hs.sps(), hs.pps())))
             t0 = time.time()
             t_next = t0
             i = 0
@@ -289,13 +318,18 @@ class AAPhone:
                         self.stopping.set()
                 if self.stopping.is_set():
                     break
-                idr = i % self.idr_every == 0
-                au, _ = hs.access_unit(idr, 20000 if idr else rng.randrange(1500, 4000), rng)
+                if self.x264:
+                    au = self.x264[i % len(self.x264)]
+                    idr = i % len(self.x264) == 0
+                else:
+                    idr = i % self.idr_every == 0
+                    au, _ = hs.access_unit(idr, 20000 if idr else rng.randrange(1500, 4000), rng)
                 t_sent = time.time()
                 self.conn.sendall(au)
                 self.frames.append(dict(idx=i, frame_no=i + 1, ring_seq=i + 2, idr=idr,
                                         avcc_sha256=self.avcc_hash(au), t_us=int((t_sent - t0) * 1e6)))
                 i += 1
+                self.lag.append((now(), i - self.acks))
                 t_next = max(t_next + 1.0 / PARAMS['aa_fps'], t_sent - 0.5 / PARAMS['aa_fps'])
                 self.take(ack, 0)
             end = time.time() + 1.0                            # collect the last ACKs
@@ -304,7 +338,12 @@ class AAPhone:
         except OSError:
             pass
         with open(os.path.join(self.dir, 'input', 'frames.jsonl'), 'w') as f:
-            f.write(json.dumps(dict(event='avcC', ring_seq=1, sps=hs.sps().hex(), pps=hs.pps().hex())) + '\n')
+            sps, pps = hs.sps(), hs.pps()
+            if self.x264:
+                nals = [n for n in re.split(rb'\x00\x00\x00\x01|\x00\x00\x01', self.x264[0]) if n]
+                sps = next(n for n in nals if n[0] & 0x1f == 7)
+                pps = next(n for n in nals if n[0] & 0x1f == 8)
+            f.write(json.dumps(dict(event='avcC', ring_seq=1, sps=sps.hex(), pps=pps.hex())) + '\n')
             for x in self.frames:
                 f.write(json.dumps(x) + '\n')
 
@@ -318,9 +357,16 @@ class AAPhone:
     def silence(self, seconds):
         self.silence_until = time.time() + seconds
 
+    def status(self):
+        try:
+            return open(os.path.join(self.car.ram, 'pmcp-aa-feeder.txt')).read()
+        except OSError:
+            return ''
+
     def stop(self, mode):
         if self.stopping.is_set() and mode == 'unplug' and self.feeder.poll() is not None:
             return
+        self.status_before = self.status() or self.status_before
         self.stopping.set()
         if mode == 'kill' and self.feeder.poll() is None:
             self.feeder.send_signal(signal.SIGKILL)
@@ -341,6 +387,51 @@ class AAPhone:
             os.unlink(self.ack_path)
         except OSError:
             pass
+
+    def handle_aus(self, hid):
+        """Video AUs of one channel handle: (leading non-PUSI packets, [(discontinuity, [frame_no...] or None)])."""
+        by_hash = {}
+        for f in self.frames:
+            by_hash.setdefault(f['avcc_sha256'], []).append(f['frame_no'])
+        data = open(os.path.join(self.car.dir, 'chan-%d-aa.ts' % hid), 'rb').read()
+        aus, cur, lead = [], None, 0
+        for i in range(0, len(data) - 187, 188):
+            p = data[i:i + 188]
+            if ((p[1] & 0x1f) << 8 | p[2]) != 0x11:
+                continue
+            afc, off, disc = (p[3] >> 4) & 3, 4, False
+            if afc & 2:
+                disc, off = p[4] > 0 and bool(p[5] & 0x80), 5 + p[4]
+            pay = p[off:] if afc & 1 else b''
+            if p[1] & 0x40:
+                if cur is not None:
+                    aus.append(cur)
+                cur = [disc, bytearray(pay[9 + pay[8]:])]
+            elif cur is None:
+                lead += 1
+            else:
+                cur[1] += pay
+        if cur is not None:
+            aus.append(cur)
+        return lead, [(d, by_hash.get(self.avcc_hash(bytes(b)))) for d, b in aus]
+
+    def decode(self):
+        """AA I6: ffmpeg decodes the AA TS with zero errors; returns (rc, errors, pictures)."""
+        self.analyse()   # writes mlb.ts (all AA handles of this phone)
+        ts = os.path.join(self.dir, 'mlb.ts')
+        r = subprocess.run(['ffmpeg', '-v', 'error', '-err_detect', 'crccheck+bitstream+buffer+explode', '-f', 'mpegts',
+                            '-i', ts, '-map', '0:v', '-f', 'null', '-'], capture_output=True, text=True)
+        # count with ffprobe: the framemd5/null muxers drop pictures whose timestamps crowd (after a slow drain)
+        c = subprocess.run(['ffprobe', '-v', 'error', '-count_frames', '-select_streams', 'v', '-show_entries',
+                            'stream=nb_read_frames', '-of', 'csv=p=0', ts], capture_output=True, text=True)
+        try:
+            pics = int(c.stdout.split()[0])
+        except (IndexError, ValueError):
+            pics = -1
+        # the null muxer maps PTS 0.3 ms apart (a phone burst) to one 1/30 s tick and says so: not a decoder error
+        err = '\n'.join(l for l in r.stderr.splitlines() if 'non monotonically increasing dts to muxer' not in l
+                        and 'Last message repeated' not in l)
+        return r.returncode, err.strip(), pics
 
     def analyse(self):
         """aa/most/test/ts_analyse.py on every AA byte the channel accepted (all AA handles, in order)."""
@@ -531,7 +622,8 @@ class Car:
             hd = self.chan.holder
             if hd == 'vw':
                 who = 'vw'
-            elif isinstance(hd, Handle) and hd.idr_at is not None and hd.last_write and t - hd.last_write < PARAMS['screen_hold_ms'] / 1000.0:
+            elif isinstance(hd, Handle) and hd.idr_at is not None and hd.last_picture and \
+                    t - hd.last_picture < PARAMS['screen_hold_ms'] / 1000.0:
                 who = hd.tag
             else:
                 who = 'blank'
@@ -601,8 +693,8 @@ class Car:
         self.bb.rec('phone', 'cp cable unplug')
 
     # ---- Android Auto: the real aa-most-feeder (host build with sim_mlb.c), the car plays gal's hook + the phone
-    def aa_plug(self, idr_every_s=None):
-        self.aa = AAPhone(self, idr_every_s or PARAMS['aa_idr_every_s'])
+    def aa_plug(self, idr_every_s=None, env_add=None):
+        self.aa = AAPhone(self, idr_every_s or PARAMS['aa_idr_every_s'], env_add)
         self.marks.setdefault('aa_plug', []).append(now())
         self.bb.rec('phone', 'aa plug feeder=%d' % self.aa.feeder.pid)
 
@@ -626,19 +718,21 @@ class Car:
                               '--idr-on-request', str(idr_on_request)])
         self.wl_gen = gen
         ms = int(time.monotonic() * 1000)
-        put(os.path.join(self.src, 'owner'), 'v=1 src=wireless pid=%d gen=%d since_ms=%d\n' % (self.wl.pid, gen, ms))
+        put(os.path.join(self.src, 'owner'), 'v=1 src=wireless pid=%d gen=%d since_ms=%d kind=in\n' % (self.wl.pid, gen, ms))
         put(os.path.join(self.src, 'wireless.session'),
             'v=1 state=start gen=%d pid=%d ts_ms=%d reason=connect\n' % (gen, self.wl.pid, ms))
         self.marks.setdefault('wl_start', []).append(now())
         self.bb.rec('phone', 'wl start gen=%d fps=%d gop=%d producer=%d' % (gen, fps, gop, self.wl.pid))
 
     def wl_stop(self, reason):
-        """'idle': Wi-Fi gone, no frames for wl_idle_ms, then stop; otherwise the stream ended (TEARDOWN...)."""
+        """The WL receiver ends the session (reasons as airplayd writes them, WL 2026-11-24):
+        'idle'  Wi-Fi gone: airplayd (the producer) stays alive, only the frames stop; stop after wl_idle_ms;
+        'done'  TEARDOWN of stream 111; any other session reason the same way (phone-gone, SIGTERM, guard).
+        The producer is frozen (SIGSTOP), never killed: in the car its pid stays alive."""
         pid = self.wl.pid
         if self.wl.poll() is None:
-            self.wl.kill()
-            self.wl.wait()
-        self.bb.rec('phone', 'wl stream gone reason=%s' % reason)
+            self.wl.send_signal(signal.SIGSTOP)
+        self.bb.rec('phone', 'wl frames stop reason=%s (producer alive)' % reason)
         if reason == 'idle':
             time.sleep(PARAMS['wl_idle_ms'] / 1000.0)
         ms = int(time.monotonic() * 1000)
@@ -652,8 +746,15 @@ class Car:
         self.marks.setdefault('wl_stop', []).append(now())
         self.bb.rec('phone', 'wl session stop reason=%s' % reason)
 
+    def wl_crash(self):
+        """airplayd dies: dead owner pid, no stop line (WL: the guard restarts it with a new pid and gen+1)."""
+        self.wl.kill()
+        self.wl.wait()
+        self.marks.setdefault('wl_crash', []).append(now())
+        self.bb.rec('phone', 'wl airplayd killed (no session stop)')
+
     # ---- the unit under load: reverse camera, CPU 98-100 %, devp-iso-mmx drains slowly (A203/A208)
-    def reverse(self, seconds, rate=0.1):
+    def reverse(self, seconds, rate=0.03):
         self.chan.rate = rate
         self.bb.rec('car', 'reverse on drain=%.2f' % rate)
         self.marks.setdefault('reverse', []).append((now(), now() + seconds))
@@ -766,24 +867,79 @@ def common_invariants(car):
           car.screen[-1][1] == 'vw', 'view=%s screen=%s' % (car.view, car.screen[-1][1] if car.screen else None))
 
 
-def aa_invariants(car, phone, sessions_with_most=1, ts=True):
+def aa_invariants(car, phone, sessions_with_most=1, ts=True, decode=True, killed=False):
     n = car.name
     gb = dm(car, r'^dc 70 33 by=aa', after=phone.plug_t)
     check(f'{n}: AA gives MOST back exactly once per session ({sessions_with_most})', len(gb) == sessions_with_most,
           len(gb))
     check(f'{n}: AA never asks the phone for an IDR (no K/C on the ACK socket)', phone.other == 0, phone.other)
-    check(f'{n}: one ACK per frame sent ({len(phone.frames)})', phone.acks == len(phone.frames),
-          '%d/%d' % (phone.acks, len(phone.frames)))
+    if killed:   # frames in flight when the feeder died are never ACKed: at most the phone's window
+        check(f'{n}: every frame ACKed except those in flight at the SIGKILL (<= {PARAMS["aa_window"]})',
+              0 <= len(phone.frames) - phone.acks <= PARAMS['aa_window'], '%d/%d' % (phone.acks, len(phone.frames)))
+    else:
+        check(f'{n}: one ACK per frame sent ({len(phone.frames)})', phone.acks == len(phone.frames),
+              '%d/%d' % (phone.acks, len(phone.frames)))
     check(f'{n}: AA guardian marker and owner file removed after the restore',
           not os.path.exists(os.path.join(car.ram, 'pmcp-aa-guard.pid')) and
           not os.path.exists(os.path.join(car.src, 'isotx2')))
+    if decode and sessions_with_most and phone.x264 and shutil.which('ffmpeg'):
+        rc, err, pics = phone.decode()
+        ka = max(0, snum(phone.status_before or phone.status(), 'keepalive:', 'wyslane'))
+        check(f'{n}: AA TS decodes with ffmpeg, zero errors (AA I6)', rc == 0 and not err, err[:200])
+        check(f'{n}: pictures decoded = phone frames + keep-alive ({len(phone.frames)} + {ka})',
+              pics == len(phone.frames) + ka, pics)
     if ts and sessions_with_most:
         rc, out, norm = phone.analyse()
         miss = norm and norm['missing_frame_nos']
         check(f'{n}: AA TS passes ts_analyse', rc == 0, out[-300:])
         check(f'{n}: every AA frame in the TS once, in order', norm and not miss and
-              norm['output_aus'] >= len(phone.frames) - 0, 'out=%s sent=%d missing=%s' % (
+              norm['output_aus'] >= len(phone.frames), 'out=%s sent=%d missing=%s' % (
                   norm and norm['output_aus'], len(phone.frames), miss and miss[:8]))
+
+
+def aa_reclaim_ts(car, phone, steal_t):
+    """AA I3 as corrected by AA (2026-11-24), per channel handle, nothing glued: handle 1 = frames 1..k (the last may
+    be cut); handle 2 starts (after < 1 AU of continuation packets) with a discontinuity-flagged AU, holds every frame
+    from k+1 in order plus exactly one replayed IDR equal to the last IDR before the steal. Order logged."""
+    n = car.name
+    hs = sorted(h.hid for h in car.chan.handles.values() if h.tag == 'aa' and h.t_open >= phone.plug_t)
+    if len(hs) != 2:
+        check(f'{n}: two AA channel handles (before and after the reclaim)', False, hs)
+        return
+    lead1, a1 = phone.handle_aus(hs[0])
+    lead2, a2 = phone.handle_aus(hs[1])
+    f1 = [x[0] for _, x in a1 if x]
+    cut = 1 if a1 and a1[-1][1] is None else 0
+    ok1 = f1 == list(range(1, len(f1) + 1)) and all(x for _, x in a1[:len(a1) - cut])
+    check(f'{n}: handle 1 = frames 1..{len(f1)} whole and in order (cut at the steal: {cut})', ok1,
+          [x for _, x in a1][:6])
+    k = len(f1)
+    idrs = [f['frame_no'] for f in phone.frames if f['idr'] and f['frame_no'] <= k + cut]
+    last_idr = idrs[-1] if idrs else None
+    seq = [(d, x) for d, x in a2]
+    check(f'{n}: handle 2 starts on a PES start with the discontinuity flag ({lead2} continuation packets first)',
+          seq and seq[0][0] and lead2 * 184 < 60000, (lead2, seq[:1]))
+    replay = [i for i, (_, x) in enumerate(seq) if x and last_idr in x and x[0] <= k + cut]
+    rest = [x[0] for _, x in seq if x and x[0] > k]
+    first = k + 1 + cut
+    expect = list(range(rest[0], rest[0] + len(rest))) if rest else []
+    check(f'{n}: handle 2 = every frame from {first} on, in order, plus exactly one replayed IDR (frame {last_idr})',
+          len(replay) == 1 and rest == expect and rest and rest[0] in (k + 1, k + 2) and
+          all(x for _, x in seq), 'replay at %s, rest %s..%s, unmatched %d' % (
+              replay, rest[:2], rest[-1:], sum(1 for _, x in seq if not x)))
+    order = ' '.join(('D:' if d else '') + ('?' if not x else ('IDR%d' % x[0] if x[0] == last_idr else str(x[0])))
+                     for d, x in seq[:6])
+    car.bb.rec('aa', 'after reclaim: %s ...' % order)
+    print('       aa-steal order after the reopen: %s ...' % order, flush=True)
+
+
+def snum(text, prefix, key):
+    """Number after key= on the status line starting with prefix (aa feeder status), -1 if absent."""
+    for l in text.split('\n'):
+        if l.startswith(prefix):
+            m = re.search(r'(?:^|\s)' + re.escape(key) + r'[= ](-?\d+)', l)
+            return int(m.group(1)) if m else -1
+    return -1
 
 
 def picture_after(car, t, tag, within):
@@ -911,10 +1067,10 @@ def sc_wl_steal():
     rec = car.bb.find('screen', '^keyframe tag=cp', after=st)
     d = rec[0][0] - st if rec else None
     check('wl-steal: CP picture back within 3 s without any answered IDR request', d is not None and d < 3, d)
-    car.wl_stop('teardown')
+    car.wl_stop('done')
     time.sleep(4)
     d = car.first_after(car.marks['wl_stop'][0], 'vw', 4)
-    check('wl-steal: VW map back within 3 s of the teardown', d is not None and d < 3, d)
+    check('wl-steal: VW map back within 3 s of the TEARDOWN (reason=done)', d is not None and d < 3, d)
     car.shutdown()
     common_invariants(car)
 
@@ -950,7 +1106,7 @@ def sc_aa_kill():
     check('aa-kill: VW map back within 3 s of the SIGKILL', d is not None and d < 3, d)
     car.shutdown()
     common_invariants(car)
-    aa_invariants(car, car.aa, ts=False)
+    aa_invariants(car, car.aa, ts=False, decode=False, killed=True)
 
 
 def sc_aa_holds():
@@ -1017,13 +1173,19 @@ def sc_aa_steal():
     d = rec[0][0] - st if rec else None
     check('aa-steal: AA picture back with a keyframe within 3 s of the steal', d is not None and d < 3, d)
     check('aa-steal: reclaim dmdt (dc 72 by aa) after the steal', dm(car, '^dc 72 by=aa', after=st))
+    aa_reclaim_ts(car, car.aa, st)
+    st_text = car.aa.status()
+    check('aa-steal: feeder status: one reclaim attempt, IDR replayed once',
+          snum(st_text, 'ponowne przejecie MOST:', 'proby') == 1 and
+          snum(st_text, 'ponowne przejecie MOST:', 'IDR_ponownie') == 1,
+          [l for l in st_text.split('\n') if l.startswith('ponowne')])
     car.aa_unplug()
     time.sleep(4)
     car.shutdown()
     common_invariants(car)
     # ts_analyse assumes one continuous capture (PSI cadence by packet number); AA's own reclaim test does not run it
     # either. The AU in flight at the steal is cut (the ENOMEM block is not accepted) - question to AA (docs/28).
-    aa_invariants(car, car.aa, ts=False)
+    aa_invariants(car, car.aa, ts=False, decode=False)
 
 
 def sc_aa_reverse():
@@ -1042,6 +1204,10 @@ def sc_aa_reverse():
           [x for _, _, x in dm(car, 'by=aa', after=t_on, before=t_off + 1)])
     d = car.first_after(t_off, 'aa', 4)
     check('aa-reverse: AA picture on the AID within 2 s after reverse', d is not None and d < 2, d)
+    lag = max([x for t, x in car.aa.lag if t_on <= t <= t_off] or [0])
+    held = snum(car.aa.status(), 'ACK wstrzymane:', 'razy')
+    check('aa-reverse: the feeder really held ACKs (phone at its 8-frame window, status razy >= 1)',
+          lag >= PARAMS['aa_window'] and held >= 1, 'max lag=%d razy=%d' % (lag, held))
     car.aa_unplug()
     time.sleep(4)
     car.shutdown()
@@ -1063,6 +1229,52 @@ def sc_aa_silence():
           all(w == 'aa' for ts, w in car.screen if t <= ts <= t + 9), sorted(set(w for ts, w in car.screen
                                                                                   if t <= ts <= t + 9)))
     check('aa-silence: no giveback during the silence', not dm(car, 'by=aa', after=t, before=t + 9))
+    st_text = car.aa.status()
+    ka = snum(st_text, 'keepalive:', 'wyslane')
+    check('aa-silence: about 8 keep-alive pictures sent, no errors', 6 <= ka <= 10 and
+          snum(st_text, 'keepalive:', 'bledy') == 0, [l for l in st_text.split('\n') if l.startswith('keepalive')])
+    car.aa_unplug()
+    time.sleep(4)
+    car.shutdown()
+    common_invariants(car)
+    # after keep-alive the phone frames carry shifted frame_num/POC (v17), so ts_analyse's byte match cannot hold:
+    # the decode check (zero errors, phone + keep-alive pictures) is AA's own criterion (run_direct_test 17)
+    aa_invariants(car, car.aa, ts=False)
+
+
+def sc_wl_crash():
+    """airplayd dies mid-session (dead owner pid, no stop line), the guard restarts it with gen+1."""
+    car = Car('wl-crash')
+    car.boot()
+    time.sleep(1)
+    car.wl_start(fps=30, gop=5, gen=1)
+    time.sleep(4)
+    car.wl_crash()
+    time.sleep(5)
+    d = car.first_after(car.marks['wl_crash'][0], 'vw', 5)
+    check('wl-crash: VW map back within 4 s after airplayd died', d is not None and d < 4, d)
+    car.wl_start(fps=30, gop=5, gen=2)
+    time.sleep(6)
+    d = car.first_after(car.marks['wl_start'][1], 'cp', 6)
+    check('wl-crash: CP map again within 4 s of the restarted session (gen 2)', d is not None and d < 4, d)
+    car.wl_stop('done')
+    time.sleep(4)
+    car.shutdown()
+    common_invariants(car)
+
+
+def sc_aa_silence_noka():
+    """Control for aa-silence (AA request): keep-alive off (PMCP_AA_KEEPALIVE_MS=0) - the car must see the gap."""
+    car = Car('aa-silence-noka')
+    car.boot()
+    time.sleep(1)
+    car.aa_plug(env_add={'PMCP_AA_KEEPALIVE_MS': '0'})
+    time.sleep(4)
+    t = now()
+    car.aa.silence(8)
+    time.sleep(10)
+    check('aa-silence-noka: without keep-alive the AID loses the AA picture during the silence (control)',
+          any(w != 'aa' for ts, w in car.screen if t <= ts <= t + 9))
     car.aa_unplug()
     time.sleep(4)
     car.shutdown()
@@ -1070,10 +1282,34 @@ def sc_aa_silence():
     aa_invariants(car, car.aa)
 
 
+def sc_aa_steal_late():
+    """The encoder steals after the reclaim window (PMCP_AA_RECLAIM_S=0): AA gives MOST back, no reclaim, the session
+    goes on as analysis only (AA I8); exactly one giveback in the whole session."""
+    car = Car('aa-steal-late')
+    car.boot()
+    time.sleep(1)
+    car.aa_plug(env_add={'PMCP_AA_RECLAIM_S': '0'})
+    time.sleep(4)
+    car.vw_steal_in(1)
+    time.sleep(6)
+    st = car.marks['steal'][0]
+    check('aa-steal-late: no reclaim (no dc 72 by aa) after the steal', not dm(car, '^dc 72 by=aa', after=st))
+    check('aa-steal-late: MOST given back (dc 70 33 by aa) after the steal', dm(car, '^dc 70 33 by=aa', after=st))
+    check('aa-steal-late: the AA session goes on (feeder alive, analysis only)', car.aa.feeder.poll() is None)
+    d = car.first_after(st, 'vw', 3)
+    check('aa-steal-late: VW map on the AID', d is not None)
+    car.aa_unplug()
+    time.sleep(4)
+    car.shutdown()
+    common_invariants(car)
+    aa_invariants(car, car.aa, ts=False, decode=False)
+
+
 SCENARIOS = {'session': sc_session, 'boot-steal': sc_boot_steal, 'replug': sc_replug, 'cp-reverse': sc_cp_reverse,
-             'wl-session': sc_wl_session, 'wl-steal': sc_wl_steal,
+             'wl-session': sc_wl_session, 'wl-steal': sc_wl_steal, 'wl-crash': sc_wl_crash,
              'aa-session': sc_aa_session, 'aa-kill': sc_aa_kill, 'aa-holds': sc_aa_holds, 'cp-then-aa': sc_cp_then_aa,
-             'aa-steal': sc_aa_steal, 'aa-reverse': sc_aa_reverse, 'aa-silence': sc_aa_silence}
+             'aa-steal': sc_aa_steal, 'aa-steal-late': sc_aa_steal_late, 'aa-reverse': sc_aa_reverse,
+             'aa-silence': sc_aa_silence, 'aa-silence-noka': sc_aa_silence_noka}
 
 
 def main():
