@@ -1565,6 +1565,7 @@ def chaos_run(name, seq):
     cable = wl = False
     aa = None                 # None | 'show' | 'waiting' | 'analysis'
     aa_until = 0.0
+    kill_t = -1e9             # last bridge_kill: the supervisor gives MOST back, then starts a new bridge (~1.3 s dmdt)
     phones = []
     log = []
 
@@ -1613,7 +1614,9 @@ def chaos_run(name, seq):
         elif do == 'aa_plug':
             car.aa_plug()
             phones.append(car.aa)
-            if cable or wl:
+            if (cable or wl) and now() - kill_t < 5.0:
+                aa, aa_until = 'race', now() + 20   # plugged in the gap after a CP bridge kill: MOST may be free
+            elif cable or wl:
                 aa, aa_until = 'waiting', now() + 20
             else:
                 aa = 'show'
@@ -1634,6 +1637,7 @@ def chaos_run(name, seq):
         elif do == 'bridge_kill':
             for p in car.bridge_pids():
                 os.kill(p, signal.SIGKILL)
+            kill_t = now()
             # the supervisor gives MOST back before it starts a new bridge: an AA session that is still waiting for
             # CP (within its 20 s) may take it in that gap (as in cp-then-aa) - either phone on the AID is right
             if aa == 'waiting' and now() < aa_until:
