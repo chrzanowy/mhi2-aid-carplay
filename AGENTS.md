@@ -132,17 +132,73 @@ Build only issues that have been through this review (they have the structure ab
 "Bouwen" sections, keep to the repository conventions, and report which acceptance criteria were checked by tests and
 which still need the drive in the car.
 
-In Claude Code, `/bouw-issue N` (`.claude/commands/bouw-issue.md`) runs the whole build without asking:
+The owner starts a build with one request and then prepares the test drive from GitHub alone. Work through the steps
+below without asking. This works in any assistant:
 
-- **Branch**: create `issue-N-<short-slug>` yourself from `origin/main` (or from the branch of an unmerged issue this
-  one depends on, and say so). Never commit to `main`, never merge, never force-push.
-- **PR**: a draft PR titled `#N: <issue title>` ending in `Closes #N`. The owner merges after the test drive.
-- **Report on the issue, not only in the terminal**: one comment on the issue, in Dutch, with branch, PR, build ID,
-  card (release / experimental), what changed, test results, each acceptance criterion marked as checked by a host test
-  or still needing the drive, a test-drive checklist, the logging decision, and open points. The owner prepares the
-  test drive from GitHub alone, so the comment must be complete without the terminal output.
-- **When you stop** (issue not reviewed, open decision, build fails three times on the same error): still post the
-  comment, with the reason and what the owner has to do.
+- **Claude Code**: `/bouw-issue N` (`.claude/commands/bouw-issue.md` points here; `.claude/settings.json` allows the
+  commands these steps need).
+- **Codex and other assistants**: "Bouw issue #N volgens AGENTS.md". Configure the tool so it may run `git`, `gh` and
+  the build scripts in this repository; the limits below apply whatever the tool allows.
+
+**Limits, always:** never commit or push to `main`, never merge, never force-push, never close or edit an issue (only
+comment). The owner merges after the test drive.
+
+### Steps
+
+Stop only where a step says so. When you stop, still post the comment of step 8, with the reason and what the owner
+has to do.
+
+1. **Read.** `gh issue view N --comments`, plus every issue and PR it mentions (`#N`) with their status. If the issue
+   has not been through the review (no "Doel / Gewenst gedrag / Acceptatiecriteria / Implementatie / Bouwen"
+   structure), or a behaviour decision is still open: post a comment listing exactly what is missing, then stop.
+2. **Branch.** `git fetch origin`, then create `issue-N-<short-slug>` from `origin/main`. If the issue depends on
+   another issue whose PR is not merged yet, branch from that PR's branch instead and say so in the PR and the comment.
+   If the branch already exists, continue on it.
+3. **Plan.** Write a short plan (files, patch script, build ID, tests, logging decision of step 5) and keep it for the
+   comment. Do not wait for approval.
+4. **Build.** Implement per the issue's "Implementatie" section and the repository conventions (counted replacements,
+   new build ID, host test printing `<NAME>_PASS`, `python3 -I`, `README.md` + `README.pl.md`, `CHANGELOG.md`
+   "Unreleased").
+5. **Logging decision.** Decide whether the test drive needs temporary extra logging, following "Temporary logging for
+   the test drive" below. Add it only when the decision says so.
+6. **Test.** Run the component's `build.sh` (and `installer/test/run_tests.sh` when the installer changed). Fix and
+   rerun until every test passes; existing tests stay unchanged unless the issue says otherwise. If the local workspace
+   is missing, write "code-only, not built" everywhere instead of claiming results. After three failed fix attempts on
+   the same failure: commit what you have as WIP, post the comment with the failure output, and stop.
+7. **Commit and PR.** Small commits with clear messages. `git push -u origin <branch>`, then a draft PR titled
+   `#N: <issue title>` whose body ends in `Closes #N` (`gh pr create --draft`).
+8. **Report on the issue.** One comment with `gh issue comment N --body-file <file>`, in Dutch, complete without the
+   terminal output, with exactly this structure:
+
+   ```markdown
+   ## 🔧 Build-rapport
+   **Branch:** `…` · **PR:** #… (draft) · **Build-ID:** … · **Kaart:** release / experimenteel
+   **Status:** klaar voor proefrit | gestopt: <reden>
+
+   ### Wat is er veranderd
+   <2-5 regels, in gewone woorden>
+
+   ### Tests
+   - `…_PASS` (nieuw) / bestaande tests ongewijzigd geslaagd: …
+
+   ### Acceptatiecriteria
+   | Criterium | Gecontroleerd door |
+   |---|---|
+   | … | ✅ hosttest `…` / 🚗 proefrit |
+
+   ### Proefrit-checklist
+   - [ ] <concreet scenario: bron (CarPlay bedraad/draadloos, Android Auto), situatie, wat je op het AID moet zien>
+
+   ### Tijdelijke logging
+   **Ja/Nee** — <waarom>.
+   Indien ja: aanzetten: … · bestand: … · uitlezen: … · waar op letten: …
+   - [ ] Na de proefrit verwijderen (`grep -rn "TEMP-LOG(#…)"`)
+
+   ### Open punten
+   <of "geen">
+   ```
+
+Finish with a one-line summary to the owner: branch, PR number, and whether it is ready for the test drive.
 
 ### Temporary logging for the test drive
 
