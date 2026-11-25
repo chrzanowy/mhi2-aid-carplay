@@ -50,13 +50,22 @@ tried on AID 791.
 ## How to review an issue
 
 Do the review in the language of the issue (the owner writes issues in Dutch). Do not change the issue on GitHub
-yourself unless the owner asks; deliver the review in the conversation.
+yourself unless the owner asks; deliver the review in the conversation. One exception: the **issue type** (see
+step 1), which you set yourself when it is missing.
 
 ### 1. Read everything first
 
 - The issue, its comments, and every issue or PR it mentions (`#N`), with their status.
 - Look for **dependencies between issues**, also circular ones (#1 waits for #2 and #2 waits for #1). Propose an order
   and make each issue buildable on its own: the later issue carries the dependency, the earlier one does not.
+- **Check the issue type.** Every issue must have a GitHub issue type (the type field, not a label): `Feature` for
+  new or changed behaviour, `Bug` for something that does not work as it should, `Task` for work without a change in
+  behaviour (documentation, build, cleanup). Read it with
+  `gh api repos/lammert/mhi2-aid-carplay/issues/N --jq '.type.name'`. When it is missing, choose the type from the
+  issue text and set it right away with `gh api -X PATCH repos/lammert/mhi2-aid-carplay/issues/N -f type=Feature`
+  (or `Bug` / `Task`). When the issue text fits no type clearly, ask the owner instead of guessing. When the type is
+  present but looks wrong, do not change it: name it as a finding. Report in the review which type the issue has and
+  whether you set it.
 
 ### 2. Find the code
 
@@ -87,8 +96,9 @@ For each point, either the issue already answers it, or you write it down as a f
 11. **Implementation hint**: where the change goes and how it follows the conventions above.
 12. **Build and test environment**: local build by the owner or code-only by a cloud assistant.
 13. **Out of scope**: what this issue deliberately does not do (often: the related issue).
-14. **Labels**: one type label (`enhancement`, `bug`, `documentation`) and one component label named after the
-    directory (`rg`, `aa`, `bridge`, `hmiextras`, `installer`, `ui`, …).
+14. **Issue type**: present and fitting (step 1). The issue type replaces type labels such as `enhancement` or `bug`.
+15. **Labels**: one component label named after the directory (`rg`, `aa`, `bridge`, `hmiextras`, `installer`,
+    `ui`, …).
 
 ### 4. Deliver the review
 
@@ -110,7 +120,8 @@ In this order:
    ## Buiten scope
    ```
 
-3. **Labels** to add, and the dependency order with related issues.
+3. **Issue type** (already present, or set by you during this review), **labels** to add, and the dependency order
+   with related issues.
 
 Keep facts and recommendations apart. Anything you could not check (a symbol never shown on AID 791, a field the phone
 may not send) is named as unverified, not stated as fact.
