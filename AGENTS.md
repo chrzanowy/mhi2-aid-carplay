@@ -131,3 +131,40 @@ may not send) is named as unverified, not stated as fact.
 Build only issues that have been through this review (they have the structure above). Follow the "Implementatie" and
 "Bouwen" sections, keep to the repository conventions, and report which acceptance criteria were checked by tests and
 which still need the drive in the car.
+
+In Claude Code, `/bouw-issue N` (`.claude/commands/bouw-issue.md`) runs the whole build without asking:
+
+- **Branch**: create `issue-N-<short-slug>` yourself from `origin/main` (or from the branch of an unmerged issue this
+  one depends on, and say so). Never commit to `main`, never merge, never force-push.
+- **PR**: a draft PR titled `#N: <issue title>` ending in `Closes #N`. The owner merges after the test drive.
+- **Report on the issue, not only in the terminal**: one comment on the issue, in Dutch, with branch, PR, build ID,
+  card (release / experimental), what changed, test results, each acceptance criterion marked as checked by a host test
+  or still needing the drive, a test-drive checklist, the logging decision, and open points. The owner prepares the
+  test drive from GitHub alone, so the comment must be complete without the terminal output.
+- **When you stop** (issue not reviewed, open decision, build fails three times on the same error): still post the
+  comment, with the reason and what the owner has to do.
+
+### Temporary logging for the test drive
+
+For every build, decide whether the drive needs temporary extra logging, and give the decision and its reason in the
+issue comment. Add logging when an acceptance criterion can only be judged in the car and the existing logs would not
+show why it failed, for example:
+
+- the behaviour depends on data the phone sends that the host test only simulates (a field Apple Maps or Android Auto
+  may not send, wired vs wireless CarPlay);
+- a threshold, latch or timer decides what is shown (log the value and the decision at each change, not every message);
+- a VW symbol, field or setting is used that was never shown on AID 791 before.
+
+Rules for temporary logging:
+
+- **Reuse what exists first**: `guidance-evidence.txt` (`rg/lanes/GuidanceEvidence.java`, read by `rglast.sh`), the
+  `/ramdisk/pmcp-kombi-view.log` pattern (`rg/kv/`), "CP save log" / "AA save log" and the log card
+  (`installer/logcard/`). A new file only when none of these fits.
+- **Bounded and cheap**: a line per state change, a fixed maximum (rotate to `.1` as `KombiView` does), never on the
+  iAP2 receive thread per message, in `/ramdisk` or `/dev/shmem`, never in `/mnt/persist`.
+- **Privacy**: never street names, addresses, destination text or coordinates; numbers, states and enums only.
+- **Experimental card only**, unless the issue says otherwise.
+- **Marked and testable**: every added line carries `TEMP-LOG(#N)` in a comment, and the host test checks the log line
+  format so a typo cannot cost a drive.
+- **In the comment**: how to switch it on (if gated), which file, how to read it out (GEM button or log card), what to
+  look for, and an unchecked box "remove after the test drive" with `grep -rn "TEMP-LOG(#N)"`.

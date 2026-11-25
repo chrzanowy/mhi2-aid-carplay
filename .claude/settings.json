@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git fetch:*)",
+      "Bash(git switch:*)",
+      "Bash(git checkout -b issue-:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push -u origin issue-:*)",
+      "Bash(git push origin issue-:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue comment:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh api repos/lammert/mhi2-aid-carplay/issues/:*)",
+      "Bash(python3 -I:*)",
+      "Bash(./rg/build.sh:*)",
+      "Bash(bash rg/build.sh:*)",
+      "Bash(./installer/test/run_tests.sh:*)",
+      "Bash(grep:*)"
+    ],
+    "deny": [
+      "Bash(git push origin main:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh issue close:*)",
+      "Bash(gh issue edit:*)"
+    ]
+  }
+}
