@@ -465,7 +465,7 @@ step 7 "Building the components" \
 run "core.so map layout variants (from the pinned omonob base)" python3 -I "$PROJ/patches/mu1161/build_core.py" \
     "$WS/upstream/mib/$CORE_BASE" "$BUILD/$VERSION_TAG/tuning"
 # one build per package of the profile; the build scripts take the profile id first
-RG_DIR="$BUILD/rg-$PROFILE_LC-lanes-uturn-asf-m-aa-r-aa11"
+RG_DIR="$BUILD/rg-$PROFILE_LC-lanes-uturn-asf-m-aa-r-aa11-wl"
 SL_DIR="$BUILD/sl-$PROFILE_LC"
 if has_pkg nai; then
     run_long "NavActiveIgnore.jar" bash "$PROJ/navactiveignore/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/nai-$PROFILE_LC-v2"
@@ -477,8 +477,8 @@ if has_pkg zoom || has_pkg dn; then
     run_long "pmcp-zoom.jar and pmcp-dn.jar (zoom, day/night)" bash "$PROJ/hmiextras/build.sh" "$PROFILE" "$LSD_JAR" "$BUILD/extras-$PROFILE_LC-v2"
 fi
 if has_pkg rg; then
-    run_long "route guidance (pmcp-rg.jar with lanes, distance bar, street, maneuver fallbacks, Android Auto arrows, road, lanes and destination, reroute; iAP2 driver, iap2.cfg, reader)" \
-        bash "$PROJ/rg/build.sh" "$PROFILE" "$LSD_JAR" "$RG_DIR" lanes-uturn-asf-m-aa-r
+    run_long "route guidance (pmcp-rg.jar with lanes, distance bar, street, maneuver fallbacks, Android Auto arrows, road, lanes and destination, reroute, CarPlay over Wi-Fi; iAP2 driver, iap2.cfg, reader)" \
+        bash "$PROJ/rg/build.sh" "$PROFILE" "$LSD_JAR" "$RG_DIR" lanes-uturn-asf-m-aa-r-wl
 fi
 if has_pkg sl; then
     run_long "optional native-map speed-limit reader (pmcp-sl.jar)" bash "$PROJ/speedlimit/build.sh" "$PROFILE" "$LSD_JAR" "$SL_DIR"

@@ -5,6 +5,10 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (experimental)
 
+- **Route guidance (arrows, ETA) on the AID with CarPlay over Wi-Fi:** the `rg` package now also reads the WL
+  receiver's mailbox `/ramdisk/pmcp-wl-rg` (same format as the cable reader), only while a Wi-Fi session owns the MOST
+  map (owner `src=wireless`, live, session of the same generation); the cable always wins, Android Auto is unchanged.
+  Needs the WL receiver that writes the mailbox (A248). rg `ad5798b8` (was `2f244229`).
 - **No more map artifacts on the AID after zooming (fewer keyframes, e.g. every 10 or 30 frames):** a zoom sends
   large frames that fill the MOST channel; when the queue emptied again the bridge moved the timestamps back in one
   100 ms jump, so the next frames got timestamps 0.01 ms apart, the AID dropped them and the picture stayed broken
