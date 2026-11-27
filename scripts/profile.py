@@ -142,6 +142,8 @@ def validate(p, pid):
 
 HEX40 = re.compile(r"^[0-9a-f]{40}\Z")
 HISTORY_KEYS = {"schema", "java_renamed_note", "java_renamed", "rg_known_note", "rg_known", "lsd_known_note", "lsd_known"}
+# A247: earlier pmcp MOST supervisor / bridge files (profiles with pmcp-most only)
+HISTORY_OPTIONAL = {"most_known_note", "most_known"}
 
 
 def _hist_hashes(h, h1, size, what):
@@ -155,8 +157,9 @@ def validate_history(h, pid):
     """history.json = what older cards of this profile left on a unit that this card must still recognise: renamed
     Java packages (by name) and the earlier pmcp route guidance files that replaced factory files (rg_known, hashes).
     Earlier Java packages and AA sets need no list since A188 (pmcp.sh recognises them by name / our wrapper)."""
-    if not isinstance(h, dict) or set(h) != HISTORY_KEYS:
-        fail("%s history: keys differ from the schema %s" % (pid, sorted(HISTORY_KEYS)))
+    if not isinstance(h, dict) or set(h) - HISTORY_OPTIONAL != HISTORY_KEYS:
+        fail("%s history: keys differ from the schema %s (optional %s)" % (pid, sorted(HISTORY_KEYS),
+                                                                         sorted(HISTORY_OPTIONAL)))
     if h["schema"] != 2:
         fail("%s history: schema %r" % (pid, h["schema"]))
     for k in ("java_renamed_note", "rg_known_note", "lsd_known_note"):
@@ -184,6 +187,15 @@ def validate_history(h, pid):
             fail("%s history: lsd_known entry needs sha256, sha1, size: %r" % (pid, e))
         _hist_hashes(e["sha256"], e["sha1"], e["size"], pid + " history lsd_known")
     _unique([e["sha256"] for e in h["lsd_known"]], "%s history lsd_known" % pid)
+    if ("most_known" in h) != ("most_known_note" in h) or not isinstance(h.get("most_known_note", ""), str):
+        fail("%s history: most_known and most_known_note go together (note a string)" % pid)
+    if not isinstance(h.get("most_known", []), list):
+        fail("%s history: most_known is not a list" % pid)
+    for e in h.get("most_known", []):
+        if not isinstance(e, dict) or set(e) - {"note"} != {"kind", "sha256", "sha1", "size"} or e["kind"] not in ("SUP", "BRIDGE"):
+            fail("%s history: most_known entry needs kind SUP|BRIDGE, sha256, sha1, size: %r" % (pid, e))
+        _hist_hashes(e["sha256"], e["sha1"], e["size"], pid + " history most_known")
+    _unique([e["sha256"] for e in h.get("most_known", [])], "%s history most_known" % pid)
     return h
 
 

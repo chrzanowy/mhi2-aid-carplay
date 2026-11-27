@@ -213,6 +213,8 @@ JAVA_RENAMED = sorted(HIST["java_renamed"].items())
 # Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): (kind, sha256, sha1, size), only their
 # hashes go to the card, so no earlier build is needed here. List and notes: history.json "rg_known".
 RG_KNOWN = [(e["kind"], e["sha256"], e["sha1"], e["size"]) for e in HIST["rg_known"]]
+# Earlier pmcp MOST supervisor / bridge files (pmcp.sh MOST_KNOWN, A247): history.json "most_known".
+MOST_KNOWN = [(e["kind"], e["sha256"], e["sha1"], e["size"]) for e in HIST.get("most_known", [])]
 # Earlier lsd.sh files of ours (factory lsd.sh + an earlier block) that java-update replaces in place (pmcp.sh LSD_KNOWN,
 # history.json "lsd_known"): (sha256, sha1, size)
 LSD_KNOWN = [(e["sha256"], e["sha1"], e["size"]) for e in HIST["lsd_known"]]
@@ -790,6 +792,12 @@ def main():
     for kind, h, h1, size in RG_KNOWN:
         pairs[h] = h1
         known.append("%s %s %d" % (kind, h, size))
+    most_known = []
+    for kind, h, h1, size in MOST_KNOWN:
+        if h == PMCP_MOST_SUP_PIN[1]:
+            sys.exit("history most_known lists this card's own supervisor %s" % h[:8])
+        pairs[h] = h1
+        most_known.append("%s %s %d" % (kind, h, size))
     renamed = "\n".join("%s %s" % kv for kv in JAVA_RENAMED)
     lsd_known = []
     for h, h1, size in LSD_KNOWN:
@@ -818,6 +826,7 @@ def main():
         "@@SELFTEST_SHA@@": sha(selftest), "@@SELFTEST_SIZE@@": str(len(selftest)),
         "@@HASHMAP@@": hashmap, "@@RG_KNOWN@@": "\n".join(known), "@@JAVA_RENAMED@@": renamed,
         "@@LSD_KNOWN@@": "\n".join(lsd_known),
+        "@@MOST_KNOWN@@": "\n".join(most_known),
         "@@STOCK_JXE_SIZE@@": str(FW["lsd_jxe"]["size"]), "@@PROFILE_ID@@": FW["id"], "@@PROFILE_CLUSTER@@": FW["cluster"],
         "@@STOCK_GAL_SHA@@": STOCK["GAL"][1], "@@STOCK_GAL_SIZE@@": str(STOCK["GAL"][2]),
         "@@STOCK_LSD_SHA@@": STOCK["LSD"][1], "@@STOCK_LSD_SIZE@@": str(STOCK["LSD"][2]),

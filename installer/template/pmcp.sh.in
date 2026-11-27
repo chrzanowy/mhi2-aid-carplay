@@ -123,6 +123,11 @@ JAVA_RENAMED='
 LSD_KNOWN='
 @@LSD_KNOWN@@
 '
+# Earlier pmcp MOST files (A247, history.json "most_known"): "KIND sha256 size", KIND SUP (supervisor path) or BRIDGE.
+# An install with one of them is still ours; main menu 2 (map_bridge_update) puts this card's file in its place.
+MOST_KNOWN='
+@@MOST_KNOWN@@
+'
 GAWK_SIZE=487088
 
 ACTION="$1"
@@ -2345,13 +2350,27 @@ sup_wanted() {
     case "`bridge_wanted`" in pmcp-most) echo pmcp ;; *) echo mathsls ;; esac
 }
 
-# sup_active -> mathsls | pmcp | nothing (another file, or none, at the wrappers' supervisor path)
+# sup_active -> mathsls | pmcp | pmcp-old (an earlier card's pmcp supervisor, MOST_KNOWN) | nothing (another file, or
+# none, at the wrappers' supervisor path)
 sup_active() {
     set -- `manifest_get SUPERVISOR`
     if matches "$ROOT/carplay-cluster-supervisor" "$1" "$2"; then echo mathsls; return 0; fi
     set -- `manifest_get PMCP_MOST_SUP`
-    [ -n "$1" ] && matches "$ROOT/carplay-cluster-supervisor" "$1" "$2" && echo pmcp
+    if [ -n "$1" ] && matches "$ROOT/carplay-cluster-supervisor" "$1" "$2"; then echo pmcp; return 0; fi
+    most_known SUP "$ROOT/carplay-cluster-supervisor" && echo pmcp-old
     return 0
+}
+
+# most_known KIND FILE: FILE is an earlier card's pmcp MOST file of that kind (MOST_KNOWN)
+most_known() {
+    _o_hit=1
+    while read _o_k _o_h _o_s; do
+        [ "$_o_k" = "$1" ] || continue
+        matches "$2" "$_o_h" "$_o_s" && { _o_hit=0; break; }
+    done <<EOF
+$MOST_KNOWN
+EOF
+    return $_o_hit
 }
 
 # stop the running supervisor (both programs run from the same path): on SIGTERM it stops the bridge and gives the MOST

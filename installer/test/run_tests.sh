@@ -1817,6 +1817,22 @@ PEOF
         echo junk >> "$AB"
         run status; expect_out "MOST bridge: not this card's file" "foreign bridge file reported"
         run bridge pmcp-most; rc_is 0; pm_set && [ "$(cat "$MK")" = pmcp-most ] && ok "a Bridge button replaces a foreign bridge file" || bad "foreign bridge not replaced"
+        # A247: an install of the card before (supervisor a545d5b1, MOST_KNOWN) with a Java set: 2 updates the supervisor
+        # in place; before, it took the install for mixed files and removed everything (car 2026-11-27, wl and AA lost)
+        if git -C "$T/../.." show a4f73c9:bridge/prebuilt/pmcp-most-sup > "$W/sup-a545" 2>/dev/null \
+            && [ "$(h "$W/sup-a545")" = a545d5b1b5a95e42f62bf15770e0aeeaea267dc5a8f722e4ef76bf4b94920656 ]; then
+            run java-on nai; rc_is 0; HB=$(cat "$U/carplaymaps/HMI_BOOT")
+            cat "$W/sup-a545" > "$U/carplaymaps/carplay-cluster-supervisor"
+            run status; expect_out "MOST supervisor: pmcp-old; wanted: pmcp" "status: an earlier card's supervisor is named"
+            run map-install map-square-fps40; rc_is 0
+            grep -q "removing everything first" "$W/out" && bad "2 removed everything for an earlier supervisor" || ok "2 with the a545d5b1 supervisor: no restore"
+            expect_out "PMCP_MAP_INSTALL_OK (variant map-square-fps40 already installed; MOST bridge updated)" "2: supervisor updated in place"
+            [ "$(h "$U/carplaymaps/carplay-cluster-supervisor")" = "$(h "$SDB/pmcp/payload/pmcp-most/pmcp-most-sup")" ] \
+                && [ "$(cat "$U/carplaymaps/HMI_BOOT")" = "$HB" ] && ok "2: this card's supervisor, Java set kept" || bad "2: supervisor or Java set"
+            run java-off nai; rc_is 0
+        else
+            echo "  (a545d5b1 supervisor from git a4f73c9 not available: earlier-supervisor check skipped)"
+        fi
         restore_exact "restore from pmcp-most: exact factory tree"
         start_unit; run map-install map-square-fps40; rc_is 0
         cp "$SDB/pmcp/payload/pmcp-most/altscreen-most-bridge" "$W/pm.bak"; printf 'X' >> "$W/sd/payload/pmcp-most/altscreen-most-bridge"

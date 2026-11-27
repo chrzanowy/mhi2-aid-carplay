@@ -7,6 +7,11 @@
   {"sha256": "bff3fbf48872780e40d780f61a4e96a554d2b09edbb3f985c405f831eca6e8e5", "sha1": "7c8339fa4899c8c8bdc1719f2954e1cf904858c1", "size": 18105},
   {"sha256": "c10754081bac98f497ba3f48990888fcefe1423284255f86c562bd29c5db108e", "sha1": "ca780b50d6bd77ff8c456828261444fd9bae1815", "size": 18516}
  ],
+ "most_known_note": "Earlier pmcp MOST files at the supervisor / bridge path (pmcp.sh MOST_KNOWN, kind SUP|BRIDGE): an install with one of them is still ours, and main menu 2 brings this card's file in place (A247: without it 2 took the a545d5b1 supervisor for mixed files and removed everything). (kind, sha256, sha1, size).",
+ "most_known": [
+  {"kind": "SUP", "sha256": "a545d5b1b5a95e42f62bf15770e0aeeaea267dc5a8f722e4ef76bf4b94920656", "sha1": "45a5f9a64620db63c6ecf70353503184fa3d11db", "size": 22288},
+  {"kind": "SUP", "sha256": "5abcab2035dfd6b63bd7ec75941846e647d3d604099ed14500f6dbffe690965f", "sha1": "fe3d6dddc08cf308c5174e796a01d64ee06caf3a", "size": 22188}
+ ],
  "rg_known_note": "Earlier pmcp route guidance files that rg-update may replace in place (pmcp.sh RG_KNOWN): the v1.0-v1.3 driver and Tomasz's reader. (kind, sha256, sha1, size): only their hashes go to the card, so no earlier build is needed here.",
  "rg_known": [
   {"kind": "DRIVER", "sha256": "76926bde9bdf1e06fdfe57fd324bbd8772bcb2a98a58ac444b4822e25a331b48", "sha1": "7613f35cb8597dbaedd16fd83260a14c7f2d654f", "size": 743196},
