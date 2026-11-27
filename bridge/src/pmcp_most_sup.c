@@ -15,7 +15,13 @@
  *   - the encoder link: removed before the OEM release, made again BEFORE the OEM restore (the encoder checks its
  *     path when the HMI asks it to encode; build/displaymanager-20261120/REPORT.md);
  *   - at most 3 bridge exits in 60 s, then a 30 s pause;
- *   - one instance (pid file), a log of at most 2 x 32 KB in /ramdisk.
+ *   - one instance (pid file), a log of at most 2 x 32 KB in /ramdisk;
+ *   - the ring /ramdisk/carplay-alt-ring.bin made (initialised, generation 1) at start when it is missing: the Wi-Fi
+ *     producer takes the owner only once the ring exists, and before this only the bridge made it, which this
+ *     supervisor starts only after that owner (A247: a start without the cable never got a map);
+ *   - "--boot" (the pmcp lsd.sh block at every unit start, from the verified copy $APP/bridge/pmcp-most-sup): only when
+ *     the active supervisor $APP/carplay-cluster-supervisor is byte for byte this program, exec that path (the name
+ *     pmcp.sh stops with slay), else exit; before A247 it started only from the dio_manager wrapper (cable).
  * It never kills displaymanager or the AA guard and never touches an isotx2 file it does not hold.
  *
  * Host tests (bridge/test/sup_test.py) set every path and the time scale through the environment (PMCP_SUP_*).
@@ -322,6 +328,55 @@ static void giveback(const char *why)
     holder_release();
 }
 
+/* ------------------------------------------------------------------ ring (A247) */
+/* Make the ring when there is none (create=1 initialises the header, generation 1). The bridge initialises it again
+   and bumps the generation at its start, so a producer resends its avcC; an existing file is never touched here. */
+static void ring_ensure(void)
+{
+    pmcp_ring_map m;
+    const char *path = pmcp_most_ring_path();
+    int r;
+    if (access(path, F_OK) == 0) return;
+    r = pmcp_ring_open(&m, path, 1);
+    if (r != PMCP_OK) { sup_log("ring-create-failed r=%d errno=%d", r, errno); return; }
+    pmcp_ring_close(&m);
+    chmod(path, 0666);   /* as the bridge makes it (core.so in dio_manager writes it too) */
+    sup_log("ring-created path=%s", path);
+}
+
+/* ------------------------------------------------------------------ --boot (A247) */
+/* 1 = same size and bytes */
+static int same_file(const char *a, const char *b)
+{
+    char x[4096], y[4096];
+    int fa = open(a, O_RDONLY), fb = open(b, O_RDONLY), same = fa >= 0 && fb >= 0;
+    struct stat sa, sb;
+    if (same && (fstat(fa, &sa) != 0 || fstat(fb, &sb) != 0 || sa.st_size != sb.st_size)) same = 0;
+    while (same) {
+        ssize_t na = read(fa, x, sizeof(x)), nb;
+        if (na < 0) { same = 0; break; }
+        nb = read(fb, y, (size_t)na > 0 ? (size_t)na : 1);
+        if (na == 0) { same = nb == 0; break; }
+        if (nb != na || memcmp(x, y, (size_t)na) != 0) same = 0;
+    }
+    if (fa >= 0) close(fa);
+    if (fb >= 0) close(fb);
+    return same;
+}
+
+static int boot_start(const char *self)
+{
+    char active[320];
+    char *argv[2];
+    snprintf(active, sizeof(active), "%s/carplay-cluster-supervisor", P_APP);
+    if (access(P_DISABLED, F_OK) == 0) { sup_log("boot-skip disabled"); return 0; }
+    if (!same_file(self, active)) { sup_log("boot-skip active-supervisor-not-pmcp path=%s", active); return 0; }
+    argv[0] = active; argv[1] = NULL;
+    execv(active, argv);
+    sup_log("boot-exec-failed errno=%d", errno);
+    return 1;
+}
+
 /* ------------------------------------------------------------------ one instance */
 static int lock_take(void)
 {
@@ -339,7 +394,7 @@ static int lock_take(void)
     return -1;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     int active = 0;
     uint64_t ready_since = 0, missing_since = 0, next_try = 0;
@@ -349,12 +404,14 @@ int main(void)
 
     config();
     mkdir(P_LOGDIR, 0755);
+    if (argc == 2 && strcmp(argv[1], "--boot") == 0) return boot_start(argv[0]);
     if (lock_take() != 0) { sup_log("already-running"); return 0; }
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
     signal(SIGHUP, on_signal);
     signal(SIGPIPE, SIG_IGN);
     sup_log("supervisor-started pid=%ld", (long)getpid());
+    ring_ensure();
     memset(exits, 0, sizeof(exits));
 
     while (!g_stop) {

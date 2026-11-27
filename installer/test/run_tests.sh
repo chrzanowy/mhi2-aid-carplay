@@ -1857,8 +1857,19 @@ PEOF
     DMF=0374c1f236a947a4d728085034e2c96d21f6f0dc4a727bcc379468612bb1ded0
     LSDP="$SDB/pmcp/payload/lsd/lsd.sh"
     grep -qx 'ln -Ps /dev/mlb/isoTX2 /dev/pmcp-isoTX2 2>/dev/null' "$LSDP" && ok "lsd.sh block makes the encoder link" || bad "no link line in lsd.sh"
-    l_ln=$(grep -n '^ln -Ps /dev/mlb/isoTX2 ' "$LSDP" | cut -d: -f1); l_if=$(grep -n 'RUN_MODE}" != swdl' "$LSDP" | cut -d: -f1)
+    l_ln=$(grep -n '^ln -Ps /dev/mlb/isoTX2 ' "$LSDP" | cut -d: -f1); l_if=$(grep -n 'RUN_MODE}" != swdl' "$LSDP" | head -1 | cut -d: -f1)
     [ -n "$l_ln" ] && [ -n "$l_if" ] && [ "$l_ln" -lt "$l_if" ] && ok "link line before the update-mode / DISABLED condition" || bad "link line order ($l_ln/$l_if)"
+    # A247: the block starts the MOST supervisor (our verified copy, --boot) in the background, except in update mode or
+    # with DISABLED; run the exact lines from lsd.sh with a stub at PMCP_DIR/bridge/pmcp-most-sup
+    sb=$(awk '/^if \[ "\$\{RUN_MODE\}" != swdl \] && \[ ! -e \$PMCP_P\/DISABLED \] && \[ -x \$PMCP_DIR\/bridge\/pmcp-most-sup \]; then$/{f=1} f{print} f&&/^fi$/{exit}' "$LSDP")
+    [ "$(echo "$sb" | wc -l | tr -d ' ')" = 3 ] && echo "$sb" | grep -qx '    ( unset LD_PRELOAD; $PMCP_DIR/bridge/pmcp-most-sup --boot >/dev/null 2>&1 ) &' \
+        && ok "lsd.sh block starts the supervisor with --boot" || bad "no supervisor start in lsd.sh"
+    mkdir -p "$W/a247/app/bridge" "$W/a247/p"
+    printf '#!/bin/sh\necho "$* preload=${LD_PRELOAD:-none}" >> "%s/a247/ran"\n' "$W" > "$W/a247/app/bridge/pmcp-most-sup"; chmod 755 "$W/a247/app/bridge/pmcp-most-sup"
+    a247() { rm -f "$W/a247/ran"; (PMCP_DIR="$W/a247/app"; PMCP_P="$W/a247/p"; RUN_MODE=$1; LD_PRELOAD=x.so; eval "$sb"; wait); cat "$W/a247/ran" 2>/dev/null; }
+    [ "$(a247 normal)" = "--boot preload=none" ] && ok "normal start: --boot, without LD_PRELOAD" || bad "normal start: $(a247 normal)"
+    [ -z "$(a247 swdl)" ] && ok "update mode: no supervisor" || bad "update mode started it"
+    : > "$W/a247/p/DISABLED"; [ -z "$(a247 normal)" ] && ok "DISABLED: no supervisor" || bad "DISABLED started it"; rm -f "$W/a247/p/DISABLED"
     # what dm-path pmcp leaves, made by hand (also for release cards, which cannot make it)
     dm_ours() {
         cp "$DMJF" "$U/carplaymaps/rollback/displaymanager.json"

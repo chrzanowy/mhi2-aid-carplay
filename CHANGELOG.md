@@ -5,6 +5,11 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (experimental)
 
+- **CarPlay over Wi-Fi without the cable gets the cluster map:** the MOST supervisor now starts at every unit start
+  (the pmcp `lsd.sh` block runs our verified copy with `--boot`; it only runs when the active supervisor is ours, never
+  in update mode or with `DISABLED`) and makes the ring when it is missing. Before, only the `dio_manager` wrapper
+  started it, i.e. only a cable connection: a Wi-Fi producer waited for the ring and the supervisor waited for the Wi-Fi
+  owner, so the map never came (A247). Binary `fbc73f07` (was `a545d5b1`).
 - **VW encoder MOST path (MOST supervisor stage 5, experimental cards only):** the factory VW encoder (`displaymanager`)
   reads its MOST channel path from `displaymanager.json` once at start and checks it with `access()` before every open:
   a missing path means no open attempt at all (today it retries the busy channel about 20 times a second, starting and

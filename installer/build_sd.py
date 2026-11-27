@@ -188,7 +188,7 @@ PMCP_MOST_PIN = ("bridge/prebuilt/altscreen-most-bridge", "93bad193f7351eecdb680
 # MOST supervisor v1 (stage 5, bridge/src/pmcp_most_sup.c; PMCP_MOST_SUP=1 bridge/build.sh OUTDIR, then bridge/prebuilt):
 # every MU1161 card, it goes with pmcp-most (bridge pmcp-most|mathsls sets the matching supervisor); experimental cards
 # also have pmcp.sh most-sup pmcp|mathsls on its own
-PMCP_MOST_SUP_PIN = ("bridge/prebuilt/pmcp-most-sup", "a545d5b1b5a95e42f62bf15770e0aeeaea267dc5a8f722e4ef76bf4b94920656", 22288)
+PMCP_MOST_SUP_PIN = ("bridge/prebuilt/pmcp-most-sup", "fbc73f076a88b5322e2c7464be915ee0717c7818f4b22ea8e5ad6dc685f8b4e6", 23396)
 if PROFILE_ID == "MU1161":
     PAYLOAD_BY_PROFILE["MU1161"].update({
         "PMCP_MOST": (PROJ / PMCP_MOST_PIN[0], PMCP_MOST_PIN[1], PMCP_MOST_PIN[2], "pmcp-most/altscreen-most-bridge"),
@@ -338,6 +338,12 @@ fi
 # Java set loading; in the background so it can never delay the HMI start.
 if [ -n "$PMCP_JARS" ] && [ -x $PMCP_DIR/rg/rgi-observer ] && [ -e $PMCP_DIR/rg/SYSTEM_ON ]; then
     ( $PMCP_DIR/rg/rgi-observer start-live /dev/ipod0/rgi-events /ramdisk/carplay-route-guidance >/dev/null 2>&1 ) &
+fi
+# MOST supervisor (A247): also started here, so CarPlay over Wi-Fi without the cable gets the map (it makes the ring the
+# Wi-Fi producer waits for; before, only the dio_manager wrapper started it, i.e. the cable). Our verified copy runs only
+# when the active supervisor is the same program, else it exits. Never in update mode or with DISABLED; in the background.
+if [ "${RUN_MODE}" != swdl ] && [ ! -e $PMCP_P/DISABLED ] && [ -x $PMCP_DIR/bridge/pmcp-most-sup ]; then
+    ( unset LD_PRELOAD; $PMCP_DIR/bridge/pmcp-most-sup --boot >/dev/null 2>&1 ) &
 fi
 # <<< pmcp"""
 

@@ -66,7 +66,8 @@ class Rig:
         self.env = dict(os.environ, PMCP_SUP_RAMDISK=self.ram, PMCP_SUP_APP=self.app, PMCP_MOST_SRC_DIR=self.src,
                         PMCP_SUP_DMDT=os.path.join(self.d, "dmdt"), PMCP_SUP_LN=os.path.join(self.d, "ln"),
                         PMCP_SUP_LINK=self.link, PMCP_SUP_DEV=self.dev,
-                        PMCP_SUP_FLUSH=os.path.join(self.d, "flush"), PMCP_SUP_TIME_DIV="10")
+                        PMCP_SUP_FLUSH=os.path.join(self.d, "flush"), PMCP_SUP_TIME_DIV="10",
+                        PMCP_MOST_RING=os.path.join(self.ram, "carplay-alt-ring.bin"))
         self.env.pop("PMCP_AA_RUNDIR", None)
         self.sleeper = subprocess.Popen(["sleep", "300"])
         self.p = None
@@ -301,6 +302,69 @@ r = Rig()
 r.start()
 second = subprocess.run([SUP], env=r.env, timeout=5)
 ok(second.returncode == 0 and "already-running" in r.log(), "second instance exits: already-running")
+r.stop()
+
+print("== ring made at start when missing (A247: Wi-Fi without the cable)")
+import shutil
+import struct
+RING_SIZE, RING_MAGIC = 0x1000710, 0x43505247
+r = Rig()
+ring = r.env["PMCP_MOST_RING"]
+r.start()
+ok(r.wait(lambda: "ring-created" in r.log()), "log: ring-created")
+st = os.stat(ring)
+magic, version, gen = struct.unpack("<III", open(ring, "rb").read(12))
+ok(st.st_size == RING_SIZE and magic == RING_MAGIC and gen == 1, "ring: full size, magic, generation 1")
+ok(st.st_mode & 0o777 == 0o666, "ring: mode 0666 as the bridge makes it")
+# the WL producer now finds the ring and takes the owner; the supervisor starts the bridge (no cable at all)
+write(os.path.join(r.src, "owner"), "v=1 src=wireless pid=%d gen=1 since_ms=1 kind=in\n" % r.sleeper.pid)
+write(os.path.join(r.src, "wireless.session"), "v=1 state=start gen=1 pid=%d ts_ms=1 reason=start\n" % r.sleeper.pid)
+ok(r.wait(lambda: has_bridge(r)), "Wi-Fi only after a cold start: bridge started")
+r.stop()
+r = Rig()
+ring = r.env["PMCP_MOST_RING"]
+write(ring, "not a ring, someone else's file")
+r.start()
+ok(r.wait(lambda: "supervisor-started" in r.log()), "started")
+time.sleep(0.1)
+ok(open(ring).read() == "not a ring, someone else's file" and "ring-created" not in r.log(), "existing ring file untouched")
+r.stop()
+
+print("== --boot from the lsd.sh block (A247)")
+def boot_rig(active):
+    r = Rig()
+    os.makedirs(os.path.join(r.app, "bridge"))
+    copy = os.path.join(r.app, "bridge", "pmcp-most-sup")
+    shutil.copy2(SUP, copy)
+    act = os.path.join(r.app, "carplay-cluster-supervisor")
+    if active == "pmcp":
+        shutil.copy2(SUP, act)
+    elif active == "other":
+        script(act, 'echo "other supervisor $*" >> "%s"\nexit 0\n' % r.ev)
+    return r, copy
+r, copy = boot_rig("pmcp")
+b = subprocess.Popen([copy, "--boot"], env=r.env)
+ok(r.wait(lambda: "supervisor-started" in r.log()), "--boot, active is pmcp: supervisor running")
+pid = open(os.path.join(r.ram, "pmcp-most", "sup.pid")).read().strip()
+ok(pid == str(b.pid) and b.poll() is None, "--boot execs in place (same pid, keeps running)")
+ps = subprocess.run(["ps", "-o", "command=", "-p", pid], capture_output=True, text=True).stdout.strip()
+ok(ps == os.path.join(r.app, "carplay-cluster-supervisor"), "runs under the active path (pmcp.sh slay -f finds it)")
+ok(os.path.exists(r.env["PMCP_MOST_RING"]), "--boot: ring made")
+second = subprocess.run([os.path.join(r.app, "carplay-cluster-supervisor")], env=r.env, timeout=5)
+ok(second.returncode == 0 and "already-running" in r.log(), "the wrapper's later start: already-running")
+r.p = b
+r.stop()
+for kind in ("other", "missing"):
+    r, copy = boot_rig(kind)
+    res = subprocess.run([copy, "--boot"], env=r.env, timeout=5)
+    ok(res.returncode == 0 and "boot-skip active-supervisor-not-pmcp" in r.log(), "--boot, active %s: skip" % kind)
+    ok(not os.path.exists(os.path.join(r.ram, "pmcp-most", "sup.pid")) and not os.path.exists(r.env["PMCP_MOST_RING"])
+       and not any(e.startswith("other supervisor") for e in r.events()), "--boot, active %s: nothing started" % kind)
+    r.stop()
+r, copy = boot_rig("pmcp")
+write(os.path.join(r.app, "stock_first", "DISABLED"), "")
+res = subprocess.run([copy, "--boot"], env=r.env, timeout=5)
+ok(res.returncode == 0 and "boot-skip disabled" in r.log() and "supervisor-started" not in r.log(), "--boot with DISABLED: skip")
 r.stop()
 
 print("SUPERVISOR TESTS: %d ok, %d failed" % (OK, BAD))

@@ -39,6 +39,7 @@ PARAMS = {
     'aa_window': 8,           # M (AA): the phone keeps at most 8 frames unACKed
     'aa_idr_every_s': 60,     # M (AA): an IDR about every 60 s, never on request
     'wl_phone_gone_ms': 3000, # A (WL): airplayd sees the phone leave the hotspot (by MAC) after about 3 s
+    'wl_ring_wait_s': 6.0,    # how long the sim's WL waits for the ring before the scenario counts it as never
     'wl_idle_ms': 5000,       # M: WL cluster_owner_idle_ms default 5000 (airplayd ap_conf.c, WL 2026-11-24)
     'chan_loss': 0.0,         # A (experiments only): silent loss per accepted block on MOST/AID - the bridge never sees it
     'screen_hold_ms': 1500,   # A: stricter than the car (AA: the AID drops the picture after ~15 s without data)
@@ -205,6 +206,16 @@ class Channel:
                 self.holder = None
                 return True
             return False
+
+
+def ring_ready(path):
+    """The ring as a producer library accepts it: full size and magic CPRG (pmcp_ring_open with create=0)."""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(4)
+        return os.path.getsize(path) >= 0x1000710 and head == struct.pack('<I', 0x43505247)
+    except OSError:
+        return False
 
 
 def put(path, text):
@@ -517,6 +528,7 @@ class Car:
                         PMCP_MOST_LOG=os.path.join(self.ram, 'pmcp-most', 'bridge.log'),
                         PMCP_AA_RUNDIR=self.ram,
                         HOST_RING_PATH=os.path.join(self.ram, 'carplay-alt-ring.bin'),
+                        PMCP_MOST_RING=os.path.join(self.ram, 'carplay-alt-ring.bin'),
                         HOST_IDR_PATH=os.path.join(self.ram, 'carplay-alt-force-idr.request'),
                         HOST_CACHE_LOCK=os.path.join(self.dir, 'cache.lock'),
                         HOST_INTRO_ONCE_PATH=os.path.join(self.dir, 'intro-played'),
@@ -681,6 +693,8 @@ class Car:
             threading.Thread(target=fn, daemon=True).start()
         time.sleep(0.1)
         self.sup_log = open(os.path.join(self.dir, 'sup.stderr'), 'w')
+        # the unit starts it from the pmcp lsd.sh block (--boot, A247), before any phone; the --boot check itself is in
+        # bridge/test/sup_test.py
         self.sup = self.spawn([os.path.join(BUILD, 'pmcp-most-sup')], stdout=self.sup_log)
         self.bb.rec('car', 'boot supervisor pid=%d' % self.sup.pid)
 
@@ -755,6 +769,16 @@ class Car:
                               '--fps', str(fps), '--gop', str(gop), '--repeat-avcc', '1',
                               '--idr-on-request', str(idr_on_request), '--attach-ms', '0'])
         self.wl_gen = gen
+        # as airplayd (WL cluster_producer_start): the owner only once the ring exists and is initialised, else
+        # "ring missing or not initialised by the bridge, waiting" (A247: no cable since the unit start = no ring)
+        t0 = now()
+        while not ring_ready(self.env['HOST_RING_PATH']) and now() - t0 < PARAMS['wl_ring_wait_s']:
+            time.sleep(0.05)
+        if not ring_ready(self.env['HOST_RING_PATH']):
+            self.marks.setdefault('wl_noring', []).append(now())
+            self.marks.setdefault('wl_start', []).append(now())
+            self.bb.rec('phone', 'wl start gen=%d: ring missing or not initialised by the bridge, waiting' % gen)
+            return
         ms = int(time.monotonic() * 1000)
         put(os.path.join(self.src, 'owner'), 'v=1 src=wireless pid=%d gen=%d since_ms=%d kind=in\n' % (self.wl.pid, gen, ms))
         put(os.path.join(self.src, 'wireless.session'),
@@ -1127,6 +1151,8 @@ def sc_wl_session():
     car.boot()
     time.sleep(1)
     car.wl_start(fps=30, gop=5)
+    check('wl-session: ring there for the Wi-Fi owner without any cable since the unit start (A247)',
+          not car.marks.get('wl_noring'))
     time.sleep(7)
     d = car.first_after(car.marks['wl_start'][0], 'cp', 6)
     check('wl-session: CP map within 4 s of the session start', d is not None and d < 4, d)
