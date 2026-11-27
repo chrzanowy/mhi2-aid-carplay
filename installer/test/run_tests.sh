@@ -1886,9 +1886,15 @@ PEOF
     echo "changed by someone else" >> "$DMJF"; cp "$DMJF" "$W/dmj.other"
     run restore; rc_is 0; cmp -s "$DMJF" "$W/dmj.other" && ok "restore leaves a displaymanager.json that is not ours" || bad "restore touched a foreign json"
     echo "  - an earlier card's lsd.sh (v1.4.2-v1.8.0 block bff3fbf4): java-update replaces it in place, one trial"
-    sed '/^# MOST supervisor (stage 5/,/^ln -Ps /d' "$LSDP" > "$W/lsd-old.sh"
+    sed -e '/^# MOST supervisor (stage 5/,/^ln -Ps /d' -e '/^# MOST supervisor (A247)/,/^fi$/d' "$LSDP" > "$W/lsd-old.sh"
     [ "$(h "$W/lsd-old.sh")" = bff3fbf48872780e40d780f61a4e96a554d2b09edbb3f985c405f831eca6e8e5 ] \
         && ok "this card's block minus the link lines = the v1.4.2-v1.8.0 lsd.sh (history lsd_known)" || bad "earlier lsd.sh: $(h "$W/lsd-old.sh")"
+    # A247: the v1.9.0 / RC dabfd24 block (with the link, without the supervisor start) is the second earlier lsd.sh
+    sed '/^# MOST supervisor (A247)/,/^fi$/d' "$LSDP" > "$W/lsd-a246.sh"
+    [ "$(h "$W/lsd-a246.sh")" = c10754081bac98f497ba3f48990888fcefe1423284255f86c562bd29c5db108e ] \
+        && ok "this card's block minus the A247 supervisor start = the v1.9.0 lsd.sh (history lsd_known)" || bad "A246 lsd.sh: $(h "$W/lsd-a246.sh")"
+    grep -q '^c10754081bac98f497ba3f48990888fcefe1423284255f86c562bd29c5db108e 18516$' "$SDB/pmcp/pmcp.sh" \
+        && ok "pmcp.sh LSD_KNOWN has the v1.9.0 lsd.sh" || bad "LSD_KNOWN without the v1.9.0 lsd.sh"
     start_unit; run map-install map-square-fps40; rc_is 0; run java-on nai; rc_is 0; run java-on zoom; rc_is 0
     SID=$(cut -d' ' -f1 "$U/carplaymaps/HMI_BOOT"); unit_boot > /dev/null; run java-confirm; rc_is 0
     cat "$W/lsd-old.sh" > "$U/eso/hmi/lsd/lsd.sh"
