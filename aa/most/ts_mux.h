@@ -71,6 +71,10 @@ typedef struct {
     uint32_t lead_min_90k;    /* lead at the AU's LAST packet below this: rebase up; default 4500 (50 ms) */
     uint32_t lead_max_90k;    /* lead at the AU's first packet above this: rebase down; default 18000 (200 ms); 0 = never */
     int discontinuity_first;  /* 0x80 on the first AU (harman-f); default 1 */
+    uint32_t slew_down_90k;   /* over lead_max: move the PTS down by at most this per AU (a slew, the AUs keep their
+                                 spacing); 0 = jump down to the target at once (default, AA). pmcp-most: 180 (2 ms),
+                                 A249: a jump gave the next AUs PTS 1 tick apart, the AID dropped them, picture broken
+                                 until the next IDR (zoom artifacts, car 27.11) */
 } ts_mux_cfg_t;
 
 /* Queue entry: one AU (AVCC with 4-byte lengths, as in the ring) or one parameter set update. */
@@ -88,6 +92,7 @@ typedef struct {
     /* written by the consumer under the lock; read by the producer for its status */
     uint64_t packets_out, video_packets, null_packets, aus_out, aus_started, keyframes_out;
     uint64_t pts_rebase_up, pts_rebase_down, pts_forced_step;
+    uint64_t pts_slew_down;   /* AUs moved down by a slew step (cfg.slew_down_90k), not counted in pts_rebase_down */
     int64_t lead_first_min, lead_first_max, lead_last_min, lead_first_last;   /* 90 kHz */
     int have_lead;
     uint64_t aus_without_ps;  /* keyframes sent before any SPS/PPS was known */

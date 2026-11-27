@@ -459,7 +459,7 @@ static void usage(void)
 {
     fprintf(stderr,
         "usage: producer --ring PATH --idr PATH --out DIR [--h264 FILE] [--frames N] [--fps F]\n"
-        "  [--seed S] [--idr-size B] [--p-min B] [--p-max B] [--burst-at K --burst-count M --burst-size B]\n"
+        "  [--seed S] [--idr-size B] [--p-min B] [--p-max B] [--burst-at K --burst-count M --burst-size B [--burst-paced 1]]\n"
         "  [--idr-on-request N] [--session-dir D --src NAME --gen G --stop-after K --stop-hold-ms MS]\n"
         "  [--session-dir D --switch-after K [--kind K] [--new-src S] [--new-kind K] [--old-tail-ms T]\n"
         "   [--new-delay-ms D] [--kill-old-ms X] [--new-frames N]]\n"
@@ -474,6 +474,7 @@ int main(int argc, char **argv)
     unsigned frames = 150, fps = 30, seed = 1161, gen = 1;
     size_t idr_size = 20000, p_min = 1500, p_max = 6000, burst_size = 100000;
     int burst_at = -1, burst_count = 0, idr_on_request = 1, stop_after = -1;
+    int burst_paced = 0;   /* --burst-paced 1: the burst frames keep the frame rate (a map zoom: large frames, same cadence) */
     unsigned stop_hold_ms = 2000;
     int repeat_avcc = 0, pause_at = -1, pause_ms = 0;
     unsigned gop = 0;
@@ -510,6 +511,7 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--burst-at")) burst_at = atoi(v);
         else if (!strcmp(a, "--burst-count")) burst_count = atoi(v);
         else if (!strcmp(a, "--burst-size")) burst_size = (size_t)atol(v);
+        else if (!strcmp(a, "--burst-paced")) burst_paced = atoi(v);
         else if (!strcmp(a, "--idr-on-request")) idr_on_request = atoi(v);
         else if (!strcmp(a, "--session-dir")) session_dir = v;
         else if (!strcmp(a, "--src")) src = v;
@@ -584,7 +586,7 @@ int main(int argc, char **argv)
             next_ns = now_ns();
         }
         now = now_ns();
-        if (!burst) {
+        if (!burst || burst_paced) {
             if (next_ns > now) {
                 uint64_t d = next_ns - now;
                 struct timespec ts_sleep;

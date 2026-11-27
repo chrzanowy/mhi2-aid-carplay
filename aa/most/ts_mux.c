@@ -100,6 +100,7 @@ void ts_mux_default_cfg(ts_mux_cfg_t *cfg)
     cfg->lead_min_90k = 4500u;
     cfg->lead_max_90k = 18000u;
     cfg->discontinuity_first = 1;
+    cfg->slew_down_90k = 0;
 }
 
 int ts_mux_init(ts_mux_t *m, uint32_t pool_bytes, uint32_t max_entries, const ts_mux_cfg_t *cfg)
@@ -269,9 +270,15 @@ static uint64_t assign_pts(ts_mux_t *m, uint64_t n, uint32_t packets, uint64_t t
         pts = target;
         m->st.pts_rebase_up++;
     } else if (m->cfg.lead_max_90k != 0u && pts > pcr_first + m->cfg.lead_max_90k) {
-        m->origin_pts -= pts - target;
-        pts = target;
-        m->st.pts_rebase_down++;
+        if (m->cfg.slew_down_90k != 0u && pts - target > m->cfg.slew_down_90k) {
+            m->origin_pts -= m->cfg.slew_down_90k;     /* slew: a little per AU, the spacing stays */
+            pts -= m->cfg.slew_down_90k;
+            m->st.pts_slew_down++;
+        } else {
+            m->origin_pts -= pts - target;
+            pts = target;
+            m->st.pts_rebase_down++;
+        }
     }
     if (m->sent_first && pts <= m->last_pts) { pts = m->last_pts + 1u; m->st.pts_forced_step++; }
     m->last_pts = pts;

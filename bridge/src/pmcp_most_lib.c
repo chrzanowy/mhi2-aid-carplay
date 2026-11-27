@@ -366,6 +366,9 @@ static const uint8_t *to_avcc4(const uint8_t *d, uint32_t n, uint32_t *out_len, 
 }
 
 /* Returns 0 = put (or knowingly dropped by the policy), -1 = malformed. */
+static uint64_t g_frame_ntp;   /* ring NTP of the frame on_video handles (A249) */
+static uint64_t au_time_us(uint64_t now_us, uint64_t ntp);
+
 static int on_video(const uint8_t *d, uint32_t n, uint32_t flags, uint32_t sequence, uint32_t source_seq)
 {
     uint32_t len, queued;
@@ -424,7 +427,7 @@ static int on_video(const uint8_t *d, uint32_t n, uint32_t flags, uint32_t seque
                        (unsigned long long)(waited / 1000ULL));
         }
     }
-    rc = ts_mux_put_avcc(&g_mux, au, len, key, monotonic_us(), sequence);
+    rc = ts_mux_put_avcc(&g_mux, au, len, key, au_time_us(monotonic_us(), g_frame_ntp), sequence);
     if (rc == -1) {
         /* pool or entry table full: the writer is far behind; a latency reset drops until a keyframe */
         ++g_put_full;
@@ -516,6 +519,37 @@ static int check_writer(void)
     return -1;
 }
 
+/* A249: the time an AU is put into the mux (its PTS follows it). The read time, except when the bridge reads
+   frames that the producer made apart in one go (a backlog after a slow loop): then the producer's spacing (ring
+   NTP timestamps) on from the previous AU, so two frames never get PTS 0.01 ms apart (the AID decoder dropped such
+   frames: zoom artifacts until the next IDR, car 27.11; sim scenario zoom). Never earlier than the previous one. */
+static uint64_t g_t_last_eff, g_ntp_last;
+static int g_t_have;
+
+static uint64_t ntp_to_us(uint64_t ntp)
+{
+    return (ntp >> 32) * 1000000ULL + (((ntp & 0xffffffffULL) * 1000000ULL) >> 32);
+}
+
+static void au_time_reset(void)
+{
+    g_t_have = 0;
+}
+
+static uint64_t au_time_us(uint64_t now_us, uint64_t ntp)
+{
+    uint64_t t = now_us;
+    if (g_t_have && ntp > g_ntp_last) {
+        uint64_t d = ntp_to_us(ntp - g_ntp_last);
+        if (d <= 200000ULL && now_us < g_t_last_eff + d / 2U) t = g_t_last_eff + d;
+    }
+    if (g_t_have && t < g_t_last_eff) t = g_t_last_eff;
+    g_t_last_eff = t;
+    g_ntp_last = ntp;
+    g_t_have = 1;
+    return t;
+}
+
 static void log_metrics(void)
 {
     most_stats_t w;
@@ -527,14 +561,15 @@ static void log_metrics(void)
     cpmap_log_fprintf(stderr, CPMAP_BRIDGE_LOG_LIMIT,
             "bridge: metrics blocks=%llu queue=%u queue_hi=%u frames=%lu keys=%lu drops=%lu aus_out=%llu "
             "write_us=%llu write_us_max=%llu slow_writes=%llu hist_write_us=%llu,%llu,%llu,%llu,%llu,%llu "
-            "eagain=%llu lead_first_min=%lld lead_last_min=%lld pts_rebase=%llu/%llu\n",
+            "eagain=%llu lead_first_min=%lld lead_last_min=%lld pts_rebase=%llu/%llu pts_slew=%llu pts_forced=%llu\n",
             (unsigned long long)w.blocks, queued, m.queue_packets_hi, g_frames, g_keyframes, g_drops,
             (unsigned long long)m.aus_out, (unsigned long long)w.write_us_last,
             (unsigned long long)w.write_us_max, (unsigned long long)w.slow_writes,
             (unsigned long long)w.hist[0], (unsigned long long)w.hist[1], (unsigned long long)w.hist[2],
             (unsigned long long)w.hist[3], (unsigned long long)w.hist[4], (unsigned long long)w.hist[5],
             (unsigned long long)w.eagain, (long long)m.lead_first_min, (long long)m.lead_last_min,
-            (unsigned long long)m.pts_rebase_up, (unsigned long long)m.pts_rebase_down);
+            (unsigned long long)m.pts_rebase_up, (unsigned long long)m.pts_rebase_down,
+            (unsigned long long)m.pts_slew_down, (unsigned long long)m.pts_forced_step);
 }
 
 static void status_now(uint32_t generation, uint32_t next_sequence, uint64_t now_us)
@@ -623,6 +658,13 @@ int main(int argc, char **argv)
     signal(SIGTERM, on_signal);
     signal(SIGPIPE, SIG_IGN);
     ts_mux_default_cfg(&mcfg);           /* lead 100 ms as stage 1c (PTS_TARGET_LEAD_90K) */
+    /* A249: over lead_max the PTS slews down 2 ms per AU instead of jumping 100 ms (a jump gave the next AUs PTS
+       1 tick apart: the AID dropped them, zoom artifacts until the next IDR, car 27.11). PMCP_MOST_PTS_SLEW_90K=0 =
+       the old jump (A/B only). */
+    {
+        const char *v = getenv("PMCP_MOST_PTS_SLEW_90K");
+        mcfg.slew_down_90k = (v && *v) ? (uint32_t)strtoul(v, NULL, 10) : 180u;
+    }
     g_au = (uint8_t *)malloc(ALT_FRAME_RING_SLOT_DATA_MAX + ALT_FRAME_RING_SLOT_DATA_MAX / 2U);
     message = (uint8_t *)malloc(ALT_FRAME_RING_SLOT_DATA_MAX);
     if (!g_au || !message || ts_mux_init(&g_mux, PMCP_CP_POOL_BYTES, PMCP_CP_POOL_ENTRIES, &mcfg) != 0) {
@@ -810,7 +852,9 @@ int main(int argc, char **argv)
                 status = on_config(message, size);
             } else if (type == ALT_FRAME_TYPE_VIDEO) {
                 pmcp_most_note_frame(media_ntp, monotonic_us(), new_epoch, next_sequence);
+                if (new_epoch) au_time_reset();
                 new_epoch = 0;
+                g_frame_ntp = media_ntp;
                 status = on_video(message, size, flags, next_sequence, source_sequence);
             } else {
                 status = -1;

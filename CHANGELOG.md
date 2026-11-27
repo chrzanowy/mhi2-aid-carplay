@@ -5,6 +5,12 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (experimental)
 
+- **No more map artifacts on the AID after zooming (fewer keyframes, e.g. every 10 or 30 frames):** a zoom sends
+  large frames that fill the MOST channel; when the queue emptied again the bridge moved the timestamps back in one
+  100 ms jump, so the next frames got timestamps 0.01 ms apart, the AID dropped them and the picture stayed broken
+  until the next keyframe (about 1 s at every 30 frames). Now the timestamps move back by at most 2 ms per frame, and
+  frames read together keep the phone's spacing. Found with a model of the AID decoder in the car simulator (A249).
+  Bridge `70f18b16` (was `93bad193`).
 - **CarPlay over Wi-Fi without the cable gets the cluster map:** the MOST supervisor now starts at every unit start
   (the pmcp `lsd.sh` block runs our verified copy with `--boot`; it only runs when the active supervisor is ours, never
   in update mode or with `DISABLED`) and makes the ring when it is missing. Before, only the `dio_manager` wrapper

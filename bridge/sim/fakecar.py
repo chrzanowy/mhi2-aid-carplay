@@ -42,6 +42,7 @@ PARAMS = {
     'wl_ring_wait_s': 6.0,    # how long the sim's WL waits for the ring before the scenario counts it as never
     'wl_idle_ms': 5000,       # M: WL cluster_owner_idle_ms default 5000 (airplayd ap_conf.c, WL 2026-11-24)
     'chan_loss': 0.0,         # A (experiments only): silent loss per accepted block on MOST/AID - the bridge never sees it
+    'aid_min_pts_gap_ms': 1.0, # A: the AID decoder drops an AU whose PTS is less than this after the previous one
     'screen_hold_ms': 1500,   # A: stricter than the car (AA: the AID drops the picture after ~15 s without data)
 }
 # Source of every parameter: M = measured in the car (where), A = assumption. `fakecar.py BUILD --params` prints it.
@@ -97,6 +98,78 @@ class Handle:
         self.bytes = 0
         self.bad_blocks = 0
         self.cap = None          # every accepted byte of this handle (chan-<id>-<tag>.ts)
+        self.dec = AidDecoder()   # AID decoder model (PCR/PTS of the accepted packets)
+
+
+class AidDecoder:
+    """Model of the AID's H.264 decoder on the TS it gets (A: behaviour not measured; car 27.11: artifacts at zoom that
+    last until the next IDR while pmcp-most drops nothing, together with PTS rebases). The decoder clock is locked to
+    the last PCR received (STC = PCR + time since its arrival). An AU (video PES, ends at the next PES start) is
+    dropped when its last packet arrives after its PTS (late) or when its PTS is not at least aid_min_pts_gap_ms after
+    the previous AU's (a PTS step the decoder takes as a duplicate). A dropped P frame breaks the picture until the
+    next keyframe that is decoded."""
+    def __init__(self):
+        self.pcr = None           # (pcr90k, t)
+        self.cur = None           # [pts, key, t_first, t_last]
+        self.prev_pts = None
+        self.late = self.close = self.decoded = 0
+        self.broken_since = None
+        self.broken = []
+        self.gaps_ms = []         # PTS steps between consecutive AUs (ms)
+
+    def stc(self, t):
+        return None if self.pcr is None else self.pcr[0] + (t - self.pcr[1]) * 90000.0
+
+    def finish(self):
+        c, self.cur = self.cur, None
+        if c is None:
+            return
+        pts, key, t0, t1 = c
+        gap_ok = True
+        if self.prev_pts is not None:
+            d = (pts - self.prev_pts) / 90.0
+            self.gaps_ms.append(d)
+            gap_ok = d >= PARAMS['aid_min_pts_gap_ms']
+        stc = self.stc(t1)
+        late = stc is not None and stc > pts
+        self.prev_pts = pts
+        if late or not gap_ok:
+            if late:
+                self.late += 1
+            else:
+                self.close += 1
+            if not key and self.broken_since is None:
+                self.broken_since = t1
+            return
+        self.decoded += 1
+        if key and self.broken_since is not None:
+            self.broken.append((self.broken_since, t1))
+            self.broken_since = None
+
+    def packet(self, p, t):
+        pid = (p[1] & 0x1f) << 8 | p[2]
+        if pid == 0x1000 and p[3] & 0x20 and p[4] >= 7 and p[5] & 0x10:
+            b = p[6] << 25 | p[7] << 17 | p[8] << 9 | p[9] << 1 | p[10] >> 7
+            self.pcr = (b, t)
+        elif pid == 0x11:
+            off = 4
+            if p[3] & 0x20:
+                off = 5 + p[4]
+            if p[1] & 0x40:
+                self.finish()
+                q = p[off:]
+                if len(q) >= 14 and q[:3] == b'\x00\x00\x01' and q[7] & 0x80:
+                    h = q[9:14]
+                    pts = ((h[0] >> 1) & 7) << 30 | h[1] << 22 | (h[2] >> 1) << 15 | h[3] << 7 | h[4] >> 1
+                    key = re.search(rb'\x00\x00\x01[\x25\x45\x65]', bytes(q)) is not None
+                    self.cur = [pts, key, t, t]
+            elif self.cur is not None:
+                self.cur[3] = t
+
+    def summary(self):
+        span = sum(b - a for a, b in self.broken)
+        return dict(decoded=self.decoded, late=self.late, close=self.close, broken_s=span,
+                    broken_open=self.broken_since is not None)
 
 
 class Channel:
@@ -165,6 +238,10 @@ class Channel:
             h.last_write = t
             if h.cap:
                 h.cap.write(data)
+            # the packets reach the AID spread over the block's transmit time (bps), not all at once
+            npk = len(data) // 188
+            for k in range(npk):
+                h.dec.packet(data[k * 188:(k + 1) * 188], t + (self.level - len(data) + (k + 1) * 188) * 8.0 / (PARAMS['bps'] * self.rate))
             for i in range(0, len(data) - 187, 188):
                 if data[i + 1] & 0x40 and ((data[i + 1] & 0x1f) << 8 | data[i + 2]) == 0x11:
                     h.last_picture = t
@@ -718,7 +795,7 @@ class Car:
                 self.bb.rec('proc', 'bridge exit pid=%d' % p)
             seen = pids
 
-    def cable_plug(self):
+    def cable_plug(self, extra=()):
         self.dio = self.spawn(['sleep', '3600'])
         out = os.path.join(self.dir, 'producer-%d' % len(self.marks.get('plug', [])))
         os.makedirs(out)
@@ -727,7 +804,7 @@ class Car:
         self.prod = self.spawn([os.path.join(BUILD, 'producer'), '--ring', self.env['HOST_RING_PATH'],
                                 '--idr', self.env['HOST_IDR_PATH'], '--out', out,
                                 '--frames', '100000', '--fps', '30', '--gop', '60', '--repeat-avcc', '1',
-                                '--attach-ms', '0'])   # A: core.so waits for the bridge's ring as long as the session lives
+                                '--attach-ms', '0'] + list(extra))   # A: core.so waits for the ring as long as the session lives
         open(os.path.join(self.ram, 'carplay-altstream.ready'), 'w').close()
         self.marks.setdefault('plug', []).append(now())
         self.bb.rec('phone', 'cp cable plug dio=%d producer=%d' % (self.dio.pid, self.prod.pid))
@@ -1078,6 +1155,34 @@ def sc_session():
     check('session: VW map back within 4 s of the unplug', d is not None and d < 4, d)
     car.shutdown()
     common_invariants(car)
+
+
+def sc_zoom():
+    """Map zoom on the cable (car 27.11, A246): a run of large P frames above the channel rate at 40 fps, keyframe every
+    10 and every 30 frames. The AID decoder model must decode every AU: no late AU, no PTS step under
+    aid_min_pts_gap_ms, no broken picture (the car showed artifacts until the next IDR at kf10/kf30)."""
+    for gop in (10, 30):
+        car = Car('zoom-kf%d' % gop)
+        car.boot()
+        time.sleep(1.0)
+        car.cable_plug(['--fps', '40', '--gop', str(gop), '--burst-at', '160', '--burst-count', '60',
+                        '--burst-size', '45000', '--burst-paced', '1'])
+        time.sleep(14)
+        car.cable_unplug()
+        time.sleep(1.5)
+        car.shutdown()
+        hs = [h for h in car.chan.handles.values() if h.tag == 'cp']
+        for h in hs:
+            h.dec.finish()
+        sm = [h.dec.summary() for h in hs]
+        gaps = [g for h in hs for g in h.dec.gaps_ms]
+        print('       zoom-kf%d: decoder %s, PTS step min %.2f ms' % (gop, sm, min(gaps) if gaps else -1), flush=True)
+        check('zoom-kf%d: AID decoder model decodes every AU (no late AU, no PTS step under %.1f ms)'
+              % (gop, PARAMS['aid_min_pts_gap_ms']),
+              sm and all(x['late'] == 0 and x['close'] == 0 for x in sm), sm)
+        check('zoom-kf%d: no broken picture on the AID' % gop,
+              sm and all(x['broken_s'] == 0 and not x['broken_open'] for x in sm), sm)
+        common_invariants(car)
 
 
 def sc_boot_steal():
@@ -1516,7 +1621,7 @@ def sc_aa_steal_late():
     aa_invariants(car, car.aa, ts=False, decode=False)
 
 
-SCENARIOS = {'session': sc_session, 'boot-steal': sc_boot_steal, 'replug': sc_replug, 'cp-reverse': sc_cp_reverse,
+SCENARIOS = {'zoom': sc_zoom, 'session': sc_session, 'boot-steal': sc_boot_steal, 'replug': sc_replug, 'cp-reverse': sc_cp_reverse,
              'wl-session': sc_wl_session, 'wl-steal': sc_wl_steal, 'wl-crash': sc_wl_crash,
              'wl-phone-gone': sc_wl_phone_gone, 'wl-replaced': sc_wl_replaced, 'wl-gen': sc_wl_gen,
              'wl-preempted': sc_wl_preempted,

@@ -184,7 +184,7 @@ PAYLOAD_BY_PROFILE["MU1161"].update({
 # bridge/build.sh OUTDIR prints the size and sha256; copy the file to bridge/prebuilt.
 # Since 2026-11-16 (A203): stage 2 (PMCP_MOST_LIB=1, src/pmcp_most_lib.c on the AA MOST output library); stage 1c was 8c104a06.
 # 2026-11-18: stage 2 with thread priority 14 and the rotated event file (was 175eee71).
-PMCP_MOST_PIN = ("bridge/prebuilt/altscreen-most-bridge", "93bad193f7351eecdb6808e8ffd96ae5e8b31caf8e2ab08802e6d57e46dab79c", 38172)
+PMCP_MOST_PIN = ("bridge/prebuilt/altscreen-most-bridge", "70f18b161237ebf401d6aa418bd8c4d220a8f7870afb443e37134d7081ef0b12", 39156)
 # MOST supervisor v1 (stage 5, bridge/src/pmcp_most_sup.c; PMCP_MOST_SUP=1 bridge/build.sh OUTDIR, then bridge/prebuilt):
 # every MU1161 card, it goes with pmcp-most (bridge pmcp-most|mathsls sets the matching supervisor); experimental cards
 # also have pmcp.sh most-sup pmcp|mathsls on its own
