@@ -34,15 +34,19 @@
 # distance / time only while KombiView says the AID does not show the AA map (TestAa11).
 # -aa-r also runs rg/lanes/component.py: route-guidance display component 1 (wireless CarPlay, omonob's notes) is
 # accepted as well as 16 (wired CarPlay, AA hook); driver and iap2.cfg unchanged (TestComponent).
+# "lanes-uturn-asf-m-aa-r-wl" (A248): lanes-uturn-asf-m-aa-r + rg/lanes/wl.py (CarPlay over Wi-Fi: while a Wi-Fi session owns
+# the MOST map contract, /ramdisk/pmcp-wl-rg written by the WL receiver is read instead of the wired reader's directory;
+# rg/lanes/WlSource.java), tested with every -aa-r suite plus TestWl. Without -wl the build is unchanged.
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # do not write __pycache__ into upstream/tomasz (review 2)
 
 PROFILE=${1:?profile id}; STOCK_JAR=${2:?converted lsd jar}; W=${3:?work dir}; MODE=${4:-base}
-case "$MODE" in base|lanes|lanes-uturn|lanes-uturn-asf|lanes-uturn-asf-m|lanes-uturn-asf-m-aa|lanes-uturn-asf-m-aa-r) ;; *) echo "FAIL: fourth argument must be lanes, lanes-uturn, lanes-uturn-asf, lanes-uturn-asf-m, lanes-uturn-asf-m-aa, lanes-uturn-asf-m-aa-r or nothing" >&2; exit 1 ;; esac
-ASF=no; case "$MODE" in *-asf|*-asf-m|*-asf-m-aa|*-asf-m-aa-r) ASF=yes ;; esac
-MAN=no; case "$MODE" in *-asf-m|*-asf-m-aa|*-asf-m-aa-r) MAN=yes ;; esac
-AA=no; case "$MODE" in *-aa|*-aa-r) AA=yes ;; esac
-R146=no; case "$MODE" in *-aa-r) R146=yes ;; esac
+case "$MODE" in base|lanes|lanes-uturn|lanes-uturn-asf|lanes-uturn-asf-m|lanes-uturn-asf-m-aa|lanes-uturn-asf-m-aa-r|lanes-uturn-asf-m-aa-r-wl) ;; *) echo "FAIL: fourth argument must be lanes, lanes-uturn, lanes-uturn-asf, lanes-uturn-asf-m, lanes-uturn-asf-m-aa, lanes-uturn-asf-m-aa-r, lanes-uturn-asf-m-aa-r-wl or nothing" >&2; exit 1 ;; esac
+ASF=no; case "$MODE" in *-asf|*-asf-m|*-asf-m-aa|*-asf-m-aa-r|*-asf-m-aa-r-wl) ASF=yes ;; esac
+MAN=no; case "$MODE" in *-asf-m|*-asf-m-aa|*-asf-m-aa-r|*-asf-m-aa-r-wl) MAN=yes ;; esac
+AA=no; case "$MODE" in *-aa|*-aa-r|*-aa-r-wl) AA=yes ;; esac
+R146=no; case "$MODE" in *-aa-r|*-aa-r-wl) R146=yes ;; esac
+WL=no; case "$MODE" in *-aa-r-wl) WL=yes ;; esac
 H=$(cd "$(dirname "$0")" && pwd)
 BT="$H/../buildtools"     # Guard (try/catch around every hook call), RefCheck (J9 API check)
 REPO=$(cd "$H/../.." && pwd)
@@ -162,6 +166,12 @@ if [ "$MODE" != base ]; then
         # wireless CarPlay sends guidance with display component 1 (omonob's notes); accept it as well as 16
         python3 -I "$H/lanes/component.py" "$LB" "$H/lanes" || fail "component.py"
         ID=pmcp-$PL-rg-lanes-asfm-aa-r-aa11-c1-1; WHAT="$WHAT + display component 1"
+        if [ $WL = yes ]; then
+            # A248: CarPlay over Wi-Fi reads the WL receiver's mailbox /ramdisk/pmcp-wl-rg while Wi-Fi owns the map contract
+            python3 -I "$H/lanes/wl.py" "$LB" "$H/lanes" || fail "wl.py"
+            EXTRA="$EXTRA $LB/WlSource.java"
+            ID=pmcp-$PL-rg-lanes-asfm-aa-r-aa11-c1-wl-1; WHAT="$WHAT + CarPlay over Wi-Fi (WL mailbox)"
+        fi
     fi
 fi
 
@@ -207,7 +217,7 @@ EOF
 java -cp "$W/patcher:$CP" RefCheck "$STOCK_JAR" "$W/pmcp-rg.jar"
 javac -nowarn -cp "$W/patched:$STOCK_JAR" -d "$W/tests" "$LB/TestLive.java" ${EXTRA:+"$TL"} \
     $([ $AA = yes ] && echo "$LB/TestAa.java") \
-    $([ $R146 = yes ] && echo "$LB/TestAa11.java $LB/TestReroute.java $LB/TestSourceName.java $LB/TestUturnSide.java $LB/TestPlaceholder.java $LB/TestQuietQnx.java $LB/TestPmcp146.java $LB/TestComponent.java") $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
+    $([ $R146 = yes ] && echo "$LB/TestAa11.java $LB/TestReroute.java $LB/TestSourceName.java $LB/TestUturnSide.java $LB/TestPlaceholder.java $LB/TestQuietQnx.java $LB/TestPmcp146.java $LB/TestComponent.java") $([ $WL = yes ] && echo "$LB/TestWl.java") $([ $ASF = yes ] && echo "$LB/TestArrow.java $LB/TestRoad.java $LB/TestRecovery.java $LB/TestQuietHold.java $LB/TestHoldPmcp.java $LB/TestSpeedLimitText.java") \
     $([ $MAN = yes ] && echo "$LB/TestManeuvers.java")
 java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.TestLive > "$W/tests/result.json" || { cat "$W/tests/result.json"; fail "TestLive"; }
 cat "$W/tests/result.json"; echo
@@ -250,7 +260,8 @@ fi
 if [ $R146 = yes ]; then
     # each in its own JVM (static evidence counters and LiveBridge.INSTANCE start fresh)
     for t in TestAa11:AA11_PASS TestReroute:REROUTE_PASS TestSourceName:SOURCE_NAME_PASS TestUturnSide:UTURN_SIDE_PASS TestPlaceholder:PLACEHOLDER_PASS \
-             TestQuietQnx:QUIET_FACTORY_J9_PASS TestPmcp146:PMCP146_PASS TestComponent:COMPONENT_PASS; do
+             TestQuietQnx:QUIET_FACTORY_J9_PASS TestPmcp146:PMCP146_PASS TestComponent:COMPONENT_PASS \
+             $([ $WL = yes ] && echo TestWl:WL_PASS); do
         c=${t%%:*}; m=${t#*:}
         java -Xverify:all -cp "$W/tests:$W/pmcp-rg.jar:$STOCK_JAR" com.cpmap.rgi.$c > "$W/tests/$c.txt" 2>&1 || { cat "$W/tests/$c.txt"; fail "$c"; }
         grep -q "^$m " "$W/tests/$c.txt" || fail "$c: no $m"; cat "$W/tests/$c.txt"
