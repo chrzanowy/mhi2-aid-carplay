@@ -67,9 +67,10 @@ JAVA_PACKAGES_ALL = [("nai", "nai: AID map stays while the iPhone navigates (Nav
                       ("ui", "ui: AID navigation configuration in App-Connect settings, saves trial starts without the card")]
 # Experimental cards only: the wireless CarPlay HMI hook of the WL project (separate private repo; the JAR is pinned
 # here and lives outside git, build/wl-<sha8>/pmcp-wl.jar). Not in main menu 4; inactive without a WL session file.
-# WL commit 3fbacfb, two identical builds; replaces one factory class: the SI HsmTarget. Since 3fbacfb a run-time
-# identity check of the 20 factory classes it relies on (com/wlcp/hmi/Identity): on a mismatch wl stays off for that start
-WL_JAR_PIN = ("build/wl-7d2562cc/pmcp-wl.jar", "7d2562cc4a80bb4b848d094d5bd6eaf712bbff11bf15dc7cea414bde6cf0e095", 37031)
+# WL commit 9c1c8d6 (A250): replaces one factory class, the SI HsmTarget; new classes only in com.wlcp.hmi. Run-time
+# identity check of the factory classes it relies on (com/wlcp/hmi/Identity): on a mismatch wl stays off for that start.
+# 9c1c8d6: CarPlay screen restored after a refused take (V5-5/V5-6), HFP drop off unless /mnt/persist/wlcp/HFP_DROP_ON
+WL_JAR_PIN = ("build/wl-f8a84c89/pmcp-wl.jar", "f8a84c89401ee82533643e28766936c58791d2fab4e1933442256566ba4dc0a0", 43488)
 if os.environ.get("PMCP_BUILD_EXPERIMENTAL") == "1" and WL_JAR_PIN:
     JAVA_PACKAGES_ALL.append(("wl", "wl: wireless CarPlay HMI hook (experimental; inactive without a WL session)"))
 # only what the profile supports reaches the card, the GEM menu and the settings page

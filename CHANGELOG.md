@@ -5,6 +5,10 @@ All releases are for one combination only: VW Passat B8 (MY2018), Discover Pro M
 
 ## Unreleased (experimental)
 
+- **Wireless CarPlay HMI hook `wl` (experimental cards only):** after a navigation prompt or a call window the
+  CarPlay screen comes back instead of staying black (at most 3 times a minute, off with
+  `/mnt/persist/wlcp/HMI_NO_RESTORE`; full effect needs the matching WL receiver). Hands-free drop on unplug is in
+  but off unless `/mnt/persist/wlcp/HFP_DROP_ON` exists (A250). wl `f8a84c89` (was `7d2562cc`).
 - **Route guidance (arrows, ETA) on the AID with CarPlay over Wi-Fi:** the `rg` package now also reads the WL
   receiver's mailbox `/ramdisk/pmcp-wl-rg` (same format as the cable reader), only while a Wi-Fi session owns the MOST
   map (owner `src=wireless`, live, session of the same generation); the cable always wins, Android Auto is unchanged.
